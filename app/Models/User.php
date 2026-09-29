@@ -24,10 +24,9 @@ class User extends Authenticatable
         'is_active',
         'profile_image',
         'has_face_registered',
-        'temp_password',
     ];
 
-    protected $hidden = ['password_hash', 'temp_password',];
+    protected $hidden = ['password_hash',];
 
     protected $casts = [
         'is_active' => 'boolean',

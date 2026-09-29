@@ -64,7 +64,6 @@ class UserController extends Controller
             'role' => $request->role,
             'contact_number' => $request->contact_number,
             'is_active' => true,
-            'temp_password' => $plainPassword,
         ];
 
         if ($request->hasFile('profile_image')) {
@@ -214,7 +213,6 @@ class UserController extends Controller
         );
 
         $user->password_hash = Hash::make($newPassword);
-        $user->temp_password = $newPassword;
         $user->save();
 
         try {
@@ -243,27 +241,4 @@ class UserController extends Controller
         ]);
     }
 
-    public function getUsersWithTempPasswords(Request $request)
-    {
-        $perPage = $request->get('per_page', 20);
-        $page = $request->get('page', 1);
-
-        $users = User::orderBy('created_at', 'desc')->paginate($perPage, ['*'], 'page', $page);
-        $users->getCollection()->each(function ($user) {
-            $user->temp_password_visible = $user->temp_password ?: null;
-        });
-
-        return response()->json($users);
-    }
-
-    public function clearTempPassword(Request $request)
-    {
-        $user = $request->user();
-        if ($user && $user->temp_password) {
-            $user->temp_password = null;
-            $user->save();
-            return response()->json(['message' => 'Temporary password cleared']);
-        }
-        return response()->json(['message' => 'No temporary password to clear']);
-    }
 }

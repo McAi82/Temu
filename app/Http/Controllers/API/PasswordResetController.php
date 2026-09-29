@@ -129,7 +129,6 @@ class PasswordResetController extends Controller
         DB::beginTransaction();
         try {
             $user->password_hash = Hash::make($request->password);
-            $user->temp_password = null;
             $user->save();
 
             // Invalidate every session + every other outstanding reset code.
