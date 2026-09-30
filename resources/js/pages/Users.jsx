@@ -26,6 +26,7 @@ import {
 } from "../components/ui/table";
 import { Pagination } from "../components/ui/Pagination";
 import ActionButton from "../components/ui/ActionButton";
+import { byFields } from "../lib/sortBy";
 import {
   getUsers,
   deleteUser,
@@ -195,7 +196,9 @@ const Users = () => {
       notify.success("User status updated successfully");
     },
     onError: (error) => {
-      notify.error(error.response?.data?.message || "Error updating user status");
+      notify.error(
+        error.response?.data?.message || "Error updating user status",
+      );
     },
   });
 
@@ -212,24 +215,30 @@ const Users = () => {
   const users = getDataArray(usersResponse);
   const meta = getMeta(usersResponse);
 
+  /* ---------------- Filter + Sort ---------------- */
+  // Filter by the debounced search term, then sort alphabetically by
+  // last name → first name so the list reads like a directory.
   const filteredUsers = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
-    if (!term) return users;
 
-    return users.filter((u) => {
-      const haystack = [
-        u.firstname,
-        u.middlename,
-        u.lastname,
-        u.email,
-        u.role,
-        u.contact_number,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(term);
-    });
+    const matching = term
+      ? users.filter((u) => {
+          const haystack = [
+            u.firstname,
+            u.middlename,
+            u.lastname,
+            u.email,
+            u.role,
+            u.contact_number,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(term);
+        })
+      : users;
+
+    return [...matching].sort(byFields("lastname", "firstname"));
   }, [users, debouncedSearch]);
 
   const getImageUrl = (profileImage) => {
@@ -536,8 +545,11 @@ const Users = () => {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="font-['Oswald'] font-medium text-[#16233F]">
+            <CardTitle className="font-['Oswald'] font-medium text-[#16233F] flex items-center gap-2">
               Users List
+              <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+                (alphabetical by last name)
+              </span>
             </CardTitle>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
@@ -624,7 +636,8 @@ const Users = () => {
                       </TableCell>
                       <TableCell>
                         <div className="font-medium text-[#1F2937]">
-                          {user.firstname} {user.middlename} {user.lastname}
+                          {user.lastname}, {user.firstname}
+                          {user.middlename ? ` ${user.middlename[0]}.` : ""}
                         </div>
                         <div className="text-xs text-[#64748B]">
                           ID: {user.user_id}

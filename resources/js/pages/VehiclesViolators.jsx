@@ -30,6 +30,7 @@ import {
 } from "../components/ui/tabs";
 import { Pagination } from "../components/ui/Pagination";
 import ActionButton from "../components/ui/ActionButton";
+import { byFields } from "../lib/sortBy";
 import {
   getVehicles,
   createVehicle,
@@ -55,10 +56,6 @@ import { useAlert } from "../components/ui/AlertProvider";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 const ITEMS_PER_PAGE = 10;
 
-/* ------------------------------------------------------------------ */
-/* Debounce                                                            */
-/* ------------------------------------------------------------------ */
-
 function useDebouncedValue(value, delay = 350) {
   const [debounced, setDebounced] = useState(value);
 
@@ -69,10 +66,6 @@ function useDebouncedValue(value, delay = 350) {
 
   return debounced;
 }
-
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
 
 const getDataArray = (response) => {
   if (!response) return [];
@@ -114,10 +107,6 @@ const getMeta = (response) => {
   return { current_page: 1, last_page: 1, total: 0 };
 };
 
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
-
 const VehiclesViolators = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
@@ -153,7 +142,6 @@ const VehiclesViolators = () => {
     color: "",
   });
 
-  /* ---------------- Debounced search ---------------- */
   const debouncedViolatorSearch = useDebouncedValue(violatorSearchTerm, 350);
   const debouncedVehicleSearch = useDebouncedValue(vehicleSearchTerm, 350);
 
@@ -395,35 +383,47 @@ const VehiclesViolators = () => {
   const vehicles = getDataArray(vehiclesResponse);
   const isLoading = violatorsLoading || vehiclesLoading;
 
+  /* ---------------- Filter + Sort ---------------- */
+
+  // Violators: search, then alphabetical by lastname → firstname.
   const filteredViolators = useMemo(() => {
     const term = debouncedViolatorSearch.trim().toLowerCase();
-    if (!term) return violators;
-    return violators.filter((v) => {
-      const haystack = [
-        v.firstname,
-        v.middlename,
-        v.lastname,
-        v.license,
-        v.nationality,
-        v.gender,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(term);
-    });
+
+    const matching = term
+      ? violators.filter((v) => {
+        const haystack = [
+          v.firstname,
+          v.middlename,
+          v.lastname,
+          v.license,
+          v.nationality,
+          v.gender,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(term);
+      })
+      : violators;
+
+    return [...matching].sort(byFields("lastname", "firstname"));
   }, [violators, debouncedViolatorSearch]);
 
+  // Vehicles: search, then alphabetical by plate number.
   const filteredVehicles = useMemo(() => {
     const term = debouncedVehicleSearch.trim().toLowerCase();
-    if (!term) return vehicles;
-    return vehicles.filter((v) => {
-      const haystack = [v.platenumber, v.owner, v.make, v.model, v.color]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(term);
-    });
+
+    const matching = term
+      ? vehicles.filter((v) => {
+        const haystack = [v.platenumber, v.owner, v.make, v.model, v.color]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(term);
+      })
+      : vehicles;
+
+    return [...matching].sort(byFields("platenumber"));
   }, [vehicles, debouncedVehicleSearch]);
 
   /* ---------------- Early returns ---------------- */
@@ -456,7 +456,6 @@ const VehiclesViolators = () => {
     );
   }
 
-  /* ---------------- Render ---------------- */
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -515,6 +514,9 @@ const VehiclesViolators = () => {
                 <CardTitle className="font-['Oswald'] font-medium text-[#16233F] flex items-center gap-2">
                   <Users className="w-5 h-5 text-[#F0B429]" />
                   Violators List
+                  <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+                    (alphabetical by last name)
+                  </span>
                 </CardTitle>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
@@ -601,8 +603,10 @@ const VehiclesViolators = () => {
                           </TableCell>
                           <TableCell>
                             <div className="font-medium text-[#1F2937]">
-                              {violator.firstname} {violator.middlename}{" "}
-                              {violator.lastname}
+                              {violator.lastname}, {violator.firstname}
+                              {violator.middlename
+                                ? ` ${violator.middlename[0]}.`
+                                : ""}
                             </div>
                           </TableCell>
                           <TableCell className="font-mono text-[#16233F]">
@@ -661,6 +665,9 @@ const VehiclesViolators = () => {
                 <CardTitle className="font-['Oswald'] font-medium text-[#16233F] flex items-center gap-2">
                   <Car className="w-5 h-5 text-[#1E8449]" />
                   Vehicles List
+                  <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+                    (alphabetical by plate)
+                  </span>
                 </CardTitle>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
@@ -945,7 +952,7 @@ const VehiclesViolators = () => {
                 }
               >
                 {createViolatorMutation.isPending ||
-                updateViolatorMutation.isPending
+                  updateViolatorMutation.isPending
                   ? "Saving..."
                   : editingViolator
                     ? "Update Violator"
@@ -1048,7 +1055,7 @@ const VehiclesViolators = () => {
                 }
               >
                 {createVehicleMutation.isPending ||
-                updateVehicleMutation.isPending
+                  updateVehicleMutation.isPending
                   ? "Saving..."
                   : editingVehicle
                     ? "Update Vehicle"

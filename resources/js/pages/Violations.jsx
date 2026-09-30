@@ -25,6 +25,7 @@ import {
 } from "../components/ui/table";
 import { Pagination } from "../components/ui/Pagination";
 import ActionButton from "../components/ui/ActionButton";
+import { byFields } from "../lib/sortBy";
 import {
   getViolations,
   createViolation,
@@ -166,22 +167,28 @@ const Violations = () => {
   const violations = getDataArray(violationsResponse);
   const meta = getMeta(violationsResponse);
 
+  /* ---------------- Filter + Sort ---------------- */
+  // Filter by the debounced search term, then sort alphabetically by
+  // violation name so the list reads like a catalog.
   const filteredViolations = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
-    if (!term) return violations;
 
-    return violations.filter((v) => {
-      const haystack = [
-        v.violation_code,
-        v.violation_name,
-        v.category,
-        v.description,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(term);
-    });
+    const matching = term
+      ? violations.filter((v) => {
+        const haystack = [
+          v.violation_code,
+          v.violation_name,
+          v.category,
+          v.description,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(term);
+      })
+      : violations;
+
+    return [...matching].sort(byFields("violation_name"));
   }, [violations, debouncedSearch]);
 
   const handleSubmit = (e) => {
@@ -403,8 +410,11 @@ const Violations = () => {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="font-['Oswald'] font-medium text-[#16233F]">
+            <CardTitle className="font-['Oswald'] font-medium text-[#16233F] flex items-center gap-2">
               Violations List
+              <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+                (alphabetical by name)
+              </span>
             </CardTitle>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
