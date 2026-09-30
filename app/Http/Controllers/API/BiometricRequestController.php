@@ -18,6 +18,63 @@ class BiometricRequestController extends Controller
      * Deduplicates: if a pending request of the same type already
      * exists for this user, we return it instead of creating another.
      */
+    /**
+     * POST /api/biometric-requests/{id}/consume
+     * Called by the mobile app after it has applied an approval locally.
+     * Marks the request so no other device picks it up.
+     */
+    public function consume(Request $request, $id)
+    {
+        $biometricRequest = BiometricRequest::findOrFail($id);
+
+        if ($biometricRequest->user_id !== $request->user()->user_id) {
+            return response()->json(['message' => 'Not authorized.'], 403);
+        }
+
+        if ($biometricRequest->status !== BiometricRequest::STATUS_APPROVED) {
+            return response()->json([
+                'message' => 'Only approved requests can be consumed.',
+            ], 422);
+        }
+
+        if ($biometricRequest->consumed_at) {
+            // Already consumed — treat as success so retries are safe.
+            return response()->json([
+                'message' => 'Already consumed.',
+                'request' => $biometricRequest,
+            ]);
+        }
+
+        $biometricRequest->update(['consumed_at' => now()]);
+
+        return response()->json([
+            'message' => 'Consumed.',
+            'request' => $biometricRequest->fresh(),
+        ]);
+    }
+    public function mine(Request $request)
+    {
+        $user = $request->user();
+
+        // If there's an approved-but-not-consumed request, that's the one
+        // we want to hand over. Otherwise fall back to the most recent
+        // request of any status so the mobile app can still show "pending".
+        $fresh = BiometricRequest::where('user_id', $user->user_id)
+            ->where('status', BiometricRequest::STATUS_APPROVED)
+            ->whereNull('consumed_at')
+            ->orderBy('reviewed_at', 'desc')
+            ->first();
+
+        if ($fresh) {
+            return response()->json(['request' => $fresh]);
+        }
+
+        $latest = BiometricRequest::where('user_id', $user->user_id)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        return response()->json(['request' => $latest]);
+    }
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -121,21 +178,6 @@ class BiometricRequestController extends Controller
             ->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json($requests);
-    }
-
-    /**
-     * GET /api/biometric-requests/mine
-     * The caller's own latest request.
-     */
-    public function mine(Request $request)
-    {
-        $user = $request->user();
-
-        $latest = BiometricRequest::where('user_id', $user->user_id)
-            ->orderBy('created_at', 'desc')
-            ->first();
-
-        return response()->json(['request' => $latest]);
     }
 
     /**

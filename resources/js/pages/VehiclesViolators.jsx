@@ -13,7 +13,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "../components/ui/dialog";
 import {
   Table,
@@ -41,7 +40,6 @@ import {
   deleteViolator,
 } from "../services/api";
 import {
-  Plus,
   Pencil,
   Trash2,
   Search,
@@ -49,19 +47,16 @@ import {
   Users,
   RefreshCw,
   Loader2,
-  User,
-  Phone,
-  Calendar,
-  MapPin,
 } from "lucide-react";
+import { useAlert } from "../components/ui/AlertProvider";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 const ITEMS_PER_PAGE = 10;
 
 const VehiclesViolators = () => {
   const queryClient = useQueryClient();
+  const notify = useAlert();
 
-  // ==================== VIOLATORS STATE ====================
   const [violatorPage, setViolatorPage] = useState(1);
   const [violatorSearchTerm, setViolatorSearchTerm] = useState("");
   const [isViolatorDialogOpen, setIsViolatorDialogOpen] = useState(false);
@@ -79,7 +74,6 @@ const VehiclesViolators = () => {
   });
   const [violatorPhotoPreview, setViolatorPhotoPreview] = useState(null);
 
-  // ==================== VEHICLES STATE ====================
   const [vehiclePage, setVehiclePage] = useState(1);
   const [vehicleSearchTerm, setVehicleSearchTerm] = useState("");
   const [isVehicleDialogOpen, setIsVehicleDialogOpen] = useState(false);
@@ -92,7 +86,6 @@ const VehiclesViolators = () => {
     color: "",
   });
 
-  // ==================== QUERIES ====================
   const {
     data: violatorsResponse,
     isLoading: violatorsLoading,
@@ -117,17 +110,16 @@ const VehiclesViolators = () => {
     staleTime: 1000 * 60 * 2,
   });
 
-  // ==================== MUTATIONS ====================
   const createViolatorMutation = useMutation({
     mutationFn: createViolator,
     onSuccess: () => {
       queryClient.invalidateQueries(["violators"]);
       setIsViolatorDialogOpen(false);
       resetViolatorForm();
-      alert("Violator created successfully");
+      notify.success("Violator created successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error creating violator");
+      notify.error(error.response?.data?.message || "Error creating violator");
     },
   });
 
@@ -137,10 +129,10 @@ const VehiclesViolators = () => {
       queryClient.invalidateQueries(["violators"]);
       setIsViolatorDialogOpen(false);
       resetViolatorForm();
-      alert("Violator updated successfully");
+      notify.success("Violator updated successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error updating violator");
+      notify.error(error.response?.data?.message || "Error updating violator");
     },
   });
 
@@ -148,10 +140,10 @@ const VehiclesViolators = () => {
     mutationFn: deleteViolator,
     onSuccess: () => {
       queryClient.invalidateQueries(["violators"]);
-      alert("Violator deleted successfully");
+      notify.success("Violator deleted successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error deleting violator");
+      notify.error(error.response?.data?.message || "Error deleting violator");
     },
   });
 
@@ -161,10 +153,10 @@ const VehiclesViolators = () => {
       queryClient.invalidateQueries(["vehicles"]);
       setIsVehicleDialogOpen(false);
       resetVehicleForm();
-      alert("Vehicle created successfully");
+      notify.success("Vehicle created successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error creating vehicle");
+      notify.error(error.response?.data?.message || "Error creating vehicle");
     },
   });
 
@@ -174,10 +166,10 @@ const VehiclesViolators = () => {
       queryClient.invalidateQueries(["vehicles"]);
       setIsVehicleDialogOpen(false);
       resetVehicleForm();
-      alert("Vehicle updated successfully");
+      notify.success("Vehicle updated successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error updating vehicle");
+      notify.error(error.response?.data?.message || "Error updating vehicle");
     },
   });
 
@@ -185,14 +177,13 @@ const VehiclesViolators = () => {
     mutationFn: deleteVehicle,
     onSuccess: () => {
       queryClient.invalidateQueries(["vehicles"]);
-      alert("Vehicle deleted successfully");
+      notify.success("Vehicle deleted successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error deleting vehicle");
+      notify.error(error.response?.data?.message || "Error deleting vehicle");
     },
   });
 
-  // ==================== HELPERS ====================
   const getImageUrl = (profilePhoto) => {
     if (!profilePhoto) return null;
     if (profilePhoto.startsWith("http")) return profilePhoto;
@@ -230,10 +221,12 @@ const VehiclesViolators = () => {
     }
   };
 
-  const handleDeleteViolator = (id) => {
-    if (window.confirm("Are you sure you want to delete this violator?")) {
-      deleteViolatorMutation.mutate(id);
-    }
+  const handleDeleteViolator = async (id) => {
+    const ok = await notify.confirm(
+      "Are you sure you want to delete this violator?",
+      { destructive: true, confirmText: "Delete" },
+    );
+    if (ok) deleteViolatorMutation.mutate(id);
   };
 
   const handleEditViolator = (violator) => {
@@ -281,10 +274,12 @@ const VehiclesViolators = () => {
     }
   };
 
-  const handleDeleteVehicle = (id) => {
-    if (window.confirm("Are you sure you want to delete this vehicle?")) {
-      deleteVehicleMutation.mutate(id);
-    }
+  const handleDeleteVehicle = async (id) => {
+    const ok = await notify.confirm(
+      "Are you sure you want to delete this vehicle?",
+      { destructive: true, confirmText: "Delete" },
+    );
+    if (ok) deleteVehicleMutation.mutate(id);
   };
 
   const handleEditVehicle = (vehicle) => {
@@ -304,7 +299,6 @@ const VehiclesViolators = () => {
     });
   };
 
-  // ==================== EXTRACT DATA ====================
   const getDataArray = (response) => {
     if (!response) return [];
     if (Array.isArray(response)) return response;
@@ -347,16 +341,10 @@ const VehiclesViolators = () => {
     return { current_page: 1, last_page: 1, total: 0 };
   };
 
-  // For Violators tab
   const violatorsMeta = getMeta(violatorsResponse);
-
-  // For Vehicles tab
   const vehiclesMeta = getMeta(vehiclesResponse);
-
   const violators = getDataArray(violatorsResponse);
-
   const vehicles = getDataArray(vehiclesResponse);
-
   const isLoading = violatorsLoading || vehiclesLoading;
 
   if (violatorsError || vehiclesError) {
@@ -438,7 +426,6 @@ const VehiclesViolators = () => {
           </TabsList>
         </div>
 
-        {/* ==================== VIOLATORS TAB ==================== */}
         <TabsContent value="violators">
           <Card>
             <CardHeader>
@@ -618,7 +605,7 @@ const VehiclesViolators = () => {
                           }
                         >
                           {createViolatorMutation.isPending ||
-                          updateViolatorMutation.isPending
+                            updateViolatorMutation.isPending
                             ? "Saving..."
                             : editingViolator
                               ? "Update Violator"
@@ -747,7 +734,6 @@ const VehiclesViolators = () => {
           </Card>
         </TabsContent>
 
-        {/* ==================== VEHICLES TAB ==================== */}
         <TabsContent value="vehicles">
           <Card>
             <CardHeader>
@@ -848,7 +834,7 @@ const VehiclesViolators = () => {
                           }
                         >
                           {createVehicleMutation.isPending ||
-                          updateVehicleMutation.isPending
+                            updateVehicleMutation.isPending
                             ? "Saving..."
                             : editingVehicle
                               ? "Update Vehicle"

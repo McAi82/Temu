@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
+import { useAlert } from "../components/ui/AlertProvider";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -48,7 +49,6 @@ const getMeta = (response) => {
   if (!response) return { current_page: 1, last_page: 1, total: 0 };
   if (response.meta) return response.meta;
   if (response.data && response.data.meta) return response.data.meta;
-  // Handle paginated response from Laravel
   if (response.data && response.data.current_page !== undefined) {
     return {
       current_page: response.data.current_page,
@@ -62,6 +62,7 @@ const getMeta = (response) => {
 
 const Tickets = () => {
   const queryClient = useQueryClient();
+  const notify = useAlert();
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -82,10 +83,10 @@ const Tickets = () => {
     mutationFn: ({ id, status }) => updateTicketStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries(["tickets"]);
-      alert("Ticket status updated successfully");
+      notify.success("Ticket status updated successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Failed to update ticket status");
+      notify.error(error.response?.data?.message || "Failed to update ticket status");
     },
   });
 
@@ -93,30 +94,30 @@ const Tickets = () => {
     mutationFn: deleteTicket,
     onSuccess: () => {
       queryClient.invalidateQueries(["tickets"]);
-      alert("Ticket deleted successfully");
+      notify.success("Ticket deleted successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Failed to delete ticket");
+      notify.error(error.response?.data?.message || "Failed to delete ticket");
     },
   });
 
   const tickets = getDataArray(ticketsResponse);
   const meta = getMeta(ticketsResponse);
 
-  const handleStatusUpdate = (id, status) => {
-    if (window.confirm(`Change ticket status to ${status.toUpperCase()}?`)) {
-      updateStatusMutation.mutate({ id, status });
-    }
+  const handleStatusUpdate = async (id, status) => {
+    const ok = await notify.confirm(
+      `Change ticket status to ${status.toUpperCase()}?`,
+      { confirmText: "Change" },
+    );
+    if (ok) updateStatusMutation.mutate({ id, status });
   };
 
-  const handleDelete = (id) => {
-    if (
-      window.confirm(
-        "Are you sure you want to delete this ticket? This action cannot be undone.",
-      )
-    ) {
-      deleteMutation.mutate(id);
-    }
+  const handleDelete = async (id) => {
+    const ok = await notify.confirm(
+      "Are you sure you want to delete this ticket? This action cannot be undone.",
+      { destructive: true, confirmText: "Delete" },
+    );
+    if (ok) deleteMutation.mutate(id);
   };
 
   const getStatusColor = (status) => {
@@ -140,7 +141,6 @@ const Tickets = () => {
     return icons[status] || null;
   };
 
-  // Filter tickets (client-side filtering on current page data)
   const filteredTickets = tickets.filter((ticket) => {
     const matchesSearch =
       ticket.ticket_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -379,21 +379,21 @@ const Tickets = () => {
                           )}
                           {(ticket.status === "paid" ||
                             ticket.status === "partial_paid") && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleStatusUpdate(
-                                  ticket.ticket_id,
-                                  "dismissed",
-                                )
-                              }
-                              className="text-[#C8202F] hover:bg-[#FBE7E9]"
-                              title="Dismiss Ticket"
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </Button>
-                          )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleStatusUpdate(
+                                    ticket.ticket_id,
+                                    "dismissed",
+                                  )
+                                }
+                                className="text-[#C8202F] hover:bg-[#FBE7E9]"
+                                title="Dismiss Ticket"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </Button>
+                            )}
                           {ticket.status === "contested" && (
                             <Button
                               variant="ghost"

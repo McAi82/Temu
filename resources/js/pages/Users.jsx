@@ -48,14 +48,11 @@ import {
   X,
 } from "lucide-react";
 import api from "../services/api";
+import { useAlert } from "../components/ui/AlertProvider";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const ITEMS_PER_PAGE = 20;
 
-// ---------------------------------------------------------------------------
-// Tiny debounce hook — returns a value that only updates after `delay` ms of
-// silence. Prevents refetching on every keystroke.
-// ---------------------------------------------------------------------------
 function useDebouncedValue(value, delay = 350) {
   const [debounced, setDebounced] = useState(value);
 
@@ -100,6 +97,7 @@ const getMeta = (response) => {
 
 const Users = () => {
   const queryClient = useQueryClient();
+  const notify = useAlert();
 
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
@@ -118,17 +116,12 @@ const Users = () => {
   });
   const [previewUrl, setPreviewUrl] = useState("");
 
-  // ✅ Debounce the search term so typing doesn't refetch on every keystroke.
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
 
-  // Reset to page 1 whenever the debounced search actually changes
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch]);
 
-  // -------------------------------------------------------------------------
-  // Query — only depends on page. We do NOT put searchTerm in the key.
-  // -------------------------------------------------------------------------
   const {
     data: usersResponse,
     isLoading,
@@ -141,9 +134,6 @@ const Users = () => {
     staleTime: 1000 * 60 * 2,
   });
 
-  // -------------------------------------------------------------------------
-  // Mutations (unchanged, but simplified: fetch only takes FormData)
-  // -------------------------------------------------------------------------
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const response = await api.post("/users", data, {
@@ -156,15 +146,16 @@ const Users = () => {
       setIsDialogOpen(false);
       resetForm();
       if (response.data.generated_password) {
-        alert(
-          `✅ User created successfully!\n\n🔑 Password: ${response.data.generated_password}\n\n📧 An email has been sent to the user.`
+        notify.success(
+          `User created successfully!\n\n🔑 Password: ${response.data.generated_password}\n\n📧 An email has been sent to the user.`,
+          { title: "User Created" },
         );
       } else {
-        alert("User created successfully");
+        notify.success("User created successfully");
       }
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error creating user");
+      notify.error(error.response?.data?.message || "Error creating user");
     },
   });
 
@@ -179,11 +170,11 @@ const Users = () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setIsDialogOpen(false);
       resetForm();
-      alert("User updated successfully");
+      notify.success("User updated successfully");
     },
     onError: (error) => {
       console.error("Update error:", error);
-      alert(error.response?.data?.message || "Error updating user");
+      notify.error(error.response?.data?.message || "Error updating user");
     },
   });
 
@@ -191,10 +182,10 @@ const Users = () => {
     mutationFn: deleteUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      alert("User deleted successfully");
+      notify.success("User deleted successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error deleting user");
+      notify.error(error.response?.data?.message || "Error deleting user");
     },
   });
 
@@ -202,29 +193,23 @@ const Users = () => {
     mutationFn: toggleUserStatus,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      alert("User status updated successfully");
+      notify.success("User status updated successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error updating user status");
+      notify.error(error.response?.data?.message || "Error updating user status");
     },
   });
 
   const resetPasswordMutation = useMutation({
     mutationFn: resetUserPassword,
-    onSuccess: (response) => {
-      alert(
-        `Password reset successful!.`
-      );
+    onSuccess: () => {
+      notify.success("Password reset successful. An email has been sent.");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error resetting password");
+      notify.error(error.response?.data?.message || "Error resetting password");
     },
   });
 
-  // -------------------------------------------------------------------------
-  // Derived — client-side filtering on the current page, memoized so it only
-  // recomputes when the search term or users actually change.
-  // -------------------------------------------------------------------------
   const users = getDataArray(usersResponse);
   const meta = getMeta(usersResponse);
 
@@ -248,9 +233,6 @@ const Users = () => {
     });
   }, [users, debouncedSearch]);
 
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
   const getImageUrl = (profileImage) => {
     if (!profileImage) return null;
     if (profileImage.startsWith("http")) return profileImage;
@@ -286,23 +268,31 @@ const Users = () => {
     }
   };
 
-  const handleDelete = (id, email) => {
-    if (window.confirm(`Are you sure you want to delete ${email}?`)) {
-      deleteMutation.mutate(id);
-    }
+  const handleDelete = async (id, email) => {
+    const ok = await notify.confirm(
+      `Are you sure you want to delete ${email}?`,
+      { destructive: true, confirmText: "Delete" },
+    );
+    if (ok) deleteMutation.mutate(id);
   };
 
-  const handleToggleStatus = (id, currentStatus, email) => {
+  const handleToggleStatus = async (id, currentStatus, email) => {
     const action = currentStatus ? "deactivate" : "activate";
-    if (window.confirm(`Are you sure you want to ${action} ${email}?`)) {
-      toggleStatusMutation.mutate(id);
-    }
+    const ok = await notify.confirm(
+      `Are you sure you want to ${action} ${email}?`,
+      {
+        destructive: currentStatus,
+        confirmText: action === "deactivate" ? "Deactivate" : "Activate",
+      },
+    );
+    if (ok) toggleStatusMutation.mutate(id);
   };
 
-  const handleResetPassword = (id, email) => {
-    if (window.confirm(`Reset password for ${email}?`)) {
-      resetPasswordMutation.mutate(id);
-    }
+  const handleResetPassword = async (id, email) => {
+    const ok = await notify.confirm(`Reset password for ${email}?`, {
+      confirmText: "Reset",
+    });
+    if (ok) resetPasswordMutation.mutate(id);
   };
 
   const handleEdit = (user) => {
@@ -353,9 +343,6 @@ const Users = () => {
     return colors[role] || "bg-gray-100 text-gray-700";
   };
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
   if (isLoading && !usersResponse) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -490,7 +477,7 @@ const Users = () => {
                           setPreviewUrl("");
                           setFormData({ ...formData, profile_image: null });
                           const fileInput = document.getElementById(
-                            "profile_image_input"
+                            "profile_image_input",
                           );
                           if (fileInput) fileInput.value = "";
                         }}
@@ -646,7 +633,7 @@ const Users = () => {
                       <TableCell>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(
-                            user.role
+                            user.role,
                           )}`}
                         >
                           {user.role.toUpperCase()}
@@ -667,8 +654,8 @@ const Users = () => {
                       <TableCell>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
-                            ? "bg-[#E5F2EA] text-[#1E8449]"
-                            : "bg-[#FBE7E9] text-[#C8202F]"
+                              ? "bg-[#E5F2EA] text-[#1E8449]"
+                              : "bg-[#FBE7E9] text-[#C8202F]"
                             }`}
                         >
                           {user.is_active ? "Active" : "Inactive"}
@@ -692,7 +679,7 @@ const Users = () => {
                               handleToggleStatus(
                                 user.user_id,
                                 user.is_active,
-                                user.email
+                                user.email,
                               )
                             }
                             title={user.is_active ? "Deactivate" : "Activate"}

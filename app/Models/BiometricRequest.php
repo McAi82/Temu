@@ -21,10 +21,12 @@ class BiometricRequest extends Model
         'reviewed_by',
         'review_notes',
         'reviewed_at',
+        'consumed_at',
     ];
 
     protected $casts = [
         'reviewed_at'   => 'datetime',
+        'consumed_at'   => 'datetime',
         'failure_count' => 'integer',
     ];
 

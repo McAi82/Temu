@@ -37,10 +37,8 @@ import {
   Search,
   RefreshCw,
   Loader2,
-  AlertCircle,
-  DollarSign,
-  Hash,
 } from "lucide-react";
+import { useAlert } from "../components/ui/AlertProvider";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -60,7 +58,7 @@ const getDataArray = (response) => {
 
 const getMeta = (response) => {
   if (!response) return { current_page: 1, last_page: 1, total: 0 };
-  
+
   if (response.current_page !== undefined) {
     return {
       current_page: response.current_page,
@@ -69,7 +67,7 @@ const getMeta = (response) => {
       per_page: response.per_page,
     };
   }
-  
+
   if (response.data && response.data.current_page !== undefined) {
     return {
       current_page: response.data.current_page,
@@ -78,16 +76,17 @@ const getMeta = (response) => {
       per_page: response.data.per_page,
     };
   }
-  
+
   if (response.meta) {
     return response.meta;
   }
-  
+
   return { current_page: 1, last_page: 1, total: 0 };
 };
 
 const Violations = () => {
   const queryClient = useQueryClient();
+  const notify = useAlert();
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -119,10 +118,10 @@ const Violations = () => {
       queryClient.invalidateQueries(["violations"]);
       setIsDialogOpen(false);
       resetForm();
-      alert("Violation created successfully");
+      notify.success("Violation created successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error creating violation");
+      notify.error(error.response?.data?.message || "Error creating violation");
     },
   });
 
@@ -132,10 +131,10 @@ const Violations = () => {
       queryClient.invalidateQueries(["violations"]);
       setIsDialogOpen(false);
       resetForm();
-      alert("Violation updated successfully");
+      notify.success("Violation updated successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error updating violation");
+      notify.error(error.response?.data?.message || "Error updating violation");
     },
   });
 
@@ -143,10 +142,10 @@ const Violations = () => {
     mutationFn: deleteViolation,
     onSuccess: () => {
       queryClient.invalidateQueries(["violations"]);
-      alert("Violation deleted successfully");
+      notify.success("Violation deleted successfully");
     },
     onError: (error) => {
-      alert(error.response?.data?.message || "Error deleting violation");
+      notify.error(error.response?.data?.message || "Error deleting violation");
     },
   });
 
@@ -171,10 +170,12 @@ const Violations = () => {
     }
   };
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Are you sure you want to delete "${name}"?`)) {
-      deleteMutation.mutate(id);
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await notify.confirm(
+      `Are you sure you want to delete "${name}"?`,
+      { destructive: true, confirmText: "Delete" },
+    );
+    if (ok) deleteMutation.mutate(id);
   };
 
   const handleEdit = (violation) => {
@@ -477,11 +478,11 @@ const Violations = () => {
                 </TableBody>
               </Table>
               <Pagination
-  currentPage={meta.current_page}
-  totalPages={meta.last_page}
-  onPageChange={setPage}
-  totalItems={meta.total}
-/>
+                currentPage={meta.current_page}
+                totalPages={meta.last_page}
+                onPageChange={setPage}
+                totalItems={meta.total}
+              />
             </>
           )}
         </CardContent>

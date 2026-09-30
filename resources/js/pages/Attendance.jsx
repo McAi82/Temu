@@ -38,7 +38,6 @@ import {
   MapPin,
   LocateFixed,
 } from "lucide-react";
-// Leaflet imports
 import {
   MapContainer,
   TileLayer,
@@ -47,8 +46,8 @@ import {
   ZoomControl,
 } from "react-leaflet";
 import L from "leaflet";
+import { useAlert } from "../components/ui/AlertProvider";
 
-// Fix Leaflet icon issue (same as DutyMap)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
@@ -59,7 +58,6 @@ L.Icon.Default.mergeOptions({
     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
-// Custom marker icon for attendance location
 const attendanceIcon = new L.Icon({
   iconUrl:
     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
@@ -119,6 +117,7 @@ const getMeta = (response) => {
 };
 
 const Attendance = () => {
+  const notify = useAlert();
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAttendance, setSelectedAttendance] = useState(null);
@@ -135,7 +134,6 @@ const Attendance = () => {
   });
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
-  // ✅ New state for map modal
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapLocation, setMapLocation] = useState(null);
   const [mapAttendance, setMapAttendance] = useState(null);
@@ -174,7 +172,6 @@ const Attendance = () => {
     setActiveFiltersCount(count);
   }, [filters]);
 
-  // ✅ Helper to format location display
   const formatLocationDisplay = (locationStr) => {
     if (!locationStr || locationStr === "N/A") return "—";
     if (locationStr.includes(",")) {
@@ -184,7 +181,6 @@ const Attendance = () => {
     return `📍 ${locationStr}`;
   };
 
-  // ✅ Helper to parse coordinates from location string
   const parseCoordinates = (locationStr) => {
     if (!locationStr || !locationStr.includes(",")) return null;
     const [lat, lng] = locationStr.split(",").map(Number);
@@ -192,7 +188,6 @@ const Attendance = () => {
     return { lat, lng };
   };
 
-  // ✅ Handle viewing photo
   const handleViewPhoto = (attendance, type) => {
     setSelectedAttendance(attendance);
     setPhotoType(type);
@@ -214,16 +209,15 @@ const Attendance = () => {
         console.error("Image failed to load:", fullUrl);
         setImageLoading(false);
         setCurrentImageUrl("");
-        alert("Photo not found on server.");
+        notify.error("Photo not found on server.");
       };
       img.src = fullUrl;
     } else {
-      alert("No photo available for this attendance record.");
+      notify.warning("No photo available for this attendance record.");
       setImageLoading(false);
     }
   };
 
-  // ✅ Handle viewing location on map
   const handleViewOnMap = (attendance, type) => {
     const locationStr =
       type === "in"
@@ -232,7 +226,7 @@ const Attendance = () => {
     const coords = parseCoordinates(locationStr);
 
     if (!coords) {
-      alert("No valid coordinates found for this attendance record.");
+      notify.warning("No valid coordinates found for this attendance record.");
       return;
     }
 
@@ -622,7 +616,6 @@ const Attendance = () => {
                               Time Out
                             </Button>
                           )}
-                          {/* ✅ View on Map Button */}
                           {att.time_in_location && (
                             <Button
                               variant="outline"
@@ -734,7 +727,7 @@ const Attendance = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Map Modal - Same satellite tile as DutyMap */}
+      {/* Map Modal */}
       <Dialog open={showMapModal} onOpenChange={setShowMapModal}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
@@ -791,7 +784,6 @@ const Attendance = () => {
                 </div>
               </div>
 
-              {/* Map - Same Satellite View as DutyMap */}
               <div className="h-[400px] w-full rounded-lg overflow-hidden border border-[#E9ECF2]">
                 <MapContainer
                   key={`map-${mapLocation.lat}-${mapLocation.lng}`}
@@ -802,14 +794,12 @@ const Attendance = () => {
                   scrollWheelZoom={false}
                   dragging={true}
                 >
-                  {/* ✅ Satellite Tile Layer (same as DutyMap) */}
                   <TileLayer
                     attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
                     url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                   />
                   <ZoomControl position="topright" />
 
-                  {/* Marker with attendance info */}
                   <Marker
                     position={[mapLocation.lat, mapLocation.lng]}
                     icon={attendanceIcon}

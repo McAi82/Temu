@@ -40,18 +40,13 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useAlert } from '../components/ui/AlertProvider';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const ITEMS_PER_PAGE = 20;
 
-/* ------------------------------------------------------------------ */
-/* Hard limits                                                         */
-/* ------------------------------------------------------------------ */
 const MAX_ENFORCERS_PER_SHIFT = 2;
 
-/* ------------------------------------------------------------------ */
-/* Shift defaults                                                      */
-/* ------------------------------------------------------------------ */
 const SHIFT_DEFAULTS = {
   morning: { start: '08:00', end: '12:00', label: '🌅 Morning (8:00 AM – 12:00 PM)' },
   afternoon: { start: '13:00', end: '17:00', label: '☀️ Afternoon (1:00 PM – 5:00 PM)' },
@@ -97,9 +92,6 @@ const SHIFT_LABELS = {
   full: '📅 Full Day',
 };
 
-/* ------------------------------------------------------------------ */
-/* Date helpers                                                        */
-/* ------------------------------------------------------------------ */
 const toISODate = (d) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -142,9 +134,6 @@ const formatTimeDisplay = (value) => {
   }
 };
 
-/* ------------------------------------------------------------------ */
-/* API helpers                                                         */
-/* ------------------------------------------------------------------ */
 const getDataArray = (response) => {
   if (!response) return [];
   if (Array.isArray(response)) return response;
@@ -168,11 +157,9 @@ const getMeta = (response) => {
   return { current_page: 1, last_page: 1, total: 0 };
 };
 
-/* =================================================================== */
-/* Component                                                           */
-/* =================================================================== */
 const Schedule = () => {
-  /* ---------------- View state ---------------- */
+  const notify = useAlert();
+
   const [viewMode, setViewMode] = useState('date');
   const [selectedDate, setSelectedDate] = useState(todayISO());
 
@@ -185,13 +172,11 @@ const Schedule = () => {
     end_date: daysFromNowISO(30),
   });
 
-  /* ---------------- Filters ---------------- */
   const [selectedEnforcer, setSelectedEnforcer] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
 
-  /* ---------------- Data ---------------- */
   const [schedulesData, setSchedulesData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -200,7 +185,6 @@ const Schedule = () => {
   const [isLoadingEnforcers, setIsLoadingEnforcers] = useState(true);
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
 
-  /* ---------------- Dialog state ---------------- */
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
 
@@ -210,7 +194,7 @@ const Schedule = () => {
 
   const defaultForm = {
     duty_location_id: '',
-    schedule_date: tomorrowISO(), // ✅ default to tomorrow
+    schedule_date: tomorrowISO(),
     shift_type: 'morning',
     start_time: SHIFT_DEFAULTS.morning.start,
     end_time: SHIFT_DEFAULTS.morning.end,
@@ -220,7 +204,6 @@ const Schedule = () => {
 
   const [formData, setFormData] = useState(defaultForm);
 
-  /* ---------------- Fetchers ---------------- */
   const fetchEnforcers = async () => {
     setIsLoadingEnforcers(true);
     try {
@@ -326,7 +309,6 @@ const Schedule = () => {
     page,
   ]);
 
-  /* ---------------- Mutations ---------------- */
   const createSchedule = useMutation({
     mutationFn: async (data) => {
       const token = localStorage.getItem('token');
@@ -345,7 +327,7 @@ const Schedule = () => {
       return response.json();
     },
     onError: (error) =>
-      alert('❌ ' + (error.message || 'Failed to create schedule')),
+      notify.error(error.message || 'Failed to create schedule'),
   });
 
   const updateSchedule = useMutation({
@@ -366,7 +348,7 @@ const Schedule = () => {
       return response.json();
     },
     onError: (error) =>
-      alert('❌ ' + (error.message || 'Failed to update schedule')),
+      notify.error(error.message || 'Failed to update schedule'),
   });
 
   const deleteSchedule = useMutation({
@@ -379,7 +361,7 @@ const Schedule = () => {
       if (!response.ok) throw new Error('Failed to delete schedule');
     },
     onError: (error) =>
-      alert('❌ ' + (error.message || 'Failed to delete schedule')),
+      notify.error(error.message || 'Failed to delete schedule'),
   });
 
   const updateStatus = useMutation({
@@ -398,10 +380,9 @@ const Schedule = () => {
     },
     onSuccess: () => fetchSchedules(),
     onError: (error) =>
-      alert('❌ ' + (error.message || 'Failed to update status')),
+      notify.error(error.message || 'Failed to update status'),
   });
 
-  /* ---------------- Derived ---------------- */
   const schedules = getDataArray(schedulesData);
   const meta = getMeta(schedulesData);
 
@@ -452,8 +433,6 @@ const Schedule = () => {
     return c;
   }, [schedules]);
 
-  /* ---------------- Handlers ---------------- */
-
   const handleShiftTypeChange = (value) => {
     const defaults = SHIFT_DEFAULTS[value] || SHIFT_DEFAULTS.morning;
     setFormData((prev) => ({
@@ -464,15 +443,15 @@ const Schedule = () => {
     }));
   };
 
-  /* ✅ Enforcer toggle — respects MAX_ENFORCERS_PER_SHIFT */
   const toggleEnforcer = (id) => {
     setSelectedEnforcerIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
       if (prev.length >= MAX_ENFORCERS_PER_SHIFT) {
         setTimeout(
           () =>
-            alert(
-              `⚠️ Limit Reached\n\nA shift can have at most ${MAX_ENFORCERS_PER_SHIFT} enforcers. Remove one before adding another.`,
+            notify.warning(
+              `A shift can have at most ${MAX_ENFORCERS_PER_SHIFT} enforcers. Remove one before adding another.`,
+              { title: 'Limit Reached' },
             ),
           0,
         );
@@ -488,8 +467,9 @@ const Schedule = () => {
       if (remaining <= 0) {
         setTimeout(
           () =>
-            alert(
-              `⚠️ Limit Reached\n\nA shift can have at most ${MAX_ENFORCERS_PER_SHIFT} enforcers.`,
+            notify.warning(
+              `A shift can have at most ${MAX_ENFORCERS_PER_SHIFT} enforcers.`,
+              { title: 'Limit Reached' },
             ),
           0,
         );
@@ -509,8 +489,9 @@ const Schedule = () => {
       if (visible.length > remaining) {
         setTimeout(
           () =>
-            alert(
-              `⚠️ Only ${remaining} more enforcer${remaining === 1 ? '' : 's'} can be added (limit: ${MAX_ENFORCERS_PER_SHIFT} per shift).`,
+            notify.warning(
+              `Only ${remaining} more enforcer${remaining === 1 ? '' : 's'} can be added (limit: ${MAX_ENFORCERS_PER_SHIFT} per shift).`,
+              { title: 'Limit Reached' },
             ),
           0,
         );
@@ -521,29 +502,27 @@ const Schedule = () => {
 
   const clearSelectedEnforcers = () => setSelectedEnforcerIds([]);
 
-  /* ✅ Submit — enforces both the date rule and the enforcer cap */
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // ------ Rule 1: no today or past dates (only for NEW schedules) ------
     if (!editingSchedule) {
       const minDate = tomorrowISO();
       if (!formData.schedule_date || formData.schedule_date < minDate) {
-        alert(
-          '⚠️ Invalid Date\n\nYou cannot schedule for today or a past date.\nPlease choose tomorrow or a later date.',
+        notify.warning(
+          'You cannot schedule for today or a past date. Please choose tomorrow or a later date.',
+          { title: 'Invalid Date' },
         );
         return;
       }
     }
 
-    // ------ Rule 2: at least 1, at most MAX enforcers ------
     if (selectedEnforcerIds.length === 0) {
-      alert('Please select at least one enforcer.');
+      notify.warning('Please select at least one enforcer.');
       return;
     }
     if (selectedEnforcerIds.length > MAX_ENFORCERS_PER_SHIFT) {
-      alert(
-        `⚠️ Too many enforcers. A shift can have at most ${MAX_ENFORCERS_PER_SHIFT}.`,
+      notify.warning(
+        `Too many enforcers. A shift can have at most ${MAX_ENFORCERS_PER_SHIFT}.`,
       );
       return;
     }
@@ -563,7 +542,6 @@ const Schedule = () => {
       notes: formData.notes || '',
     };
 
-    /* ---------------- EDIT MODE ---------------- */
     if (editingSchedule) {
       const originalEnforcerId = editingSchedule.enforcer_id;
       const stillIncluded = selectedEnforcerIds.includes(originalEnforcerId);
@@ -591,9 +569,8 @@ const Schedule = () => {
         await fetchSchedules();
         setIsDialogOpen(false);
         resetForm();
-        alert(
-          `✅ Schedule updated (${selectedEnforcerIds.length} enforcer${
-            selectedEnforcerIds.length === 1 ? '' : 's'
+        notify.success(
+          `Schedule updated (${selectedEnforcerIds.length} enforcer${selectedEnforcerIds.length === 1 ? '' : 's'
           })`,
         );
       } catch {
@@ -602,7 +579,6 @@ const Schedule = () => {
       return;
     }
 
-    /* ---------------- CREATE MODE ---------------- */
     let success = 0;
     let failed = 0;
 
@@ -623,9 +599,11 @@ const Schedule = () => {
     resetForm();
 
     if (failed === 0) {
-      alert(`✅ Created ${success} schedule${success === 1 ? '' : 's'}`);
+      notify.success(
+        `Created ${success} schedule${success === 1 ? '' : 's'}`,
+      );
     } else {
-      alert(`⚠️ ${success} created, ${failed} failed.`);
+      notify.warning(`${success} created, ${failed} failed.`);
     }
   };
 
@@ -652,32 +630,29 @@ const Schedule = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDeleteGroup = (group) => {
-    if (
-      !window.confirm(
-        `Delete all ${group.items.length} schedule(s) in this shift?`,
-      )
-    )
-      return;
+  const handleDeleteGroup = async (group) => {
+    const ok = await notify.confirm(
+      `Delete all ${group.items.length} schedule(s) in this shift?`,
+      { destructive: true, confirmText: 'Delete' },
+    );
+    if (!ok) return;
     group.items.forEach((s) => deleteSchedule.mutate(s.schedule_id));
   };
 
-  const handleStatusChange = (id, newStatus) => {
-    if (window.confirm(`Change status to ${newStatus.replace('_', ' ')}?`)) {
-      updateStatus.mutate({ id, status: newStatus });
-    }
+  const handleStatusChange = async (id, newStatus) => {
+    const ok = await notify.confirm(
+      `Change status to ${newStatus.replace('_', ' ')}?`,
+      { confirmText: 'Change' },
+    );
+    if (ok) updateStatus.mutate({ id, status: newStatus });
   };
 
-  const handleStatusChangeGroup = (group, newStatus) => {
-    if (
-      !window.confirm(
-        `Change status for all ${group.items.length} schedule(s) to ${newStatus.replace(
-          '_',
-          ' ',
-        )}?`,
-      )
-    )
-      return;
+  const handleStatusChangeGroup = async (group, newStatus) => {
+    const ok = await notify.confirm(
+      `Change status for all ${group.items.length} schedule(s) to ${newStatus.replace('_', ' ')}?`,
+      { confirmText: 'Change All' },
+    );
+    if (!ok) return;
     group.items.forEach((s) =>
       updateStatus.mutate({ id: s.schedule_id, status: newStatus }),
     );
@@ -729,7 +704,6 @@ const Schedule = () => {
     );
   }
 
-  /* ---------------- Grouped card ---------------- */
   const renderScheduleGroup = (group) => {
     const isGroup = group.items.length > 1;
     const first = group.items[0];
@@ -889,10 +863,8 @@ const Schedule = () => {
 
   const atCap = selectedEnforcerIds.length >= MAX_ENFORCERS_PER_SHIFT;
 
-  /* ---------------- Main render ---------------- */
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-['Oswald'] font-semibold text-[#16233F]">
@@ -919,26 +891,23 @@ const Schedule = () => {
             <DialogHeader>
               <DialogTitle className="font-['Oswald'] text-[#16233F]">
                 {editingSchedule
-                  ? `Edit Schedule${
-                      selectedEnforcerIds.length > 1
-                        ? ` (${selectedEnforcerIds.length} enforcers)`
-                        : ''
-                    }`
+                  ? `Edit Schedule${selectedEnforcerIds.length > 1
+                    ? ` (${selectedEnforcerIds.length} enforcers)`
+                    : ''
+                  }`
                   : 'Add New Schedule'}
               </DialogTitle>
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Enforcer picker with cap */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-sm font-medium text-[#1F2937]">
                     Enforcers *
                   </label>
                   <span
-                    className={`text-xs font-semibold ${
-                      atCap ? 'text-[#C8202F]' : 'text-[#64748B]'
-                    }`}
+                    className={`text-xs font-semibold ${atCap ? 'text-[#C8202F]' : 'text-[#64748B]'
+                      }`}
                   >
                     {selectedEnforcerIds.length} / {MAX_ENFORCERS_PER_SHIFT}
                   </span>
@@ -1034,13 +1003,12 @@ const Schedule = () => {
                               type="button"
                               disabled={disabled}
                               onClick={() => toggleEnforcer(e.user_id)}
-                              className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors ${
-                                checked
-                                  ? 'bg-[#E5F2EA]'
-                                  : disabled
-                                    ? 'cursor-not-allowed opacity-50'
-                                    : 'hover:bg-[#F5F6F8]'
-                              }`}
+                              className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors ${checked
+                                ? 'bg-[#E5F2EA]'
+                                : disabled
+                                  ? 'cursor-not-allowed opacity-50'
+                                  : 'hover:bg-[#F5F6F8]'
+                                }`}
                               title={
                                 disabled
                                   ? `Limit is ${MAX_ENFORCERS_PER_SHIFT} per shift`
@@ -1048,11 +1016,10 @@ const Schedule = () => {
                               }
                             >
                               <span
-                                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
-                                  checked
-                                    ? 'border-[#1E8449] bg-[#1E8449]'
-                                    : 'border-[#CBD5E1] bg-white'
-                                }`}
+                                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${checked
+                                  ? 'border-[#1E8449] bg-[#1E8449]'
+                                  : 'border-[#CBD5E1] bg-white'
+                                  }`}
                               >
                                 {checked && (
                                   <Check className="h-3 w-3 text-white" />
@@ -1084,7 +1051,6 @@ const Schedule = () => {
                 </p>
               </div>
 
-              {/* Duty Location */}
               <div>
                 <label className="text-sm font-medium mb-1 block text-[#1F2937]">
                   Duty Location
@@ -1108,7 +1074,6 @@ const Schedule = () => {
                 </select>
               </div>
 
-              {/* Date — cannot be today or past */}
               <div>
                 <label className="text-sm font-medium mb-1 block text-[#1F2937]">
                   Date *
@@ -1129,7 +1094,6 @@ const Schedule = () => {
                 </p>
               </div>
 
-              {/* Shift Type */}
               <div>
                 <label className="text-sm font-medium mb-1 block text-[#1F2937]">
                   Shift Type *
@@ -1152,7 +1116,6 @@ const Schedule = () => {
                 </p>
               </div>
 
-              {/* Locked times */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 flex items-center gap-1.5 text-[#1F2937]">
@@ -1197,7 +1160,6 @@ const Schedule = () => {
                 </span>
               </div>
 
-              {/* Duties */}
               <div>
                 <label className="text-sm font-medium mb-1 block text-[#1F2937]">
                   Specific Duties
@@ -1212,7 +1174,6 @@ const Schedule = () => {
                 />
               </div>
 
-              {/* Notes */}
               <div>
                 <label className="text-sm font-medium mb-1 block text-[#1F2937]">
                   Notes
@@ -1237,11 +1198,10 @@ const Schedule = () => {
                 {createSchedule.isPending || updateSchedule.isPending
                   ? 'Saving…'
                   : editingSchedule
-                    ? `Update Schedule${
-                        selectedEnforcerIds.length > 1
-                          ? ` (${selectedEnforcerIds.length} enforcers)`
-                          : ''
-                      }`
+                    ? `Update Schedule${selectedEnforcerIds.length > 1
+                      ? ` (${selectedEnforcerIds.length} enforcers)`
+                      : ''
+                    }`
                     : selectedEnforcerIds.length > 1
                       ? `Create ${selectedEnforcerIds.length} Schedules`
                       : 'Create Schedule'}
@@ -1251,18 +1211,16 @@ const Schedule = () => {
         </Dialog>
       </div>
 
-      {/* View toggle + filters */}
       <div className="bg-white rounded-xl shadow-sm border border-[#E9ECF2] p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex rounded-lg bg-[#F5F6F8] p-1">
             <button
               type="button"
               onClick={() => setViewMode('date')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'date'
-                  ? 'bg-[#16233F] text-white'
-                  : 'text-[#64748B] hover:text-[#16233F]'
-              }`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'date'
+                ? 'bg-[#16233F] text-white'
+                : 'text-[#64748B] hover:text-[#16233F]'
+                }`}
             >
               <CalendarDays className="w-4 h-4" />
               By Date
@@ -1270,11 +1228,10 @@ const Schedule = () => {
             <button
               type="button"
               onClick={() => setViewMode('all')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'all'
-                  ? 'bg-[#16233F] text-white'
-                  : 'text-[#64748B] hover:text-[#16233F]'
-              }`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'all'
+                ? 'bg-[#16233F] text-white'
+                : 'text-[#64748B] hover:text-[#16233F]'
+                }`}
             >
               <List className="w-4 h-4" />
               All Schedules
@@ -1421,7 +1378,6 @@ const Schedule = () => {
         </div>
       </div>
 
-      {/* Summary strip */}
       {schedules.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {Object.entries(STATUS_META).map(([key, meta]) => {
@@ -1442,7 +1398,6 @@ const Schedule = () => {
         </div>
       )}
 
-      {/* Meta line */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[#64748B]">
         <div>
           {isLoading ? (
@@ -1468,7 +1423,6 @@ const Schedule = () => {
         )}
       </div>
 
-      {/* List */}
       {error ? (
         <div className="bg-white rounded-xl shadow-sm border p-8 text-center">
           <XCircle className="w-12 h-12 text-[#C8202F] mx-auto mb-3" />

@@ -40,9 +40,7 @@ import {
   Check,
   AlertCircle,
   MousePointer,
-  Smartphone,
   Clock,
-  Activity,
   Wifi,
   WifiOff,
   LocateFixed,
@@ -50,19 +48,15 @@ import {
   Layers,
   Maximize2,
   Minimize2,
-  ChevronLeft,
   ChevronRight,
   Users,
   PanelLeftClose,
   PanelLeftOpen,
   Copy,
-  Mail,
-  Phone,
   MapPinned,
-  ChevronsLeft,
-  ChevronsRight,
   Navigation,
 } from "lucide-react";
+import { useAlert } from "../ui/AlertProvider";
 
 // ==================== LEAFLET SETUP ====================
 delete L.Icon.Default.prototype._getIconUrl;
@@ -106,7 +100,6 @@ const TILE_LAYERS = {
 
 // ==================== MAP HELPERS ====================
 
-// Handles map clicks + draggable preview marker
 const MapEventHandler = ({
   onMapClick,
   onMarkerDrag,
@@ -124,7 +117,6 @@ const MapEventHandler = ({
       setMarkerPosition({ lat, lng });
       if (onMapClick) onMapClick({ lat, lng });
 
-      // Pulse animation
       const pulse = L.marker([lat, lng], {
         icon: L.divIcon({
           className: "click-marker",
@@ -169,7 +161,6 @@ const MapEventHandler = ({
   return null;
 };
 
-// Fly-to target helper - only acts on a fresh requestId
 const FlyToTarget = ({ target, zoom = 16, requestId }) => {
   const map = useMap();
   const lastIdRef = useRef(null);
@@ -187,7 +178,6 @@ const FlyToTarget = ({ target, zoom = 16, requestId }) => {
   return null;
 };
 
-// Auto-invalidate map size on container resize
 const InvalidateOnResize = () => {
   const map = useMap();
   useEffect(() => {
@@ -202,14 +192,12 @@ const InvalidateOnResize = () => {
   return null;
 };
 
-// Renders the actual enforcer markers + popups
 const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
   const map = useMap();
   const markersRef = useRef({});
   const circlesRef = useRef({});
 
   useEffect(() => {
-    // Cleanup old markers
     Object.values(markersRef.current).forEach((m) => map.removeLayer(m));
     Object.values(circlesRef.current).forEach((c) => map.removeLayer(c));
     markersRef.current = {};
@@ -222,20 +210,17 @@ const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
         enforcer.is_online &&
         enforcer.last_updated &&
         new Date(enforcer.last_updated) >
-          new Date(Date.now() - 2 * 60 * 1000);
+        new Date(Date.now() - 2 * 60 * 1000);
 
       const markerHtml = `
-        <div class="enforcer-marker ${
-          isOnline ? "enforcer-marker-online" : "enforcer-marker-offline"
+        <div class="enforcer-marker ${isOnline ? "enforcer-marker-online" : "enforcer-marker-offline"
         }">
-          <div class="enforcer-marker-bubble ${
-            isOnline ? "enforcer-marker-bubble-online" : "enforcer-marker-bubble-offline"
-          }">
+          <div class="enforcer-marker-bubble ${isOnline ? "enforcer-marker-bubble-online" : "enforcer-marker-bubble-offline"
+        }">
             ${enforcer.firstname?.[0] || "E"}${enforcer.lastname?.[0] || ""}
           </div>
-          <div class="enforcer-marker-dot ${
-            isOnline ? "enforcer-marker-dot-online" : "enforcer-marker-dot-offline"
-          }"></div>
+          <div class="enforcer-marker-dot ${isOnline ? "enforcer-marker-dot-online" : "enforcer-marker-dot-offline"
+        }"></div>
           ${isOnline ? '<div class="enforcer-marker-pulse"></div>' : ""}
         </div>
       `;
@@ -271,26 +256,24 @@ const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
             </div>
             <div class="enforcer-popup-row">
               <span class="enforcer-popup-label">Updated</span>
-              <span class="enforcer-popup-value">${
-                enforcer.last_updated
-                  ? new Date(enforcer.last_updated).toLocaleTimeString()
-                  : "N/A"
-              }</span>
+              <span class="enforcer-popup-value">${enforcer.last_updated
+          ? new Date(enforcer.last_updated).toLocaleTimeString()
+          : "N/A"
+        }</span>
             </div>
             <div class="enforcer-popup-row">
               <span class="enforcer-popup-label">Coords</span>
               <span class="enforcer-popup-value mono">${enforcer.latitude.toFixed(
-                5,
-              )}, ${enforcer.longitude.toFixed(5)}</span>
+          5,
+        )}, ${enforcer.longitude.toFixed(5)}</span>
             </div>
-            ${
-              enforcer.accuracy
-                ? `<div class="enforcer-popup-row">
+            ${enforcer.accuracy
+          ? `<div class="enforcer-popup-row">
                     <span class="enforcer-popup-label">Accuracy</span>
                     <span class="enforcer-popup-value">±${enforcer.accuracy.toFixed(0)}m</span>
                   </div>`
-                : ""
-            }
+          : ""
+        }
           </div>
           <button class="enforcer-popup-btn" onclick="window.__dutyMapLocate(${enforcer.user_id})">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -329,7 +312,6 @@ const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
       }
     });
 
-    // expose locate callback
     window.__dutyMapLocate = (id) => onLocate && onLocate(id);
 
     return () => {
@@ -350,27 +332,24 @@ const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
 // ==================== MAIN COMPONENT ====================
 
 const DutyMap = () => {
-  // ---- state ----
+  const notify = useAlert();
+
   const [enforcers, setEnforcers] = useState([]);
   const [dutyLocations, setDutyLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Sidebar
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("all"); // all | online | offline
+  const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Selection / zoom
   const [selectedEnforcer, setSelectedEnforcer] = useState(null);
   const [flyTarget, setFlyTarget] = useState(null);
 
-  // Map controls
   const [tileLayer, setTileLayer] = useState("satellite");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
-  // "Add duty" flow
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDuty, setEditingDuty] = useState(null);
   const [isPlacingMode, setIsPlacingMode] = useState(false);
@@ -384,11 +363,9 @@ const DutyMap = () => {
     radius: 100,
   });
 
-  // Static initial center
   const mapCenter = useMemo(() => [8.558004, 124.524832], []);
   const mapZoom = 15;
 
-  // ---- data fetching ----
   const fetchEnforcerLocations = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
@@ -462,7 +439,6 @@ const DutyMap = () => {
     return () => clearInterval(interval);
   }, [fetchData, fetchEnforcers]);
 
-  // ---- derived ----
   const onlineEnforcers = useMemo(
     () => enforcers.filter((e) => e.is_online && e.latitude),
     [enforcers],
@@ -497,7 +473,6 @@ const DutyMap = () => {
     );
   }, [dutyLocations, searchTerm]);
 
-  // ---- actions ----
   const handleLocateEnforcer = (enforcer) => {
     if (!enforcer?.latitude || !enforcer?.longitude) return;
     setFlyTarget({
@@ -514,7 +489,8 @@ const DutyMap = () => {
   };
 
   const handleLocateMe = () => {
-    if (!navigator.geolocation) return alert("Geolocation not supported");
+    if (!navigator.geolocation)
+      return notify.warning("Geolocation not supported");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setFlyTarget({
@@ -523,7 +499,7 @@ const DutyMap = () => {
           requestId: Date.now() + Math.random(),
         });
       },
-      () => alert("Unable to get your location"),
+      () => notify.error("Unable to get your location"),
       { enableHighAccuracy: true },
     );
   };
@@ -552,7 +528,8 @@ const DutyMap = () => {
   };
 
   const useMyLocation = () => {
-    if (!navigator.geolocation) return alert("Geolocation not supported");
+    if (!navigator.geolocation)
+      return notify.warning("Geolocation not supported");
     setIsGettingLocation(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -566,7 +543,7 @@ const DutyMap = () => {
         setIsGettingLocation(false);
       },
       () => {
-        alert("Unable to get your location. Check browser permissions.");
+        notify.error("Unable to get your location. Check browser permissions.");
         setIsGettingLocation(false);
       },
       { enableHighAccuracy: true },
@@ -592,7 +569,7 @@ const DutyMap = () => {
   const handleSubmitDuty = async (e) => {
     e.preventDefault();
     if (!formData.latitude || !formData.longitude) {
-      return alert("Please select a location on the map first.");
+      return notify.warning("Please select a location on the map first.");
     }
 
     try {
@@ -624,21 +601,26 @@ const DutyMap = () => {
         const msg =
           data.message ||
           (data.errors ? Object.values(data.errors).flat().join("\n") : "Failed");
-        return alert(msg);
+        return notify.error(msg);
       }
 
       await fetchDutyLocations();
       setIsDialogOpen(false);
       setIsPlacingMode(false);
-      alert(isEdit ? "Duty location updated." : "Duty location added.");
+      notify.success(isEdit ? "Duty location updated." : "Duty location added.");
     } catch (err) {
       console.error(err);
-      alert("Failed to save duty location.");
+      notify.error("Failed to save duty location.");
     }
   };
 
   const handleDeleteDuty = async (id) => {
-    if (!window.confirm("Delete this duty location?")) return;
+    const ok = await notify.confirm("Delete this duty location?", {
+      destructive: true,
+      confirmText: "Delete",
+    });
+    if (!ok) return;
+
     try {
       const token = localStorage.getItem("token");
       await fetch(`/api/duty-locations/${id}`, {
@@ -646,9 +628,10 @@ const DutyMap = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       await fetchDutyLocations();
+      notify.success("Duty location deleted.");
     } catch (err) {
       console.error(err);
-      alert("Failed to delete duty location.");
+      notify.error("Failed to delete duty location.");
     }
   };
 
@@ -656,7 +639,6 @@ const DutyMap = () => {
     navigator.clipboard?.writeText(text);
   };
 
-  // ---- render ----
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -696,11 +678,10 @@ const DutyMap = () => {
                 <button
                   key={key}
                   onClick={() => setTileLayer(key)}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
-                    active
-                      ? "bg-[#16233F] text-white"
-                      : "text-[#64748B] hover:bg-[#F5F6F8]"
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${active
+                    ? "bg-[#16233F] text-white"
+                    : "text-[#64748B] hover:bg-[#F5F6F8]"
+                    }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
                   {layer.label}
@@ -768,15 +749,13 @@ const DutyMap = () => {
 
       {/* ---------- MAIN GRID ---------- */}
       <div
-        className={`grid gap-4 transition-all duration-300 ${
-          sidebarOpen ? "lg:grid-cols-[1fr_360px]" : "grid-cols-1"
-        }`}
+        className={`grid gap-4 transition-all duration-300 ${sidebarOpen ? "lg:grid-cols-[1fr_360px]" : "grid-cols-1"
+          }`}
       >
         {/* ---------- MAP PANEL ---------- */}
         <div>
           <Card className="overflow-hidden">
             <CardContent className="p-0 relative">
-              {/* Map toolbar */}
               <div className="absolute top-3 left-3 z-[1000] flex items-center gap-2">
                 <button
                   onClick={() => setSidebarOpen((s) => !s)}
@@ -815,7 +794,6 @@ const DutyMap = () => {
                 </button>
               </div>
 
-              {/* Instruction chip */}
               <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[999] hidden md:flex">
                 <div className="bg-[#16233F]/85 text-white text-[11px] px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
                   <MousePointer className="w-3 h-3" />
@@ -823,11 +801,9 @@ const DutyMap = () => {
                 </div>
               </div>
 
-              {/* Map */}
               <div
-                className={`w-full ${
-                  isFullscreen ? "h-[calc(100vh-120px)]" : "h-[620px]"
-                }`}
+                className={`w-full ${isFullscreen ? "h-[calc(100vh-120px)]" : "h-[620px]"
+                  }`}
               >
                 <MapContainer
                   center={mapCenter}
@@ -866,7 +842,6 @@ const DutyMap = () => {
                     onLocate={handleLocateEnforcerById}
                   />
 
-                  {/* Duty location markers */}
                   {filteredLocations.map((location) => (
                     <React.Fragment key={`duty-${location.id}`}>
                       <Marker
@@ -948,7 +923,6 @@ const DutyMap = () => {
                 </MapContainer>
               </div>
 
-              {/* Legend chip */}
               <div className="absolute bottom-3 left-3 z-[999] bg-white/95 backdrop-blur border shadow-md rounded-lg px-3 py-2 flex items-center gap-3 text-[11px] font-medium text-[#475569]">
                 <span className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#16233F] inline-block" />
@@ -970,7 +944,6 @@ const DutyMap = () => {
         {/* ---------- SIDEBAR ---------- */}
         {sidebarOpen && (
           <div className="space-y-4">
-            {/* Enforcers panel */}
             <Card className="overflow-hidden">
               <div className="px-4 py-3 border-b bg-[#F8F9FA]">
                 <div className="flex items-center justify-between mb-2">
@@ -985,7 +958,6 @@ const DutyMap = () => {
                   </span>
                 </div>
 
-                {/* Search */}
                 <div className="relative mb-2">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#94A3B8]" />
                   <Input
@@ -1004,7 +976,6 @@ const DutyMap = () => {
                   )}
                 </div>
 
-                {/* Status chips */}
                 <div className="flex gap-1.5">
                   {[
                     { key: "all", label: "All", count: enforcers.length },
@@ -1014,11 +985,10 @@ const DutyMap = () => {
                     <button
                       key={chip.key}
                       onClick={() => setStatusFilter(chip.key)}
-                      className={`flex-1 text-[11px] px-2 py-1 rounded-md border font-medium transition-colors ${
-                        statusFilter === chip.key
-                          ? "bg-[#16233F] text-white border-[#16233F]"
-                          : "bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]"
-                      }`}
+                      className={`flex-1 text-[11px] px-2 py-1 rounded-md border font-medium transition-colors ${statusFilter === chip.key
+                        ? "bg-[#16233F] text-white border-[#16233F]"
+                        : "bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]"
+                        }`}
                     >
                       {chip.label} ({chip.count})
                     </button>
@@ -1026,9 +996,7 @@ const DutyMap = () => {
                 </div>
               </div>
 
-              {/* Enforcer list */}
               <div className="max-h-[340px] overflow-y-auto p-3 space-y-4">
-                {/* Online */}
                 {visibleOnline.length > 0 && (
                   <div>
                     <p className="text-[10px] uppercase tracking-wider font-semibold text-[#1E8449] mb-2 flex items-center gap-1.5">
@@ -1049,7 +1017,6 @@ const DutyMap = () => {
                   </div>
                 )}
 
-                {/* Offline */}
                 {visibleOffline.length > 0 && (
                   <div>
                     <p className="text-[10px] uppercase tracking-wider font-semibold text-[#94A3B8] mb-2 flex items-center gap-1.5">
@@ -1081,7 +1048,6 @@ const DutyMap = () => {
               </div>
             </Card>
 
-            {/* Duty locations panel */}
             <Card className="overflow-hidden">
               <div className="px-4 py-3 border-b bg-[#F8F9FA] flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1190,7 +1156,6 @@ const DutyMap = () => {
             </DialogTitle>
           </DialogHeader>
 
-          {/* Step indicator */}
           <div className="px-6 py-3 bg-[#FBF1DC] border-b border-[#F0B429]/30">
             <div className="flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
@@ -1216,7 +1181,6 @@ const DutyMap = () => {
             </div>
           </div>
 
-          {/* Preview mini-map (only when placing) */}
           {isPlacingMode && (
             <div className="px-6 pt-4">
               <div className="rounded-lg overflow-hidden border border-[#E9ECF2] h-48 relative">
@@ -1248,7 +1212,6 @@ const DutyMap = () => {
           )}
 
           <form onSubmit={handleSubmitDuty} className="px-6 py-4 space-y-4">
-            {/* Search */}
             <div>
               <label className="text-xs font-medium text-[#1F2937] mb-1.5 block">
                 Search location
@@ -1268,15 +1231,13 @@ const DutyMap = () => {
               />
             </div>
 
-            {/* Place-on-map toggle */}
             <button
               type="button"
               onClick={() => setIsPlacingMode((v) => !v)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border-2 transition-colors text-sm font-medium ${
-                isPlacingMode
-                  ? "border-[#1E8449] bg-[#E5F2EA] text-[#1E8449]"
-                  : "border-dashed border-[#CBD5E1] bg-[#F8F9FA] text-[#64748B] hover:border-[#16233F] hover:text-[#16233F]"
-              }`}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border-2 transition-colors text-sm font-medium ${isPlacingMode
+                ? "border-[#1E8449] bg-[#E5F2EA] text-[#1E8449]"
+                : "border-dashed border-[#CBD5E1] bg-[#F8F9FA] text-[#64748B] hover:border-[#16233F] hover:text-[#16233F]"
+                }`}
             >
               <span className="flex items-center gap-2">
                 <MousePointer className="w-4 h-4" />
@@ -1291,7 +1252,6 @@ const DutyMap = () => {
               )}
             </button>
 
-            {/* My location button */}
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -1329,7 +1289,6 @@ const DutyMap = () => {
               )}
             </div>
 
-            {/* Coordinates preview */}
             {formData.latitude && formData.longitude && (
               <div className="bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-[#1E8449] text-xs font-medium mb-1">
@@ -1354,7 +1313,6 @@ const DutyMap = () => {
               </div>
             )}
 
-            {/* Form fields */}
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-[#1F2937] mb-1.5 block">
@@ -1430,7 +1388,6 @@ const DutyMap = () => {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-2 pt-2 border-t">
               <Button
                 type="button"
@@ -1481,19 +1438,17 @@ const StatCard = ({ icon: Icon, label, value, accent, tint, small }) => (
 const EnforcerRow = ({ enforcer, online, active, onClick }) => (
   <button
     onClick={onClick}
-    className={`w-full text-left flex items-center gap-2.5 p-2 rounded-lg border transition-all ${
-      active
-        ? "border-[#16233F] bg-[#E9ECF2] shadow-sm"
-        : online
-          ? "border-transparent hover:border-[#1E8449]/40 hover:bg-[#F0FBF5]"
-          : "border-transparent hover:bg-[#F5F6F8] opacity-70"
-    }`}
+    className={`w-full text-left flex items-center gap-2.5 p-2 rounded-lg border transition-all ${active
+      ? "border-[#16233F] bg-[#E9ECF2] shadow-sm"
+      : online
+        ? "border-transparent hover:border-[#1E8449]/40 hover:bg-[#F0FBF5]"
+        : "border-transparent hover:bg-[#F5F6F8] opacity-70"
+      }`}
   >
     <div className="relative flex-shrink-0">
       <div
-        className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${
-          online ? "bg-[#1E8449]" : "bg-[#94A3B8]"
-        }`}
+        className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${online ? "bg-[#1E8449]" : "bg-[#94A3B8]"
+          }`}
       >
         {enforcer.firstname?.[0] || "E"}
         {enforcer.lastname?.[0] || ""}
@@ -1510,9 +1465,9 @@ const EnforcerRow = ({ enforcer, online, active, onClick }) => (
         <Clock className="w-2.5 h-2.5" />
         {enforcer.last_updated
           ? new Date(enforcer.last_updated).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
+            hour: "2-digit",
+            minute: "2-digit",
+          })
           : "No data"}
       </p>
     </div>
@@ -1525,9 +1480,8 @@ const EnforcerRow = ({ enforcer, online, active, onClick }) => (
 const EnforcerDetailCard = ({ enforcer, onClose, onLocate, onCopy }) => (
   <div className="fixed bottom-6 right-6 z-[1000] w-80 bg-white rounded-2xl shadow-2xl border border-[#E9ECF2] overflow-hidden">
     <div
-      className={`h-20 ${
-        enforcer.is_online ? "bg-[#16233F]" : "bg-[#64748B]"
-      } relative`}
+      className={`h-20 ${enforcer.is_online ? "bg-[#16233F]" : "bg-[#64748B]"
+        } relative`}
     >
       <button
         onClick={onClose}
@@ -1537,9 +1491,8 @@ const EnforcerDetailCard = ({ enforcer, onClose, onLocate, onCopy }) => (
       </button>
       <div className="absolute -bottom-8 left-4">
         <div
-          className={`w-16 h-16 rounded-full border-4 border-white flex items-center justify-center text-white text-xl font-bold ${
-            enforcer.is_online ? "bg-[#1E8449]" : "bg-[#94A3B8]"
-          }`}
+          className={`w-16 h-16 rounded-full border-4 border-white flex items-center justify-center text-white text-xl font-bold ${enforcer.is_online ? "bg-[#1E8449]" : "bg-[#94A3B8]"
+            }`}
         >
           {enforcer.firstname?.[0] || "E"}
           {enforcer.lastname?.[0] || ""}
@@ -1613,30 +1566,11 @@ const EnforcerDetailCard = ({ enforcer, onClose, onLocate, onCopy }) => (
             Center
           </button>
         )}
-        {/* {enforcer.contact_number && (
-          <a
-            href={`tel:${enforcer.contact_number}`}
-            className="flex items-center justify-center gap-1.5 bg-[#E5F2EA] hover:bg-[#D4EDE0] text-[#1E8449] text-xs font-medium py-2 px-3 rounded-lg"
-            title="Call"
-          >
-            <Phone className="w-3.5 h-3.5" />
-          </a>
-        )}
-        {enforcer.email && (
-          <a
-            href={`mailto:${enforcer.email}`}
-            className="flex items-center justify-center gap-1.5 bg-[#FBF1DC] hover:bg-[#F7E9C4] text-[#92600A] text-xs font-medium py-2 px-3 rounded-lg"
-            title="Email"
-          >
-            <Mail className="w-3.5 h-3.5" />
-          </a>
-        )} */}
       </div>
     </div>
   </div>
 );
 
-// Reusable location search (debounced nominatim)
 const LocationSearchInput = ({ onSelect }) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -1736,7 +1670,6 @@ const LocationSearchInput = ({ onSelect }) => {
 
 // ==================== STYLES ====================
 const mapStyles = `
-  /* Enforcer marker */
   .enforcer-marker-wrapper { background: none !important; border: none !important; }
   .enforcer-marker { position: relative; width: 44px; height: 44px; }
   .enforcer-marker-bubble {
@@ -1772,7 +1705,6 @@ const mapStyles = `
     100% { transform: scale(1.6); opacity: 0; }
   }
 
-  /* Duty marker */
   .duty-marker-wrapper { background: none !important; border: none !important; }
   .duty-marker {
     width: 32px; height: 40px; position: relative;
@@ -1786,7 +1718,6 @@ const mapStyles = `
   }
   .duty-marker-pin > svg { transform: rotate(45deg); }
 
-  /* Popup */
   .enforcer-popup .leaflet-popup-content-wrapper {
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.18);
@@ -1830,18 +1761,15 @@ const mapStyles = `
   }
   .enforcer-popup-btn:hover { background: #0F1A2E; }
 
-  /* Click pulse */
   .click-marker { animation: click-pulse 1s ease-out forwards; pointer-events: none; }
   @keyframes click-pulse {
     0% { transform: scale(0.6); opacity: 1; }
     100% { transform: scale(2.2); opacity: 0; }
   }
 
-  /* Cursor */
   .leaflet-container { cursor: grab; }
   .leaflet-container:active { cursor: grabbing; }
 
-  /* Scrollbar in sidebar */
   .overflow-y-auto::-webkit-scrollbar { width: 6px; }
   .overflow-y-auto::-webkit-scrollbar-thumb {
     background: #CBD5E1; border-radius: 3px;

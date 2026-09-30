@@ -45,6 +45,7 @@ import {
     Eye,
     History,
 } from "lucide-react";
+import { useAlert } from "../components/ui/AlertProvider";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -157,6 +158,7 @@ const ticketStatusBadge = (status) => {
 
 const Payments = () => {
     const queryClient = useQueryClient();
+    const notify = useAlert();
     const [tab, setTab] = useState("pending");
 
     // ----- Pending tab state -----
@@ -249,12 +251,14 @@ const Payments = () => {
             resetForm();
 
             if (data.ticket_status === "paid") {
-                alert(
-                    `✅ Payment recorded. Ticket is now fully paid. (Balance: ${formatPeso(data.balance)})`,
+                notify.success(
+                    `Payment recorded. Ticket is now fully paid. (Balance: ${formatPeso(data.balance)})`,
+                    { title: "Payment Recorded" },
                 );
             } else {
-                alert(
-                    `✅ Partial payment recorded.\n\nPaid this time: ${formatPeso(data.amount_paid)}\nTotal paid so far: ${formatPeso(data.total_paid)}\nRemaining balance: ${formatPeso(data.balance)}`,
+                notify.success(
+                    `Partial payment recorded.\n\nPaid this time: ${formatPeso(data.amount_paid)}\nTotal paid so far: ${formatPeso(data.total_paid)}\nRemaining balance: ${formatPeso(data.balance)}`,
+                    { title: "Partial Payment Recorded" },
                 );
             }
         },
@@ -267,6 +271,7 @@ const Payments = () => {
                 if (flat) msg = flat;
             }
             setFormError(msg);
+            notify.error(msg);
         },
     });
 
@@ -275,7 +280,6 @@ const Payments = () => {
     const openPaymentDialog = (ticket) => {
         setSelectedTicket(ticket);
 
-        // Pre-fill amount with the outstanding balance (or full fine if none).
         const totalFine = getTotalFine(ticket);
         const alreadyPaid = parseFloat(ticket.total_paid) || 0;
         const outstanding =
@@ -778,26 +782,26 @@ const Payments = () => {
 
                             {(selectedTicket.is_partial ||
                                 (selectedTicket.total_paid ?? 0) > 0) && (
-                                <>
-                                    <div className="flex justify-between text-sm mt-1">
-                                        <span className="text-[#64748B]">Already Paid</span>
-                                        <span className="font-semibold text-[#1E8449]">
-                                            {formatPeso(selectedTicket.total_paid || 0)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between text-sm mt-1">
-                                        <span className="text-[#64748B]">
-                                            Outstanding Balance
-                                        </span>
-                                        <span className="font-bold text-[#C2541F]">
-                                            {formatPeso(
-                                                selectedTicket.balance ??
+                                    <>
+                                        <div className="flex justify-between text-sm mt-1">
+                                            <span className="text-[#64748B]">Already Paid</span>
+                                            <span className="font-semibold text-[#1E8449]">
+                                                {formatPeso(selectedTicket.total_paid || 0)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between text-sm mt-1">
+                                            <span className="text-[#64748B]">
+                                                Outstanding Balance
+                                            </span>
+                                            <span className="font-bold text-[#C2541F]">
+                                                {formatPeso(
+                                                    selectedTicket.balance ??
                                                     getTotalFine(selectedTicket),
-                                            )}
-                                        </span>
-                                    </div>
-                                </>
-                            )}
+                                                )}
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
                         </div>
                     )}
 
@@ -852,8 +856,8 @@ const Payments = () => {
                                 />
                                 {selectedTicket &&
                                     parseFloat(formData.amount_paid) >
-                                        (parseFloat(selectedTicket.balance) || 0) +
-                                            0.01 && (
+                                    (parseFloat(selectedTicket.balance) || 0) +
+                                    0.01 && (
                                         <p className="text-xs text-[#C8202F] mt-1">
                                             Amount exceeds outstanding balance.
                                         </p>

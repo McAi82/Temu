@@ -22,12 +22,9 @@ import {
   Fingerprint, CheckCircle, XCircle, Clock, RefreshCw,
   Loader2, AlertCircle, ShieldCheck, Search, X, MessageSquare,
 } from "lucide-react";
+import { useAlert } from "../components/ui/AlertProvider";
 
 const ITEMS_PER_PAGE = 20;
-
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
 
 const getDataArray = (response) => {
   if (!response) return [];
@@ -83,12 +80,9 @@ const formatDateTime = (v) => {
   }
 };
 
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
-
 const BiometricRequests = () => {
   const queryClient = useQueryClient();
+  const notify = useAlert();
   const [tab, setTab] = useState("pending");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -137,10 +131,10 @@ const BiometricRequests = () => {
       queryClient.invalidateQueries(["biometric-requests"]);
       setReviewDialog({ open: false, mode: null, request: null });
       setReviewNotes("");
-      alert("✅ Request approved. The enforcer has been notified.");
+      notify.success("Request approved. The enforcer has been notified.");
     },
     onError: (e) =>
-      alert(e.response?.data?.message || "Failed to approve request."),
+      notify.error(e.response?.data?.message || "Failed to approve request."),
   });
 
   const rejectMutation = useMutation({
@@ -149,10 +143,10 @@ const BiometricRequests = () => {
       queryClient.invalidateQueries(["biometric-requests"]);
       setReviewDialog({ open: false, mode: null, request: null });
       setReviewNotes("");
-      alert("Request rejected. The enforcer has been notified.");
+      notify.success("Request rejected. The enforcer has been notified.");
     },
     onError: (e) =>
-      alert(e.response?.data?.message || "Failed to reject request."),
+      notify.error(e.response?.data?.message || "Failed to reject request."),
   });
 
   const openApprove = (req) => {
@@ -395,7 +389,6 @@ const BiometricRequests = () => {
         </TabsContent>
       </Tabs>
 
-      {/* -------------- Approve / Reject dialog -------------- */}
       <Dialog open={reviewDialog.open} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -487,11 +480,10 @@ const BiometricRequests = () => {
                   Cancel
                 </Button>
                 <Button
-                  className={`flex-1 ${
-                    reviewDialog.mode === "approve"
+                  className={`flex-1 ${reviewDialog.mode === "approve"
                       ? "bg-[#1E8449] hover:bg-[#186B3B]"
                       : "bg-[#C8202F] hover:bg-[#A01622]"
-                  }`}
+                    }`}
                   onClick={submitReview}
                   disabled={approveMutation.isPending || rejectMutation.isPending}
                 >

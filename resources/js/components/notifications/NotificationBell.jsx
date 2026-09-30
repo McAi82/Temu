@@ -36,6 +36,7 @@ import {
     Database,
     AlertTriangle,
 } from "lucide-react";
+import { useAlert } from "../ui/AlertProvider";
 
 // ---------- helpers ----------
 const ICONS = {
@@ -200,11 +201,12 @@ const dayLabel = (dateStr) => {
     });
 };
 
-const MODAL_EXIT_MS = 180; // must match the CSS exit animation duration
+const MODAL_EXIT_MS = 180;
 
 // ---------- component ----------
 const NotificationBell = ({ variant = "light" }) => {
     const navigate = useNavigate();
+    const notify = useAlert();
     const {
         notifications,
         unreadCount,
@@ -222,24 +224,21 @@ const NotificationBell = ({ variant = "light" }) => {
     } = useNotifications();
 
     const [open, setOpen] = useState(false);
-    // shouldRender keeps the modal mounted during the exit animation.
     const [shouldRender, setShouldRender] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
-    const [filter, setFilter] = useState("all"); // all | unread
+    const [filter, setFilter] = useState("all");
     const panelRef = useRef(null);
     const buttonRef = useRef(null);
     const closeTimerRef = useRef(null);
 
     const isDark = variant === "dark";
 
-    /* -------- open / close orchestration with fade-out -------- */
     const openModal = useCallback(() => {
         if (closeTimerRef.current) {
             clearTimeout(closeTimerRef.current);
             closeTimerRef.current = null;
         }
         setShouldRender(true);
-        // next frame so the enter animation has a starting state
         requestAnimationFrame(() => setOpen(true));
     }, []);
 
@@ -254,14 +253,12 @@ const NotificationBell = ({ variant = "light" }) => {
 
     const toggleModal = () => (open ? closeModal() : openModal());
 
-    /* -------- unmount cleanup -------- */
     useEffect(() => {
         return () => {
             if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
         };
     }, []);
 
-    /* -------- close on outside click -------- */
     useEffect(() => {
         if (!open) return;
         const onDocClick = (e) => {
@@ -278,7 +275,6 @@ const NotificationBell = ({ variant = "light" }) => {
         return () => document.removeEventListener("mousedown", onDocClick);
     }, [open, closeModal]);
 
-    /* -------- close on Escape + lock body scroll while open -------- */
     useEffect(() => {
         if (!open) return;
 
@@ -296,7 +292,6 @@ const NotificationBell = ({ variant = "light" }) => {
         };
     }, [open, closeModal]);
 
-    /* -------- group by day -------- */
     const grouped = useMemo(() => {
         const list =
             filter === "unread" ? notifications.filter((n) => !n.is_read) : notifications;
@@ -331,16 +326,19 @@ const NotificationBell = ({ variant = "light" }) => {
         if (e.target === e.currentTarget) closeModal();
     };
 
-    /* -------- animation state -------- */
-    // "enter" phase → .temu-modal-enter
-    // "exit"  phase → .temu-modal-exit
-    // The backdrop uses .temu-backdrop-enter / .temu-backdrop-exit
+    const handleClearAll = async () => {
+        const ok = await notify.confirm("Clear all notifications?", {
+            destructive: true,
+            confirmText: "Clear All",
+        });
+        if (ok) clearAll();
+    };
+
     const animState = open ? "enter" : "exit";
 
     return (
         <div className="relative">
             <style>{`
-        /* Bell shake on new unread */
         @keyframes temu-bell-shake {
           0%, 100% { transform: rotate(0); }
           10%, 30%, 50%, 70%, 90% { transform: rotate(-10deg); }
@@ -348,7 +346,6 @@ const NotificationBell = ({ variant = "light" }) => {
         }
         .temu-bell-shake { animation: temu-bell-shake 1.2s ease-in-out; }
 
-        /* ------- Modal keyframes (fade + subtle scale, centered) ------- */
         @keyframes temu-modal-in {
           from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
           to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -358,7 +355,6 @@ const NotificationBell = ({ variant = "light" }) => {
           to   { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
         }
 
-        /* ------- Backdrop keyframes ------- */
         @keyframes temu-backdrop-in {
           from { opacity: 0; }
           to   { opacity: 1; }
@@ -368,12 +364,8 @@ const NotificationBell = ({ variant = "light" }) => {
           to   { opacity: 0; }
         }
 
-        .temu-backdrop-enter {
-          animation: temu-backdrop-in 220ms ease-out both;
-        }
-        .temu-backdrop-exit {
-          animation: temu-backdrop-out 180ms ease-in both;
-        }
+        .temu-backdrop-enter { animation: temu-backdrop-in 220ms ease-out both; }
+        .temu-backdrop-exit { animation: temu-backdrop-out 180ms ease-in both; }
 
         .temu-modal-enter {
           animation: temu-modal-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -384,7 +376,6 @@ const NotificationBell = ({ variant = "light" }) => {
           will-change: opacity, transform;
         }
 
-        /* Respect users who don't want motion */
         @media (prefers-reduced-motion: reduce) {
           .temu-backdrop-enter,
           .temu-backdrop-exit,
@@ -399,15 +390,14 @@ const NotificationBell = ({ variant = "light" }) => {
                 ref={buttonRef}
                 type="button"
                 onClick={toggleModal}
-                className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
-                    isDark
+                className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${isDark
                         ? open
                             ? "bg-white/10 text-white"
                             : "text-[#B7C0D8] hover:bg-white/5 hover:text-white"
                         : open
-                          ? "bg-[#E9ECF2] text-[#16233F]"
-                          : "text-[#64748B] hover:bg-[#F5F6F8] hover:text-[#16233F]"
-                }`}
+                            ? "bg-[#E9ECF2] text-[#16233F]"
+                            : "text-[#64748B] hover:bg-[#F5F6F8] hover:text-[#16233F]"
+                    }`}
                 aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
                 aria-expanded={open}
             >
@@ -419,9 +409,8 @@ const NotificationBell = ({ variant = "light" }) => {
 
                 {unreadCount > 0 && (
                     <span
-                        className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#C8202F] text-white text-[10px] font-bold flex items-center justify-center border-2 shadow ${
-                            isDark ? "border-[#16233F]" : "border-white"
-                        }`}
+                        className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#C8202F] text-white text-[10px] font-bold flex items-center justify-center border-2 shadow ${isDark ? "border-[#16233F]" : "border-white"
+                            }`}
                     >
                         {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
@@ -430,30 +419,25 @@ const NotificationBell = ({ variant = "light" }) => {
 
             {shouldRender && (
                 <>
-                    {/* Backdrop */}
                     <div
                         onClick={handleBackdropClick}
-                        className={`fixed inset-0 z-[1999] bg-black/40 backdrop-blur-[2px] ${
-                            animState === "enter"
+                        className={`fixed inset-0 z-[1999] bg-black/40 backdrop-blur-[2px] ${animState === "enter"
                                 ? "temu-backdrop-enter"
                                 : "temu-backdrop-exit"
-                        }`}
+                            }`}
                         aria-hidden="true"
                     />
 
-                    {/* Centered modal */}
                     <div
                         ref={panelRef}
                         role="dialog"
                         aria-modal="true"
                         aria-label="Notifications"
-                        className={`fixed left-1/2 top-1/2 z-[2000] w-[440px] max-w-[calc(100vw-2rem)] max-h-[min(85vh,720px)] bg-white rounded-2xl shadow-2xl border border-[#E9ECF2] overflow-hidden flex flex-col ${
-                            animState === "enter"
+                        className={`fixed left-1/2 top-1/2 z-[2000] w-[440px] max-w-[calc(100vw-2rem)] max-h-[min(85vh,720px)] bg-white rounded-2xl shadow-2xl border border-[#E9ECF2] overflow-hidden flex flex-col ${animState === "enter"
                                 ? "temu-modal-enter"
                                 : "temu-modal-exit"
-                        }`}
+                            }`}
                     >
-                        {/* Header */}
                         <div className="px-5 py-4 border-b border-[#E9ECF2] bg-[#F8F9FA] flex-shrink-0">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
@@ -475,11 +459,10 @@ const NotificationBell = ({ variant = "light" }) => {
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => setShowSettings((v) => !v)}
-                                        className={`p-2 rounded-md transition-colors ${
-                                            showSettings
+                                        className={`p-2 rounded-md transition-colors ${showSettings
                                                 ? "bg-[#E9ECF2] text-[#16233F]"
                                                 : "text-[#94A3B8] hover:text-[#16233F] hover:bg-[#E9ECF2]"
-                                        }`}
+                                            }`}
                                         title="Notification settings"
                                     >
                                         <Settings className="w-4 h-4" />
@@ -491,9 +474,8 @@ const NotificationBell = ({ variant = "light" }) => {
                                         title="Refresh"
                                     >
                                         <RefreshCw
-                                            className={`w-4 h-4 ${
-                                                isLoading ? "animate-spin" : ""
-                                            }`}
+                                            className={`w-4 h-4 ${isLoading ? "animate-spin" : ""
+                                                }`}
                                         />
                                     </button>
                                     <button
@@ -506,7 +488,6 @@ const NotificationBell = ({ variant = "light" }) => {
                                 </div>
                             </div>
 
-                            {/* Settings drawer */}
                             {showSettings ? (
                                 <div className="pt-3 border-t border-[#E9ECF2] space-y-2.5">
                                     <label className="flex items-center justify-between text-sm text-[#1F2937] cursor-pointer">
@@ -539,25 +520,22 @@ const NotificationBell = ({ variant = "light" }) => {
                                     </label>
                                 </div>
                             ) : (
-                                /* Filter chips */
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => setFilter("all")}
-                                        className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
-                                            filter === "all"
+                                        className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${filter === "all"
                                                 ? "bg-[#16233F] text-white"
                                                 : "bg-white text-[#64748B] border border-[#E9ECF2] hover:bg-[#F5F6F8]"
-                                        }`}
+                                            }`}
                                     >
                                         All ({notifications.length})
                                     </button>
                                     <button
                                         onClick={() => setFilter("unread")}
-                                        className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
-                                            filter === "unread"
+                                        className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${filter === "unread"
                                                 ? "bg-[#16233F] text-white"
                                                 : "bg-white text-[#64748B] border border-[#E9ECF2] hover:bg-[#F5F6F8]"
-                                        }`}
+                                            }`}
                                     >
                                         Unread ({unreadCount})
                                     </button>
@@ -575,7 +553,6 @@ const NotificationBell = ({ variant = "light" }) => {
                             )}
                         </div>
 
-                        {/* Body */}
                         <div className="flex-1 overflow-y-auto">
                             {grouped.length === 0 ? (
                                 <div className="py-16 text-center">
@@ -603,11 +580,10 @@ const NotificationBell = ({ variant = "light" }) => {
                                             return (
                                                 <div
                                                     key={n.notification_id}
-                                                    className={`group relative px-5 py-3.5 border-b border-[#F3F4F6] last:border-b-0 cursor-pointer transition-colors ${
-                                                        n.is_read
+                                                    className={`group relative px-5 py-3.5 border-b border-[#F3F4F6] last:border-b-0 cursor-pointer transition-colors ${n.is_read
                                                             ? "bg-white"
                                                             : "bg-[#EFF6FF]"
-                                                    } hover:bg-[#F8F9FA]`}
+                                                        } hover:bg-[#F8F9FA]`}
                                                     onClick={() =>
                                                         handleNotificationClick(n)
                                                     }
@@ -627,11 +603,10 @@ const NotificationBell = ({ variant = "light" }) => {
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-start gap-2">
                                                                 <p
-                                                                    className={`text-sm leading-tight flex-1 ${
-                                                                        n.is_read
+                                                                    className={`text-sm leading-tight flex-1 ${n.is_read
                                                                             ? "text-[#475569] font-normal"
                                                                             : "text-[#1F2937] font-semibold"
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     {n.title}
                                                                 </p>
@@ -681,7 +656,6 @@ const NotificationBell = ({ variant = "light" }) => {
                             )}
                         </div>
 
-                        {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#E9ECF2] bg-[#F8F9FA] flex items-center justify-between text-xs flex-shrink-0">
                             <span className="text-[#94A3B8] flex items-center gap-2">
                                 <span className="w-1.5 h-1.5 rounded-full bg-[#1E8449] animate-pulse" />
@@ -694,10 +668,7 @@ const NotificationBell = ({ variant = "light" }) => {
                             </span>
                             {notifications.length > 0 && (
                                 <button
-                                    onClick={() => {
-                                        if (window.confirm("Clear all notifications?"))
-                                            clearAll();
-                                    }}
+                                    onClick={handleClearAll}
                                     className="text-[#C8202F] hover:text-[#A01622] font-medium"
                                 >
                                     Clear all

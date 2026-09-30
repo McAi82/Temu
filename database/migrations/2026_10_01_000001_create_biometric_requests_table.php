@@ -30,6 +30,7 @@ return new class extends Migration
                 ->onDelete('set null');
             $table->text('review_notes')->nullable();
             $table->timestamp('reviewed_at')->nullable();
+            $table->timestamp('consumed_at')->nullable();
             $table->timestamps();
 
             $table->index(['user_id', 'status']);
