@@ -7,15 +7,14 @@ import { Input } from '../components/ui/input';
 import OtpInput from '../components/ui/OtpInput';
 import {
   AlertCircle,
-  UserCog,
-  UserCheck,
-  Wrench,
-  GraduationCap,
-  ShieldCheck,
   Mail,
   ArrowLeft,
   RefreshCw,
   Loader2,
+  Lock,
+  Wrench,
+  GraduationCap,
+  ShieldCheck,
 } from 'lucide-react';
 import temuLogo from '../assets/temu-logo.png';
 
@@ -84,13 +83,11 @@ const Login = () => {
 
     setLoading(false);
 
-    // Enforcer / role without OTP — straight in
     if (result.success) {
       navigate('/');
       return;
     }
 
-    // Admin/staff — move to step 2
     if (result.requiresOtp) {
       setChallengeId(result.challengeId);
       setMaskedEmail(result.maskedEmail);
@@ -101,7 +98,6 @@ const Login = () => {
       return;
     }
 
-    // Failure
     setError(result.error || 'Login failed.');
   };
 
@@ -126,7 +122,6 @@ const Login = () => {
     }
 
     setOtpError(result.error || 'Could not verify the code.');
-    // Clear the boxes so the user can retype
     setOtp('');
   };
 
@@ -136,8 +131,6 @@ const Login = () => {
     setOtpError('');
     setOtpSubmitting(true);
 
-    // Re-submit the same credentials — the server reissues a fresh code
-    // and invalidates the previous one.
     const result = await beginLogin(email, password);
 
     setOtpSubmitting(false);
@@ -170,33 +163,6 @@ const Login = () => {
     }
   };
 
-  const fillDemoCredentials = (demoEmail, demoPassword) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setError('');
-  };
-
-  const demoAccounts = [
-    {
-      role: 'Admin',
-      email: 'occ.balasabas.johnpaul@gmail.com',
-      password: 'password123',
-      icon: UserCog,
-      description: 'Full access to all features',
-      accent: '#16233F',
-      tint: '#E9ECF2',
-    },
-    {
-      role: 'Staff',
-      email: 'luiskarlcons@gmail.com',
-      password: 'password123',
-      icon: UserCheck,
-      description: 'View-only access',
-      accent: '#92600A',
-      tint: '#FBF1DC',
-    },
-  ];
-
   const pillars = [
     { label: 'Engineering', icon: Wrench },
     { label: 'Education', icon: GraduationCap },
@@ -205,8 +171,8 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex bg-[#F5F6F8]">
-      {/* Left brand panel */}
-      <div className="hidden lg:flex lg:w-[44%] relative bg-[#16233F] flex-col justify-between overflow-hidden">
+      {/* ---------------- Left brand panel ---------------- */}
+      <div className="hidden lg:flex lg:w-[46%] relative bg-[#16233F] flex-col justify-between overflow-hidden">
         <div
           className="absolute inset-0 opacity-[0.05] pointer-events-none"
           style={{
@@ -214,27 +180,30 @@ const Login = () => {
               'repeating-linear-gradient(115deg, transparent, transparent 70px, #F0B429 70px, #F0B429 72px)',
           }}
         />
+
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-12 text-center">
           <img
             src={temuLogo}
             alt="City of El Salvador Seal"
-            className="w-36 h-36 mb-8"
+            className="w-40 h-40 mb-8 drop-shadow-lg"
           />
-          <p className="uppercase tracking-[0.35em] text-xs text-[#F0B429] font-['Inter'] mb-3">
+          <p className="uppercase tracking-[0.4em] text-[11px] text-[#F0B429] font-['Inter'] font-medium mb-4">
             City of El Salvador
           </p>
           <h1 className="text-6xl font-['Oswald'] font-semibold text-white tracking-tight mb-4">
             TEMU
           </h1>
-          <p className="text-[#C7CEDB] font-['Inter'] max-w-xs leading-relaxed">
+          <p className="text-[#C7CEDB] font-['Inter'] max-w-xs leading-relaxed text-sm">
             Traffic Enforcement and Management Unit
           </p>
         </div>
+
         <div className="relative z-10 grid grid-cols-3 border-t border-white/10">
           {pillars.map((p, i) => (
             <div
               key={p.label}
-              className={`flex flex-col items-center gap-2 py-6 ${i < 2 ? 'border-r border-white/10' : ''}`}
+              className={`flex flex-col items-center gap-2 py-6 ${i < 2 ? 'border-r border-white/10' : ''
+                }`}
             >
               <p.icon className="w-5 h-5 text-[#F0B429]" />
               <span className="text-[11px] uppercase tracking-wider text-[#C7CEDB] font-['Inter']">
@@ -245,20 +214,20 @@ const Login = () => {
         </div>
       </div>
 
-      {/* Right form panel */}
+      {/* ---------------- Right form panel ---------------- */}
       <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-md">
-          {/* Mobile-only brand header */}
+          {/* Mobile brand header */}
           <div className="lg:hidden flex flex-col items-center text-center mb-8">
             <img
               src={temuLogo}
               alt="City of El Salvador Seal"
-              className="w-20 h-20 mb-3"
+              className="w-24 h-24 mb-4"
             />
             <h1 className="text-3xl font-['Oswald'] font-semibold text-[#16233F]">
               TEMU
             </h1>
-            <p className="text-sm text-[#64748B] font-['Inter']">
+            <p className="text-sm text-[#64748B] font-['Inter'] mt-1">
               Traffic Enforcement and Management Unit
             </p>
           </div>
@@ -267,39 +236,40 @@ const Login = () => {
             /* ==================== STEP 1 ==================== */
             <>
               <div className="mb-8">
-                <h2 className="text-2xl font-['Oswald'] font-medium text-[#1F2937]">
+                <h2 className="text-3xl font-['Oswald'] font-semibold text-[#1F2937] tracking-tight">
                   Sign in
                 </h2>
-                <p className="text-sm text-[#64748B] font-['Inter'] mt-1">
-                  Enter your credentials to access the system.
+                <p className="text-sm text-[#64748B] font-['Inter'] mt-2 leading-relaxed">
+                  Enter your credentials to access the TEMU dashboard.
                 </p>
               </div>
 
-              <form onSubmit={handleSubmitCredentials} className="space-y-4">
+              <form onSubmit={handleSubmitCredentials} className="space-y-5">
                 {error && (
-                  <div className="bg-[#FBE7E9] text-[#C8202F] p-3 rounded-md flex items-center gap-2 text-sm border border-[#F3C6CA]">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    <span>{error}</span>
+                  <div className="bg-[#FBE7E9] text-[#C8202F] p-3.5 rounded-lg flex items-start gap-2.5 text-sm border-l-4 border-[#C8202F]">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{error}</span>
                   </div>
                 )}
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block text-[#1F2937] font-['Inter']">
+                  <label className="text-sm font-medium mb-2 block text-[#1F2937] font-['Inter']">
                     Email address
                   </label>
                   <Input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@temu.gov.ph"
+                    placeholder="you@temu.gov.ph"
                     required
-                    className="w-full focus-visible:ring-[#F0B429]"
+                    autoFocus
                     autoComplete="email"
+                    className="w-full h-11 focus-visible:ring-[#F0B429]"
                   />
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <label className="text-sm font-medium text-[#1F2937] font-['Inter']">
                       Password
                     </label>
@@ -316,59 +286,31 @@ const Login = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="w-full focus-visible:ring-[#F0B429]"
                     autoComplete="current-password"
+                    className="w-full h-11 focus-visible:ring-[#F0B429]"
                   />
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full bg-[#1E8449] hover:bg-[#186B3B] text-white font-['Inter'] font-medium"
                   disabled={loading}
+                  className="w-full h-11 bg-[#1E8449] hover:bg-[#186B3B] text-white font-['Inter'] font-semibold text-sm"
                 >
-                  {loading ? 'Signing in…' : 'Sign in'}
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Signing in…
+                    </>
+                  ) : (
+                    'Sign in'
+                  )}
                 </Button>
               </form>
 
-              <div className="space-y-3 mt-8">
-                {demoAccounts.map((demo) => (
-                  <button
-                    key={demo.role}
-                    type="button"
-                    onClick={() =>
-                      fillDemoCredentials(demo.email, demo.password)
-                    }
-                    className="w-full p-4 rounded-lg border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all duration-150 text-left group"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className="p-2 rounded-lg flex-shrink-0"
-                        style={{ backgroundColor: demo.tint, color: demo.accent }}
-                      >
-                        <demo.icon className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h3
-                            className="font-semibold font-['Inter']"
-                            style={{ color: demo.accent }}
-                          >
-                            {demo.role}
-                          </h3>
-                          <span className="text-xs text-gray-400 group-hover:text-gray-600 font-['Inter']">
-                            Use this →
-                          </span>
-                        </div>
-                        <p className="text-xs text-[#64748B] font-['Inter'] mt-0.5">
-                          {demo.description}
-                        </p>
-                        <div className="mt-1.5 text-xs font-['JetBrains_Mono'] text-[#64748B]">
-                          {demo.email}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+              <div className="mt-8 pt-6 border-t border-[#E9ECF2]">
+                <p className="text-xs text-[#94A3B8] font-['Inter'] text-center leading-relaxed">
+                  Need help? Contact your system administrator.
+                </p>
               </div>
 
               <p className="text-center text-xs text-[#94A3B8] font-['Inter'] mt-8">
@@ -389,13 +331,13 @@ const Login = () => {
               </button>
 
               <div className="mb-8">
-                <div className="w-12 h-12 rounded-full bg-[#FBF1DC] border border-[#F0B429]/40 flex items-center justify-center mb-4">
-                  <Mail className="w-6 h-6 text-[#92600A]" />
+                <div className="w-14 h-14 rounded-full bg-[#FBF1DC] border border-[#F0B429]/40 flex items-center justify-center mb-5">
+                  <Mail className="w-7 h-7 text-[#92600A]" />
                 </div>
-                <h2 className="text-2xl font-['Oswald'] font-medium text-[#1F2937]">
+                <h2 className="text-3xl font-['Oswald'] font-semibold text-[#1F2937] tracking-tight">
                   Check your email
                 </h2>
-                <p className="text-sm text-[#64748B] font-['Inter'] mt-1 leading-relaxed">
+                <p className="text-sm text-[#64748B] font-['Inter'] mt-2 leading-relaxed">
                   We sent a 6-digit verification code to{' '}
                   <span className="font-medium text-[#16233F]">
                     {maskedEmail}
@@ -405,13 +347,16 @@ const Login = () => {
               </div>
 
               {otpError && (
-                <div className="bg-[#FBE7E9] text-[#C8202F] p-3 rounded-md flex items-center gap-2 text-sm border border-[#F3C6CA] mb-4">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{otpError}</span>
+                <div className="bg-[#FBE7E9] text-[#C8202F] p-3.5 rounded-lg flex items-start gap-2.5 text-sm border-l-4 border-[#C8202F] mb-5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{otpError}</span>
                 </div>
               )}
 
               <div className="mb-6">
+                <label className="text-xs font-medium text-[#1F2937] mb-3 block font-['Inter'] text-center">
+                  Verification code
+                </label>
                 <OtpInput
                   length={6}
                   value={otp}
@@ -429,7 +374,7 @@ const Login = () => {
                 type="button"
                 onClick={() => handleVerifyOtp()}
                 disabled={otpSubmitting || otp.length !== 6}
-                className="w-full bg-[#1E8449] hover:bg-[#186B3B] text-white font-['Inter'] font-medium"
+                className="w-full h-11 bg-[#1E8449] hover:bg-[#186B3B] text-white font-['Inter'] font-semibold text-sm"
               >
                 {otpSubmitting ? (
                   <>
@@ -462,12 +407,18 @@ const Login = () => {
                 )}
               </div>
 
-              <div className="mt-8 p-3 rounded-lg bg-[#F8F9FA] border border-[#E9ECF2]">
-                <p className="text-xs text-[#64748B] font-['Inter'] leading-relaxed">
-                  <strong className="text-[#1F2937]">Didn&apos;t receive it?</strong>{' '}
-                  Check your spam folder. If it still doesn&apos;t arrive, verify
-                  the email address is correct or contact an administrator.
-                </p>
+              <div className="mt-8 p-4 rounded-lg bg-[#F8F9FA] border border-[#E9ECF2]">
+                <div className="flex items-start gap-2">
+                  <Lock className="w-3.5 h-3.5 text-[#64748B] flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-[#64748B] font-['Inter'] leading-relaxed">
+                    <strong className="text-[#1F2937]">
+                      Didn&apos;t receive it?
+                    </strong>{' '}
+                    Check your spam folder. If it still doesn&apos;t arrive,
+                    verify the email address is correct or contact an
+                    administrator.
+                  </p>
+                </div>
               </div>
             </>
           )}
