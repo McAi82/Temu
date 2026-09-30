@@ -112,7 +112,4 @@ class Notification extends Model
     public const TYPE_SYSTEM_BACKUP          = 'system_backup';
     public const TYPE_SYSTEM_ALERT           = 'system_alert';
     public const TYPE_SECURITY_ALERT         = 'security_alert';
-    public const TYPE_BIOMETRIC_REQUEST_SUBMITTED = 'biometric_request_submitted';
-    public const TYPE_BIOMETRIC_REQUEST_APPROVED  = 'biometric_request_approved';
-    public const TYPE_BIOMETRIC_REQUEST_REJECTED  = 'biometric_request_rejected';
 }

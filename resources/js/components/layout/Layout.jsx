@@ -14,8 +14,7 @@ import {
   FileText,
   MapPin,
   Wallet,
-  Calendar,
-  Fingerprint,
+  Calendar
 } from "lucide-react";
 import temuLogo from "../../assets/temu-logo.png";
 import NotificationBell from "../notifications/NotificationBell";
@@ -39,7 +38,6 @@ const Layout = ({ children }) => {
     { path: "/schedule", label: "Schedule", icon: Calendar },
     { path: "/duty-map", label: "Duty Map", icon: MapPin },
     { path: "/reports", label: "Reports", icon: FileText },
-    { path: "/biometric-requests", label: "Biometric Requests", icon: Fingerprint },
   ];
 
   if (user?.role === "staff") {

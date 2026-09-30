@@ -9,7 +9,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { AlertProvider } from './components/ui/AlertProvider';
-import BiometricRequests from './pages/BiometricRequests';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
@@ -65,7 +64,6 @@ const AppRoutes = () => {
                 <Route path="/violations" element={<ProtectedRoute><Layout><Violations /></Layout></ProtectedRoute>} />
                 <Route path="/tickets" element={<ProtectedRoute><Layout><Tickets /></Layout></ProtectedRoute>} />
                 <Route path="/users" element={<ProtectedRoute><Layout><Users /></Layout></ProtectedRoute>} />
-                <Route path="/biometric-requests" element={<ProtectedRoute><Layout><BiometricRequests /></Layout></ProtectedRoute>} />
                 <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
                 <Route path="/attendance" element={<ProtectedRoute><Layout><Attendance /></Layout></ProtectedRoute>} />
                 <Route path="/duty-map" element={<ProtectedRoute><Layout><DutyMap /></Layout></ProtectedRoute>} />

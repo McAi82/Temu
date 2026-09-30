@@ -86,29 +86,6 @@ Route::prefix('faces')->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
 
-    // ---------------------------------------------------------------
-    // BIOMETRIC CHANGE REQUESTS (attendance verification)
-    // ---------------------------------------------------------------
-    Route::prefix('biometric-requests')->group(function () {
-        // Any authenticated user (enforcer) can submit + check their own
-        Route::post('/',    [BiometricRequestController::class, 'store']);
-        Route::get('/mine', [BiometricRequestController::class, 'mine']);
-
-        // Admin/staff listing
-        Route::middleware('staff')->group(function () {
-            Route::get('/',              [BiometricRequestController::class, 'index']);
-            Route::get('/pending-count', [BiometricRequestController::class, 'pendingCount']);
-        });
-
-        // Admin-only decisions
-        Route::middleware('admin')->group(function () {
-            Route::put('/{id}/approve', [BiometricRequestController::class, 'approve'])
-                ->where('id', '[0-9]+');
-            Route::put('/{id}/reject',  [BiometricRequestController::class, 'reject'])
-                ->where('id', '[0-9]+');
-        });
-    });
-
     Route::get('/available-enforcers', [ScheduleController::class, 'availableEnforcers']);
     Route::put('/{id}/replace-enforcer', [ScheduleController::class, 'replaceEnforcer'])
         ->where('id', '[0-9]+');

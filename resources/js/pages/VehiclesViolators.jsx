@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -47,16 +47,83 @@ import {
   Users,
   RefreshCw,
   Loader2,
+  X,
 } from "lucide-react";
 import { useAlert } from "../components/ui/AlertProvider";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 const ITEMS_PER_PAGE = 10;
 
+/* ------------------------------------------------------------------ */
+/* Debounce                                                            */
+/* ------------------------------------------------------------------ */
+
+function useDebouncedValue(value, delay = 350) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+
+  return debounced;
+}
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
+const getDataArray = (response) => {
+  if (!response) return [];
+  if (Array.isArray(response)) return response;
+  if (response.data && Array.isArray(response.data)) return response.data;
+  if (
+    response.data &&
+    response.data.data &&
+    Array.isArray(response.data.data)
+  ) {
+    return response.data.data;
+  }
+  return [];
+};
+
+const getMeta = (response) => {
+  if (!response) return { current_page: 1, last_page: 1, total: 0 };
+
+  if (response.current_page !== undefined) {
+    return {
+      current_page: response.current_page,
+      last_page: response.last_page,
+      total: response.total,
+      per_page: response.per_page,
+    };
+  }
+
+  if (response.data && response.data.current_page !== undefined) {
+    return {
+      current_page: response.data.current_page,
+      last_page: response.data.last_page,
+      total: response.data.total,
+      per_page: response.data.per_page,
+    };
+  }
+
+  if (response.meta) {
+    return response.meta;
+  }
+
+  return { current_page: 1, last_page: 1, total: 0 };
+};
+
+/* ------------------------------------------------------------------ */
+/* Component                                                           */
+/* ------------------------------------------------------------------ */
+
 const VehiclesViolators = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
 
+  /* ---------------- Violators state ---------------- */
   const [violatorPage, setViolatorPage] = useState(1);
   const [violatorSearchTerm, setViolatorSearchTerm] = useState("");
   const [isViolatorDialogOpen, setIsViolatorDialogOpen] = useState(false);
@@ -74,6 +141,7 @@ const VehiclesViolators = () => {
   });
   const [violatorPhotoPreview, setViolatorPhotoPreview] = useState(null);
 
+  /* ---------------- Vehicles state ---------------- */
   const [vehiclePage, setVehiclePage] = useState(1);
   const [vehicleSearchTerm, setVehicleSearchTerm] = useState("");
   const [isVehicleDialogOpen, setIsVehicleDialogOpen] = useState(false);
@@ -86,13 +154,30 @@ const VehiclesViolators = () => {
     color: "",
   });
 
+  /* ---------------- Debounced search ---------------- */
+  const debouncedViolatorSearch = useDebouncedValue(violatorSearchTerm, 350);
+  const debouncedVehicleSearch = useDebouncedValue(vehicleSearchTerm, 350);
+
+  // Reset to page 1 whenever the search actually changes.
+  useEffect(() => {
+    setViolatorPage(1);
+  }, [debouncedViolatorSearch]);
+
+  useEffect(() => {
+    setVehiclePage(1);
+  }, [debouncedVehicleSearch]);
+
+  /* ---------------- Queries ---------------- */
+  // NOTE: no search term in the query key. We fetch one page of data and
+  // filter it client-side — the /violators and /vehicles endpoints don't
+  // accept a `search` param.
   const {
     data: violatorsResponse,
     isLoading: violatorsLoading,
     refetch: refetchViolators,
     error: violatorsError,
   } = useQuery({
-    queryKey: ["violators", violatorPage, violatorSearchTerm],
+    queryKey: ["violators", violatorPage],
     queryFn: () => getViolators(violatorPage, ITEMS_PER_PAGE),
     keepPreviousData: true,
     staleTime: 1000 * 60 * 2,
@@ -104,12 +189,13 @@ const VehiclesViolators = () => {
     refetch: refetchVehicles,
     error: vehiclesError,
   } = useQuery({
-    queryKey: ["vehicles", vehiclePage, vehicleSearchTerm],
+    queryKey: ["vehicles", vehiclePage],
     queryFn: () => getVehicles(vehiclePage, ITEMS_PER_PAGE),
     keepPreviousData: true,
     staleTime: 1000 * 60 * 2,
   });
 
+  /* ---------------- Mutations ---------------- */
   const createViolatorMutation = useMutation({
     mutationFn: createViolator,
     onSuccess: () => {
@@ -183,6 +269,8 @@ const VehiclesViolators = () => {
       notify.error(error.response?.data?.message || "Error deleting vehicle");
     },
   });
+
+  /* ---------------- Helpers ---------------- */
 
   const getImageUrl = (profilePhoto) => {
     if (!profilePhoto) return null;
@@ -299,53 +387,56 @@ const VehiclesViolators = () => {
     });
   };
 
-  const getDataArray = (response) => {
-    if (!response) return [];
-    if (Array.isArray(response)) return response;
-    if (response.data && Array.isArray(response.data)) return response.data;
-    if (
-      response.data &&
-      response.data.data &&
-      Array.isArray(response.data.data)
-    ) {
-      return response.data.data;
-    }
-    return [];
-  };
-
-  const getMeta = (response) => {
-    if (!response) return { current_page: 1, last_page: 1, total: 0 };
-
-    if (response.current_page !== undefined) {
-      return {
-        current_page: response.current_page,
-        last_page: response.last_page,
-        total: response.total,
-        per_page: response.per_page,
-      };
-    }
-
-    if (response.data && response.data.current_page !== undefined) {
-      return {
-        current_page: response.data.current_page,
-        last_page: response.data.last_page,
-        total: response.data.total,
-        per_page: response.data.per_page,
-      };
-    }
-
-    if (response.meta) {
-      return response.meta;
-    }
-
-    return { current_page: 1, last_page: 1, total: 0 };
-  };
+  /* ---------------- Derived data ---------------- */
 
   const violatorsMeta = getMeta(violatorsResponse);
   const vehiclesMeta = getMeta(vehiclesResponse);
   const violators = getDataArray(violatorsResponse);
   const vehicles = getDataArray(vehiclesResponse);
   const isLoading = violatorsLoading || vehiclesLoading;
+
+  /* ---------------- Client-side search filters ---------------- */
+
+  const filteredViolators = useMemo(() => {
+    const term = debouncedViolatorSearch.trim().toLowerCase();
+    if (!term) return violators;
+
+    return violators.filter((v) => {
+      const haystack = [
+        v.firstname,
+        v.middlename,
+        v.lastname,
+        v.license,
+        v.nationality,
+        v.gender,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [violators, debouncedViolatorSearch]);
+
+  const filteredVehicles = useMemo(() => {
+    const term = debouncedVehicleSearch.trim().toLowerCase();
+    if (!term) return vehicles;
+
+    return vehicles.filter((v) => {
+      const haystack = [
+        v.platenumber,
+        v.owner,
+        v.make,
+        v.model,
+        v.color,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [vehicles, debouncedVehicleSearch]);
+
+  /* ---------------- Early returns ---------------- */
 
   if (violatorsError || vehiclesError) {
     return (
@@ -376,12 +467,14 @@ const VehiclesViolators = () => {
     );
   }
 
+  /* ---------------- Render ---------------- */
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-['Oswald'] font-semibold text-[#16233F]">
-            Vehicles & Violators
+            Vehicles &amp; Violators
           </h1>
           <p className="text-[#64748B] font-['Inter'] text-sm mt-1">
             Manage vehicle and violator records
@@ -426,6 +519,7 @@ const VehiclesViolators = () => {
           </TabsList>
         </div>
 
+        {/* ==================== VIOLATORS TAB ==================== */}
         <TabsContent value="violators">
           <Card>
             <CardHeader>
@@ -441,179 +535,18 @@ const VehiclesViolators = () => {
                       placeholder="Search by name or license..."
                       value={violatorSearchTerm}
                       onChange={(e) => setViolatorSearchTerm(e.target.value)}
-                      className="pl-10 w-64 focus-visible:ring-[#F0B429]"
+                      className="pl-10 pr-10 w-64 focus-visible:ring-[#F0B429]"
                     />
-                  </div>
-                  <Dialog
-                    open={isViolatorDialogOpen}
-                    onOpenChange={setIsViolatorDialogOpen}
-                  >
-                    <DialogContent className="max-w-lg">
-                      <DialogHeader>
-                        <DialogTitle className="font-['Oswald'] text-[#16233F]">
-                          {editingViolator
-                            ? "Edit Violator"
-                            : "Add New Violator"}
-                        </DialogTitle>
-                      </DialogHeader>
-                      <form
-                        onSubmit={handleViolatorSubmit}
-                        className="space-y-4"
+                    {violatorSearchTerm && (
+                      <button
+                        onClick={() => setViolatorSearchTerm("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                        title="Clear"
                       >
-                        <div>
-                          <label className="block text-sm font-medium mb-1 text-[#1F2937]">
-                            Profile Photo
-                          </label>
-                          <div className="flex items-center gap-4">
-                            {violatorPhotoPreview && (
-                              <img
-                                src={violatorPhotoPreview}
-                                alt="Preview"
-                                className="w-16 h-16 rounded-full object-cover border border-[#E9ECF2]"
-                              />
-                            )}
-                            <div className="flex-1">
-                              <Input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleViolatorPhotoChange}
-                                className="flex-1 focus-visible:ring-[#F0B429]"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <Input
-                            placeholder="First Name *"
-                            value={violatorFormData.firstname}
-                            onChange={(e) =>
-                              setViolatorFormData({
-                                ...violatorFormData,
-                                firstname: e.target.value,
-                              })
-                            }
-                            required
-                            className="focus-visible:ring-[#F0B429]"
-                          />
-                          <Input
-                            placeholder="Middle Name"
-                            value={violatorFormData.middlename}
-                            onChange={(e) =>
-                              setViolatorFormData({
-                                ...violatorFormData,
-                                middlename: e.target.value,
-                              })
-                            }
-                            className="focus-visible:ring-[#F0B429]"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <Input
-                            placeholder="Last Name *"
-                            value={violatorFormData.lastname}
-                            onChange={(e) =>
-                              setViolatorFormData({
-                                ...violatorFormData,
-                                lastname: e.target.value,
-                              })
-                            }
-                            required
-                            className="focus-visible:ring-[#F0B429]"
-                          />
-                          <Input
-                            placeholder="License Number *"
-                            value={violatorFormData.license}
-                            onChange={(e) =>
-                              setViolatorFormData({
-                                ...violatorFormData,
-                                license: e.target.value.toUpperCase(),
-                              })
-                            }
-                            required
-                            className="focus-visible:ring-[#F0B429]"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-sm font-medium text-[#1F2937]">
-                              Expiry Date *
-                            </label>
-                            <Input
-                              type="date"
-                              value={violatorFormData.expiry}
-                              onChange={(e) =>
-                                setViolatorFormData({
-                                  ...violatorFormData,
-                                  expiry: e.target.value,
-                                })
-                              }
-                              required
-                              className="focus-visible:ring-[#F0B429]"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-[#1F2937]">
-                              Birthday *
-                            </label>
-                            <Input
-                              type="date"
-                              value={violatorFormData.birthday}
-                              onChange={(e) =>
-                                setViolatorFormData({
-                                  ...violatorFormData,
-                                  birthday: e.target.value,
-                                })
-                              }
-                              required
-                              className="focus-visible:ring-[#F0B429]"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <select
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                            value={violatorFormData.gender}
-                            onChange={(e) =>
-                              setViolatorFormData({
-                                ...violatorFormData,
-                                gender: e.target.value,
-                              })
-                            }
-                          >
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                            <option value="Other">Other</option>
-                          </select>
-                          <Input
-                            placeholder="Nationality"
-                            value={violatorFormData.nationality}
-                            onChange={(e) =>
-                              setViolatorFormData({
-                                ...violatorFormData,
-                                nationality: e.target.value,
-                              })
-                            }
-                            className="focus-visible:ring-[#F0B429]"
-                          />
-                        </div>
-                        <Button
-                          type="submit"
-                          className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
-                          disabled={
-                            createViolatorMutation.isPending ||
-                            updateViolatorMutation.isPending
-                          }
-                        >
-                          {createViolatorMutation.isPending ||
-                            updateViolatorMutation.isPending
-                            ? "Saving..."
-                            : editingViolator
-                              ? "Update Violator"
-                              : "Create Violator"}
-                        </Button>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -622,9 +555,11 @@ const VehiclesViolators = () => {
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
                 </div>
-              ) : violators.length === 0 ? (
+              ) : filteredViolators.length === 0 ? (
                 <div className="text-center py-8 text-[#64748B]">
-                  No violators found.
+                  {violatorSearchTerm
+                    ? `No violators match "${violatorSearchTerm}"`
+                    : "No violators found."}
                 </div>
               ) : (
                 <>
@@ -655,7 +590,7 @@ const VehiclesViolators = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {violators.map((violator) => (
+                      {filteredViolators.map((violator) => (
                         <TableRow
                           key={violator.violator_id}
                           className="hover:bg-[#F8F9FA]"
@@ -734,6 +669,7 @@ const VehiclesViolators = () => {
           </Card>
         </TabsContent>
 
+        {/* ==================== VEHICLES TAB ==================== */}
         <TabsContent value="vehicles">
           <Card>
             <CardHeader>
@@ -749,100 +685,18 @@ const VehiclesViolators = () => {
                       placeholder="Search by plate or owner..."
                       value={vehicleSearchTerm}
                       onChange={(e) => setVehicleSearchTerm(e.target.value)}
-                      className="pl-10 w-64 focus-visible:ring-[#F0B429]"
+                      className="pl-10 pr-10 w-64 focus-visible:ring-[#F0B429]"
                     />
-                  </div>
-                  <Dialog
-                    open={isVehicleDialogOpen}
-                    onOpenChange={setIsVehicleDialogOpen}
-                  >
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle className="font-['Oswald'] text-[#16233F]">
-                          {editingVehicle ? "Edit Vehicle" : "Add New Vehicle"}
-                        </DialogTitle>
-                      </DialogHeader>
-                      <form
-                        onSubmit={handleVehicleSubmit}
-                        className="space-y-4"
+                    {vehicleSearchTerm && (
+                      <button
+                        onClick={() => setVehicleSearchTerm("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                        title="Clear"
                       >
-                        <Input
-                          placeholder="Plate Number *"
-                          value={vehicleFormData.platenumber}
-                          onChange={(e) =>
-                            setVehicleFormData({
-                              ...vehicleFormData,
-                              platenumber: e.target.value.toUpperCase(),
-                            })
-                          }
-                          required
-                          className="focus-visible:ring-[#F0B429]"
-                        />
-                        <Input
-                          placeholder="Owner Name *"
-                          value={vehicleFormData.owner}
-                          onChange={(e) =>
-                            setVehicleFormData({
-                              ...vehicleFormData,
-                              owner: e.target.value,
-                            })
-                          }
-                          required
-                          className="focus-visible:ring-[#F0B429]"
-                        />
-                        <div className="grid grid-cols-2 gap-4">
-                          <Input
-                            placeholder="Make (e.g., Toyota)"
-                            value={vehicleFormData.make}
-                            onChange={(e) =>
-                              setVehicleFormData({
-                                ...vehicleFormData,
-                                make: e.target.value,
-                              })
-                            }
-                            className="focus-visible:ring-[#F0B429]"
-                          />
-                          <Input
-                            placeholder="Model"
-                            value={vehicleFormData.model}
-                            onChange={(e) =>
-                              setVehicleFormData({
-                                ...vehicleFormData,
-                                model: e.target.value,
-                              })
-                            }
-                            className="focus-visible:ring-[#F0B429]"
-                          />
-                        </div>
-                        <Input
-                          placeholder="Color"
-                          value={vehicleFormData.color}
-                          onChange={(e) =>
-                            setVehicleFormData({
-                              ...vehicleFormData,
-                              color: e.target.value,
-                            })
-                          }
-                          className="focus-visible:ring-[#F0B429]"
-                        />
-                        <Button
-                          type="submit"
-                          className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
-                          disabled={
-                            createVehicleMutation.isPending ||
-                            updateVehicleMutation.isPending
-                          }
-                        >
-                          {createVehicleMutation.isPending ||
-                            updateVehicleMutation.isPending
-                            ? "Saving..."
-                            : editingVehicle
-                              ? "Update Vehicle"
-                              : "Create Vehicle"}
-                        </Button>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -851,9 +705,11 @@ const VehiclesViolators = () => {
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
                 </div>
-              ) : vehicles.length === 0 ? (
+              ) : filteredVehicles.length === 0 ? (
                 <div className="text-center py-8 text-[#64748B]">
-                  No vehicles found.
+                  {vehicleSearchTerm
+                    ? `No vehicles match "${vehicleSearchTerm}"`
+                    : "No vehicles found."}
                 </div>
               ) : (
                 <>
@@ -881,7 +737,7 @@ const VehiclesViolators = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {vehicles.map((vehicle) => (
+                      {filteredVehicles.map((vehicle) => (
                         <TableRow
                           key={vehicle.vehicle_id}
                           className="hover:bg-[#F8F9FA]"
