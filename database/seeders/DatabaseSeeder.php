@@ -100,7 +100,18 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
 
-
+            [
+                'email' => 'enforcer.andrewE@temu.gov.ph',
+                'password_hash' => Hash::make('password123'),
+                'firstname' => 'Andrew',
+                'middlename' => 'B',
+                'lastname' => 'Enolpe',
+                'role' => 'enforcer',
+                'contact_number' => '09123456795',
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ];
 
         DB::table('users')->insert($users);
