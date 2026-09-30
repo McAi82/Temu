@@ -41,6 +41,7 @@ import {
   updateViolator,
   deleteViolator,
 } from "../services/api";
+import { useAuth } from "../contexts/AuthContext";
 import {
   Pencil,
   Trash2,
@@ -110,6 +111,7 @@ const getMeta = (response) => {
 const VehiclesViolators = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
+  const { isAdmin } = useAuth();
 
   /* ---------------- Violators state ---------------- */
   const [violatorPage, setViolatorPage] = useState(1);
@@ -630,15 +632,17 @@ const VehiclesViolators = () => {
                               >
                                 Edit
                               </ActionButton>
-                              <ActionButton
-                                icon={Trash2}
-                                variant="danger"
-                                onClick={() =>
-                                  handleDeleteViolator(violator.violator_id)
-                                }
-                              >
-                                Delete
-                              </ActionButton>
+                              {isAdmin() && (
+                                <ActionButton
+                                  icon={Trash2}
+                                  variant="danger"
+                                  onClick={() =>
+                                    handleDeleteViolator(violator.violator_id)
+                                  }
+                                >
+                                  Delete
+                                </ActionButton>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

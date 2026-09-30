@@ -91,8 +91,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->where('id', '[0-9]+');
 
     /*
-|----------------------- PAYMENTS (Staff + Admin) -----------------------
-*/
+    |----------------------- PAYMENTS (Staff + Admin) -----------------------
+    */
     Route::prefix('payments')->middleware('staff')->group(function () {
         Route::get('/',              [PaymentController::class, 'index']);
         Route::get('/pending',       [PaymentController::class, 'pending']);
@@ -155,13 +155,18 @@ Route::middleware('auth:sanctum')->group(function () {
             ->where('id', '[0-9]+');
         Route::put('/{id}/status', [TicketController::class, 'updateStatus'])
             ->where('id', '[0-9]+');
+
+        // Admin-only delete
         Route::delete('/{id}',     [TicketController::class, 'destroy'])
-            ->where('id', '[0-9]+');
+            ->where('id', '[0-9]+')
+            ->middleware('admin');
     });
     Route::get('/my-tickets', [TicketController::class, 'getMyTickets']);
 
     /*
     |----------------------- VIOLATORS -----------------------
+    | Read + create + update: any authenticated web user
+    | Delete: admin only
     */
     Route::prefix('violators')->group(function () {
         Route::get('/',    [ViolatorController::class, 'index']);
@@ -169,7 +174,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/search/license/{license}', [ViolatorController::class, 'searchByLicense']);
         Route::get('/{id}',    [ViolatorController::class, 'show'])->where('id', '[0-9]+');
         Route::put('/{id}',    [ViolatorController::class, 'update'])->where('id', '[0-9]+');
-        Route::delete('/{id}', [ViolatorController::class, 'destroy'])->where('id', '[0-9]+');
+
+        // ✅ Admin-only delete
+        Route::delete('/{id}', [ViolatorController::class, 'destroy'])
+            ->where('id', '[0-9]+')
+            ->middleware('admin');
     });
 
     /*
@@ -186,13 +195,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |----------------------- VIOLATION TYPES -----------------------
+    | Read: any authenticated user
+    | Create / Update / Delete: admin only
     */
     Route::prefix('violations')->group(function () {
         Route::get('/',    [ViolationController::class, 'index']);
-        Route::post('/',   [ViolationController::class, 'store']);
-        Route::get('/{id}',    [ViolationController::class, 'show'])->where('id', '[0-9]+');
-        Route::put('/{id}',    [ViolationController::class, 'update'])->where('id', '[0-9]+');
-        Route::delete('/{id}', [ViolationController::class, 'destroy'])->where('id', '[0-9]+');
+        Route::get('/{id}', [ViolationController::class, 'show'])->where('id', '[0-9]+');
+
+        // ✅ Admin-only mutations
+        Route::middleware('admin')->group(function () {
+            Route::post('/',   [ViolationController::class, 'store']);
+            Route::put('/{id}', [ViolationController::class, 'update'])->where('id', '[0-9]+');
+            Route::delete('/{id}', [ViolationController::class, 'destroy'])->where('id', '[0-9]+');
+        });
     });
 
     /*
@@ -255,8 +270,8 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     /*
-|----------------------- SCHEDULES -----------------------
-*/
+    |----------------------- SCHEDULES -----------------------
+    */
     Route::prefix('schedules')->group(function () {
         // ---- Literal (non-parameterized) routes FIRST ----
         Route::get('/',                    [ScheduleController::class, 'index']);

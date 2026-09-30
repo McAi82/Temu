@@ -41,6 +41,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { byFields } from '../lib/sortBy';
 import { useAlert } from '../components/ui/AlertProvider';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -205,6 +206,7 @@ const Schedule = () => {
 
   const [formData, setFormData] = useState(defaultForm);
 
+  // Sort enforcers alphabetically by lastname → firstname.
   const fetchEnforcers = async () => {
     setIsLoadingEnforcers(true);
     try {
@@ -213,7 +215,8 @@ const Schedule = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      setEnforcers(data.data || []);
+      const list = data.data || [];
+      setEnforcers([...list].sort(byFields('lastname', 'firstname')));
     } catch (err) {
       console.error('Error fetching enforcers:', err);
     } finally {
@@ -221,6 +224,7 @@ const Schedule = () => {
     }
   };
 
+  // Sort duty locations alphabetically by name.
   const fetchDutyLocations = async () => {
     setIsLoadingLocations(true);
     try {
@@ -229,7 +233,14 @@ const Schedule = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      setDutyLocations(data.data || []);
+      const list = data.data || [];
+      setDutyLocations(
+        [...list].sort((a, b) =>
+          (a.name || '').localeCompare(b.name || '', undefined, {
+            sensitivity: 'base',
+          }),
+        ),
+      );
     } catch (err) {
       console.error('Error fetching duty locations:', err);
     } finally {
@@ -395,9 +406,14 @@ const Schedule = () => {
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(s);
     });
-    return Array.from(map.entries()).map(([date, items]) => ({ date, items }));
+    // Sort dates ascending.
+    return Array.from(map.entries())
+      .sort(([a], [b]) => String(a).localeCompare(String(b)))
+      .map(([date, items]) => ({ date, items }));
   }, [schedules, viewMode]);
 
+  // Group by date + shift + location + times. Enforcers within each
+  // group are sorted alphabetically by lastname → firstname.
   const groupSchedules = (list) => {
     const map = new Map();
     list.forEach((s) => {
@@ -423,7 +439,18 @@ const Schedule = () => {
       }
       map.get(key).items.push(s);
     });
-    return Array.from(map.values());
+
+    const groups = Array.from(map.values());
+    groups.forEach((g) => {
+      g.items.sort((a, b) =>
+        byFields('lastname', 'firstname')(
+          enforcers.find((e) => e.user_id === a.enforcer_id) || {},
+          enforcers.find((e) => e.user_id === b.enforcer_id) || {},
+        ),
+      );
+    });
+
+    return groups;
   };
 
   const summaryCounts = useMemo(() => {

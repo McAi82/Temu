@@ -32,6 +32,7 @@ import {
   updateViolation,
   deleteViolation,
 } from "../services/api";
+import { useAuth } from "../contexts/AuthContext";
 import {
   Plus,
   Pencil,
@@ -95,6 +96,7 @@ const getMeta = (response) => {
 const Violations = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
+  const { isAdmin } = useAuth();
 
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
@@ -299,111 +301,112 @@ const Violations = () => {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button
-                onClick={resetForm}
-                className="bg-[#1E8449] hover:bg-[#186B3B]"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Violation
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle className="font-['Oswald'] text-[#16233F]">
-                  {editingViolation ? "Edit Violation" : "Add New Violation"}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    placeholder="Violation Code *"
-                    value={formData.violation_code}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        violation_code: e.target.value.toUpperCase(),
-                      })
-                    }
-                    required
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                  <Input
-                    placeholder="Category"
-                    value={formData.category}
-                    onChange={(e) =>
-                      setFormData({ ...formData, category: e.target.value })
-                    }
-                    list="categories"
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                  <datalist id="categories">
-                    <option value="Traffic Rules" />
-                    <option value="Documents" />
-                    <option value="Vehicle Condition" />
-                    <option value="Motorcycle" />
-                    <option value="Loading/Unloading" />
-                    <option value="Attire/Conduct" />
-                  </datalist>
-                </div>
-                <Input
-                  placeholder="Violation Name *"
-                  value={formData.violation_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, violation_name: e.target.value })
-                  }
-                  required
-                  className="focus-visible:ring-[#F0B429]"
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    type="number"
-                    placeholder="Fine Amount (₱)"
-                    value={formData.fine_amount}
-                    onChange={(e) =>
-                      setFormData({ ...formData, fine_amount: e.target.value })
-                    }
-                    required
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Demerit Points"
-                    value={formData.demerit_points}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        demerit_points: e.target.value,
-                      })
-                    }
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                </div>
-                <textarea
-                  className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                  placeholder="Description (optional)"
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                />
+          {isAdmin() && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
                 <Button
-                  type="submit"
-                  className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
-                  disabled={
-                    createMutation.isPending || updateMutation.isPending
-                  }
+                  onClick={resetForm}
+                  className="bg-[#1E8449] hover:bg-[#186B3B]"
                 >
-                  {createMutation.isPending || updateMutation.isPending
-                    ? "Saving..."
-                    : editingViolation
-                      ? "Update Violation"
-                      : "Create Violation"}
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Violation
                 </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle className="font-['Oswald'] text-[#16233F]">
+                    {editingViolation ? "Edit Violation" : "Add New Violation"}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      placeholder="Violation Code *"
+                      value={formData.violation_code}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          violation_code: e.target.value.toUpperCase(),
+                        })
+                      }
+                      required
+                      className="focus-visible:ring-[#F0B429]"
+                    />
+                    <Input
+                      placeholder="Category"
+                      value={formData.category}
+                      onChange={(e) =>
+                        setFormData({ ...formData, category: e.target.value })
+                      }
+                      list="categories"
+                      className="focus-visible:ring-[#F0B429]"
+                    />
+                    <datalist id="categories">
+                      <option value="Traffic Rules" />
+                      <option value="Documents" />
+                      <option value="Vehicle Condition" />
+                      <option value="Motorcycle" />
+                      <option value="Loading/Unloading" />
+                      <option value="Attire/Conduct" />
+                    </datalist>
+                  </div>
+                  <Input
+                    placeholder="Violation Name *"
+                    value={formData.violation_name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, violation_name: e.target.value })
+                    }
+                    required
+                    className="focus-visible:ring-[#F0B429]"
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      type="number"
+                      placeholder="Fine Amount (₱)"
+                      value={formData.fine_amount}
+                      onChange={(e) =>
+                        setFormData({ ...formData, fine_amount: e.target.value })
+                      }
+                      required
+                      className="focus-visible:ring-[#F0B429]"
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Demerit Points"
+                      value={formData.demerit_points}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          demerit_points: e.target.value,
+                        })
+                      }
+                      className="focus-visible:ring-[#F0B429]"
+                    />
+                  </div>
+                  <textarea
+                    className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
+                    placeholder="Description (optional)"
+                    value={formData.description}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
+                  />
+                  <Button
+                    type="submit"
+                    className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
+                    disabled={
+                      createMutation.isPending || updateMutation.isPending
+                    }
+                  >
+                    {createMutation.isPending || updateMutation.isPending
+                      ? "Saving..."
+                      : editingViolation
+                        ? "Update Violation"
+                        : "Create Violation"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>)}
         </div>
       </div>
 
@@ -507,27 +510,31 @@ const Violations = () => {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <ActionButton
-                            icon={Pencil}
-                            variant="primary"
-                            onClick={() => handleEdit(violation)}
-                          >
-                            Edit
-                          </ActionButton>
-                          <ActionButton
-                            icon={Trash2}
-                            variant="danger"
-                            onClick={() =>
-                              handleDelete(
-                                violation.violation_id,
-                                violation.violation_name,
-                              )
-                            }
-                          >
-                            Delete
-                          </ActionButton>
-                        </div>
+                        {isAdmin() ? (
+                          <div className="flex flex-wrap gap-2">
+                            <ActionButton
+                              icon={Pencil}
+                              variant="primary"
+                              onClick={() => handleEdit(violation)}
+                            >
+                              Edit
+                            </ActionButton>
+                            <ActionButton
+                              icon={Trash2}
+                              variant="danger"
+                              onClick={() =>
+                                handleDelete(
+                                  violation.violation_id,
+                                  violation.violation_name,
+                                )
+                              }
+                            >
+                              Delete
+                            </ActionButton>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-[#94A3B8]">View only</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

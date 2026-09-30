@@ -21,11 +21,43 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage = $request->get('per_page', 20);
-        $page = $request->get('page', 1);
+        $perPage = (int) $request->get('per_page', 20);
+        $page    = (int) $request->get('page', 1);
+
+        $query = User::query();
+
+        // ---- Role filter (used by DutyMap / Schedule picker) ----
+        if ($request->filled('role')) {
+            $query->where('role', $request->role);
+        }
+
+        // ---- Search across name, email, role, contact ----
+        if ($request->filled('search')) {
+            $term = '%' . $request->search . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('firstname', 'like', $term)
+                    ->orWhere('middlename', 'like', $term)
+                    ->orWhere('lastname', 'like', $term)
+                    ->orWhere('email', 'like', $term)
+                    ->orWhere('role', 'like', $term)
+                    ->orWhere('contact_number', 'like', $term);
+            });
+        }
+
+        // ---- Sort (whitelisted columns only) ----
+        $sortable = ['lastname', 'firstname', 'email', 'role', 'created_at'];
+        $sortBy  = in_array($request->get('sort_by'), $sortable, true)
+            ? $request->get('sort_by')
+            : 'lastname';
+        $sortDir = strtolower($request->get('sort_dir', 'asc')) === 'desc'
+            ? 'desc'
+            : 'asc';
+
+        $query->orderBy($sortBy, $sortDir)
+            ->orderBy('firstname', 'asc'); // tie-breaker
 
         return response()->json(
-            User::orderBy('created_at', 'desc')->paginate($perPage, ['*'], 'page', $page)
+            $query->paginate($perPage, ['*'], 'page', $page)
         );
     }
 
@@ -240,5 +272,4 @@ class UserController extends Controller
             'email_sent' => true,
         ]);
     }
-
 }

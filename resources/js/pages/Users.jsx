@@ -1,5 +1,5 @@
 // web/src/pages/Users.jsx
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -26,7 +26,6 @@ import {
 } from "../components/ui/table";
 import { Pagination } from "../components/ui/Pagination";
 import ActionButton from "../components/ui/ActionButton";
-import { byFields } from "../lib/sortBy";
 import {
   getUsers,
   deleteUser,
@@ -50,7 +49,7 @@ import {
 import api from "../services/api";
 import { useAlert } from "../components/ui/AlertProvider";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE_URL = "https://ivory-gerbil-502781.hostingersite.com";
 const ITEMS_PER_PAGE = 20;
 
 function useDebouncedValue(value, delay = 350) {
@@ -118,6 +117,7 @@ const Users = () => {
 
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
 
+  // Reset to page 1 whenever the search term changes.
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch]);
@@ -125,11 +125,17 @@ const Users = () => {
   const {
     data: usersResponse,
     isLoading,
+    isFetching,
     refetch,
     error,
   } = useQuery({
-    queryKey: ["users", page],
-    queryFn: () => getUsers(page, ITEMS_PER_PAGE),
+    queryKey: ["users", page, debouncedSearch],
+    queryFn: () =>
+      getUsers(page, ITEMS_PER_PAGE, {
+        search: debouncedSearch || undefined,
+        sort_by: "lastname",
+        sort_dir: "asc",
+      }),
     keepPreviousData: true,
     staleTime: 1000 * 60 * 2,
   });
@@ -214,32 +220,6 @@ const Users = () => {
 
   const users = getDataArray(usersResponse);
   const meta = getMeta(usersResponse);
-
-  /* ---------------- Filter + Sort ---------------- */
-  // Filter by the debounced search term, then sort alphabetically by
-  // last name → first name so the list reads like a directory.
-  const filteredUsers = useMemo(() => {
-    const term = debouncedSearch.trim().toLowerCase();
-
-    const matching = term
-      ? users.filter((u) => {
-          const haystack = [
-            u.firstname,
-            u.middlename,
-            u.lastname,
-            u.email,
-            u.role,
-            u.contact_number,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return haystack.includes(term);
-        })
-      : users;
-
-    return [...matching].sort(byFields("lastname", "firstname"));
-  }, [users, debouncedSearch]);
 
   const getImageUrl = (profileImage) => {
     if (!profileImage) return null;
@@ -559,6 +539,9 @@ const Users = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-10 w-80 focus-visible:ring-[#F0B429]"
               />
+              {isFetching && (
+                <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-[#94A3B8]" />
+              )}
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm("")}
@@ -576,7 +559,7 @@ const Users = () => {
             <div className="flex justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
             </div>
-          ) : filteredUsers.length === 0 ? (
+          ) : users.length === 0 ? (
             <div className="text-center py-8 text-[#64748B]">
               {searchTerm
                 ? `No users match "${searchTerm}"`
@@ -611,7 +594,7 @@ const Users = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
+                  {users.map((user) => (
                     <TableRow
                       key={user.user_id}
                       className="hover:bg-[#F8F9FA]"
@@ -674,11 +657,10 @@ const Users = () => {
                       </TableCell>
                       <TableCell>
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            user.is_active
-                              ? "bg-[#E5F2EA] text-[#1E8449]"
-                              : "bg-[#FBE7E9] text-[#C8202F]"
-                          }`}
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
+                            ? "bg-[#E5F2EA] text-[#1E8449]"
+                            : "bg-[#FBE7E9] text-[#C8202F]"
+                            }`}
                         >
                           {user.is_active ? "Active" : "Inactive"}
                         </span>

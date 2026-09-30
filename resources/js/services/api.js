@@ -158,8 +158,10 @@ export const getMyTickets = () => api.get('/my-tickets');
 export const searchTickets = (params) => api.get('/tickets/search', { params });
 
 // ==================== USERS ====================
-export const getUsers = (page = 1, perPage = 20) =>
-    api.get(`/users?page=${page}&per_page=${perPage}`);
+export const getUsers = (page = 1, perPage = 20, filters = {}) =>
+    api.get('/users', {
+        params: { page, per_page: perPage, ...filters },
+    });
 export const getUser = (id) => api.get(`/users/${id}`);
 export const createUser = (data) => api.post('/users', data);
 export const updateUser = (id, data) => api.put(`/users/${id}`, data);

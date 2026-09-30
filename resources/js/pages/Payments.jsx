@@ -1,5 +1,5 @@
 // resources/js/pages/Payments.jsx
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Pagination } from "../components/ui/Pagination";
 import ActionButton from "../components/ui/ActionButton";
+import { byFields } from "../lib/sortBy";
 import {
     getPayments,
     getPendingPayments,
@@ -216,10 +217,34 @@ const Payments = () => {
             enabled: !!historyTicketId && isHistoryDialogOpen,
         });
 
-    const pendingTickets = getDataArray(pendingResponse);
+    // Sort pending tickets alphabetically by violator lastname → firstname.
+    const pendingTickets = useMemo(() => {
+        const list = getDataArray(pendingResponse);
+        return [...list].sort((a, b) => {
+            const cmp = byFields("lastname", "firstname")(
+                a.violator || {},
+                b.violator || {},
+            );
+            if (cmp !== 0) return cmp;
+            return (a.ticket_number || "").localeCompare(b.ticket_number || "");
+        });
+    }, [pendingResponse]);
+
     const pendingMeta = getMeta(pendingResponse);
 
-    const payments = getDataArray(historyResponse);
+    // Sort payment history alphabetically by violator lastname → firstname.
+    const payments = useMemo(() => {
+        const list = getDataArray(historyResponse);
+        return [...list].sort((a, b) => {
+            const cmp = byFields("lastname", "firstname")(
+                a.ticket?.violator || {},
+                b.ticket?.violator || {},
+            );
+            if (cmp !== 0) return cmp;
+            return (a.receipt_number || "").localeCompare(b.receipt_number || "");
+        });
+    }, [historyResponse]);
+
     const historyMeta = getMeta(historyResponse);
 
     const createMutation = useMutation({
@@ -388,8 +413,11 @@ const Payments = () => {
                     <Card>
                         <CardHeader>
                             <div className="flex justify-between items-center">
-                                <CardTitle className="font-['Oswald'] font-medium text-[#16233F]">
+                                <CardTitle className="font-['Oswald'] font-medium text-[#16233F] flex items-center gap-2">
                                     Tickets Awaiting Payment
+                                    <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+                                        (alphabetical by violator)
+                                    </span>
                                 </CardTitle>
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />

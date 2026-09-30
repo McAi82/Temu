@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -18,6 +18,7 @@ import {
 } from "../components/ui/table";
 import { Pagination } from "../components/ui/Pagination";
 import ActionButton from "../components/ui/ActionButton";
+import { byFields } from "../lib/sortBy";
 import { getTickets, updateTicketStatus, deleteTicket } from "../services/api";
 import {
   Search,
@@ -144,23 +145,34 @@ const Tickets = () => {
     return icons[status] || null;
   };
 
-  const filteredTickets = tickets.filter((ticket) => {
-    const matchesSearch =
-      ticket.ticket_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.violator?.firstname
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      ticket.violator?.lastname
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      ticket.vehicle?.platenumber
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase());
+  // Filter + sort alphabetically by violator last name → first name,
+  // then by ticket number as a tie-breaker.
+  const filteredTickets = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
 
-    const matchesStatus = statusFilter === "" || ticket.status === statusFilter;
+    const matching = tickets.filter((ticket) => {
+      const matchesSearch =
+        !term ||
+        ticket.ticket_number?.toLowerCase().includes(term) ||
+        ticket.violator?.firstname?.toLowerCase().includes(term) ||
+        ticket.violator?.lastname?.toLowerCase().includes(term) ||
+        ticket.vehicle?.platenumber?.toLowerCase().includes(term);
 
-    return matchesSearch && matchesStatus;
-  });
+      const matchesStatus =
+        statusFilter === "" || ticket.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+
+    return [...matching].sort((a, b) => {
+      const cmp = byFields("lastname", "firstname")(
+        a.violator || {},
+        b.violator || {},
+      );
+      if (cmp !== 0) return cmp;
+      return (a.ticket_number || "").localeCompare(b.ticket_number || "");
+    });
+  }, [tickets, searchTerm, statusFilter]);
 
   if (isLoading && !ticketsResponse) {
     return (
@@ -378,19 +390,19 @@ const Tickets = () => {
                           )}
                           {(ticket.status === "paid" ||
                             ticket.status === "partial_paid") && (
-                              <ActionButton
-                                icon={XCircle}
-                                variant="danger"
-                                onClick={() =>
-                                  handleStatusUpdate(
-                                    ticket.ticket_id,
-                                    "dismissed",
-                                  )
-                                }
-                              >
-                                Dismiss
-                              </ActionButton>
-                            )}
+                            <ActionButton
+                              icon={XCircle}
+                              variant="danger"
+                              onClick={() =>
+                                handleStatusUpdate(
+                                  ticket.ticket_id,
+                                  "dismissed",
+                                )
+                              }
+                            >
+                              Dismiss
+                            </ActionButton>
+                          )}
                           {ticket.status === "contested" && (
                             <ActionButton
                               icon={AlertCircle}

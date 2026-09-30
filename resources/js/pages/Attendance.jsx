@@ -1,5 +1,5 @@
 // web/src/pages/Attendance.jsx
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { Pagination } from "../components/ui/Pagination";
+import { byFields } from "../lib/sortBy";
 import api from "../services/api";
 import {
   Search,
@@ -266,16 +267,35 @@ const Attendance = () => {
     return new Date(datetime).toLocaleTimeString();
   };
 
-  const filteredAttendances = attendances.filter(
-    (att) =>
-      att.enforcer?.firstname
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      att.enforcer?.lastname
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      att.status?.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  // Filter by search term, then sort by date desc → enforcer lastname → firstname.
+  const filteredAttendances = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+
+    const matching = term
+      ? attendances.filter((att) => {
+        const haystack = [
+          att.enforcer?.firstname,
+          att.enforcer?.lastname,
+          att.status,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(term);
+      })
+      : attendances;
+
+    return [...matching].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      if (dateA !== dateB) return dateB - dateA;
+
+      return byFields("lastname", "firstname")(
+        a.enforcer || {},
+        b.enforcer || {},
+      );
+    });
+  }, [attendances, searchTerm]);
 
   if (isLoading && !attendanceResponse) {
     return (

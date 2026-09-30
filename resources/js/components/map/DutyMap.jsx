@@ -387,7 +387,9 @@ const DutyMap = () => {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       });
       const json = await res.json();
-      const list = json.data || [];
+      const list = (json.data || []).filter(
+        (u) => u.role === "enforcer",
+      );
       const locations = await fetchEnforcerLocations();
 
       const merged = list.map((enforcer) => {
@@ -409,6 +411,7 @@ const DutyMap = () => {
     }
   }, [fetchEnforcerLocations]);
 
+  // Sort duty locations alphabetically by name.
   const fetchDutyLocations = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
@@ -416,7 +419,14 @@ const DutyMap = () => {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       });
       const json = await res.json();
-      setDutyLocations(json.data || []);
+      const list = json.data || [];
+      setDutyLocations(
+        [...list].sort((a, b) =>
+          (a.name || "").localeCompare(b.name || "", undefined, {
+            sensitivity: "base",
+          }),
+        ),
+      );
     } catch (err) {
       console.error("Error fetching duty locations:", err);
     }
@@ -448,14 +458,23 @@ const DutyMap = () => {
     [enforcers],
   );
 
+  // Filter then sort alphabetically by lastname → firstname.
   const filterMatches = (list) => {
-    if (!searchTerm.trim()) return list;
-    const q = searchTerm.toLowerCase();
-    return list.filter(
-      (e) =>
-        `${e.firstname} ${e.lastname}`.toLowerCase().includes(q) ||
-        (e.email || "").toLowerCase().includes(q),
-    );
+    const filtered = !searchTerm.trim()
+      ? list
+      : list.filter((e) => {
+        const q = searchTerm.toLowerCase();
+        return (
+          `${e.firstname} ${e.lastname}`.toLowerCase().includes(q) ||
+          (e.email || "").toLowerCase().includes(q)
+        );
+      });
+
+    return [...filtered].sort((a, b) => {
+      const aKey = `${(a.lastname || "").toLowerCase()}|${(a.firstname || "").toLowerCase()}`;
+      const bKey = `${(b.lastname || "").toLowerCase()}|${(b.firstname || "").toLowerCase()}`;
+      return aKey.localeCompare(bKey, undefined, { sensitivity: "base" });
+    });
   };
 
   const visibleOnline =
@@ -463,13 +482,22 @@ const DutyMap = () => {
   const visibleOffline =
     statusFilter === "online" ? [] : filterMatches(offlineEnforcers);
 
+  // Filter then sort duty locations alphabetically by name.
   const filteredLocations = useMemo(() => {
-    if (!searchTerm.trim()) return dutyLocations;
-    const q = searchTerm.toLowerCase();
-    return dutyLocations.filter(
-      (loc) =>
-        loc.name?.toLowerCase().includes(q) ||
-        loc.address?.toLowerCase().includes(q),
+    const base = !searchTerm.trim()
+      ? dutyLocations
+      : dutyLocations.filter((loc) => {
+        const q = searchTerm.toLowerCase();
+        return (
+          loc.name?.toLowerCase().includes(q) ||
+          loc.address?.toLowerCase().includes(q)
+        );
+      });
+
+    return [...base].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", undefined, {
+        sensitivity: "base",
+      }),
     );
   }, [dutyLocations, searchTerm]);
 
