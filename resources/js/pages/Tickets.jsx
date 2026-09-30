@@ -17,6 +17,7 @@ import {
   TableCell,
 } from "../components/ui/table";
 import { Pagination } from "../components/ui/Pagination";
+import ActionButton from "../components/ui/ActionButton";
 import { getTickets, updateTicketStatus, deleteTicket } from "../services/api";
 import {
   Search,
@@ -86,7 +87,9 @@ const Tickets = () => {
       notify.success("Ticket status updated successfully");
     },
     onError: (error) => {
-      notify.error(error.response?.data?.message || "Failed to update ticket status");
+      notify.error(
+        error.response?.data?.message || "Failed to update ticket status",
+      );
     },
   });
 
@@ -347,75 +350,65 @@ const Tickets = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-1 flex-wrap">
+                        <div className="flex flex-wrap gap-2">
                           {ticket.status === "issued" && (
                             <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                              <ActionButton
+                                icon={CheckCircle}
+                                variant="primary"
                                 onClick={() =>
                                   handleStatusUpdate(ticket.ticket_id, "paid")
                                 }
-                                className="text-[#1E8449] hover:bg-[#E5F2EA]"
-                                title="Mark as Paid"
                               >
-                                <CheckCircle className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                                Mark Paid
+                              </ActionButton>
+                              <ActionButton
+                                icon={AlertCircle}
+                                variant="warning"
                                 onClick={() =>
                                   handleStatusUpdate(
                                     ticket.ticket_id,
                                     "contested",
                                   )
                                 }
-                                className="text-[#C2541F] hover:bg-[#FBEAE2]"
-                                title="Mark as Contested"
                               >
-                                <AlertCircle className="w-4 h-4" />
-                              </Button>
+                                Contest
+                              </ActionButton>
                             </>
                           )}
                           {(ticket.status === "paid" ||
                             ticket.status === "partial_paid") && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                              <ActionButton
+                                icon={XCircle}
+                                variant="danger"
                                 onClick={() =>
                                   handleStatusUpdate(
                                     ticket.ticket_id,
                                     "dismissed",
                                   )
                                 }
-                                className="text-[#C8202F] hover:bg-[#FBE7E9]"
-                                title="Dismiss Ticket"
                               >
-                                <XCircle className="w-4 h-4" />
-                              </Button>
+                                Dismiss
+                              </ActionButton>
                             )}
                           {ticket.status === "contested" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
+                            <ActionButton
+                              icon={AlertCircle}
+                              variant="warning"
                               onClick={() =>
                                 handleStatusUpdate(ticket.ticket_id, "issued")
                               }
-                              className="text-[#92600A] hover:bg-[#FBF1DC]"
-                              title="Re-open Ticket"
                             >
-                              <AlertCircle className="w-4 h-4" />
-                            </Button>
+                              Re-open
+                            </ActionButton>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <ActionButton
+                            icon={Trash2}
+                            variant="danger"
                             onClick={() => handleDelete(ticket.ticket_id)}
-                            className="text-[#C8202F] hover:bg-[#FBE7E9]"
-                            title="Delete Ticket"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                            Delete
+                          </ActionButton>
                         </div>
                       </TableCell>
                     </TableRow>

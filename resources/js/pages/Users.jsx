@@ -25,10 +25,9 @@ import {
   TableCell,
 } from "../components/ui/table";
 import { Pagination } from "../components/ui/Pagination";
+import ActionButton from "../components/ui/ActionButton";
 import {
   getUsers,
-  createUser,
-  updateUser,
   deleteUser,
   toggleUserStatus,
   resetUserPassword,
@@ -546,8 +545,17 @@ const Users = () => {
                 placeholder="Search by name, email, or role..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80 focus-visible:ring-[#F0B429]"
+                className="pl-10 pr-10 w-80 focus-visible:ring-[#F0B429]"
               />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                  title="Clear"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -653,28 +661,27 @@ const Users = () => {
                       </TableCell>
                       <TableCell>
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            user.is_active
                               ? "bg-[#E5F2EA] text-[#1E8449]"
                               : "bg-[#FBE7E9] text-[#C8202F]"
-                            }`}
+                          }`}
                         >
                           {user.is_active ? "Active" : "Inactive"}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                        <div className="flex flex-wrap gap-2">
+                          <ActionButton
+                            icon={Pencil}
+                            variant="primary"
                             onClick={() => handleEdit(user)}
-                            title="Edit User"
-                            className="text-[#16233F] hover:bg-[#E9ECF2]"
                           >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                            Edit
+                          </ActionButton>
+                          <ActionButton
+                            icon={user.is_active ? UserX : UserCheck}
+                            variant={user.is_active ? "warning" : "primary"}
                             onClick={() =>
                               handleToggleStatus(
                                 user.user_id,
@@ -682,41 +689,27 @@ const Users = () => {
                                 user.email,
                               )
                             }
-                            title={user.is_active ? "Deactivate" : "Activate"}
-                            className={
-                              user.is_active
-                                ? "text-[#C8202F] hover:bg-[#FBE7E9]"
-                                : "text-[#1E8449] hover:bg-[#E5F2EA]"
-                            }
                           >
-                            {user.is_active ? (
-                              <UserX className="w-4 h-4" />
-                            ) : (
-                              <UserCheck className="w-4 h-4" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                            {user.is_active ? "Deactivate" : "Activate"}
+                          </ActionButton>
+                          <ActionButton
+                            icon={Key}
+                            variant="warning"
                             onClick={() =>
                               handleResetPassword(user.user_id, user.email)
                             }
-                            title="Reset Password"
-                            className="text-[#F0B429] hover:bg-[#FBF1DC]"
                           >
-                            <Key className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                            Reset Password
+                          </ActionButton>
+                          <ActionButton
+                            icon={Trash2}
+                            variant="danger"
                             onClick={() =>
                               handleDelete(user.user_id, user.email)
                             }
-                            title="Delete User"
-                            className="text-[#C8202F] hover:bg-[#FBE7E9]"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                            Delete
+                          </ActionButton>
                         </div>
                       </TableCell>
                     </TableRow>

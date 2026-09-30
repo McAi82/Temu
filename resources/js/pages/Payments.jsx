@@ -25,6 +25,7 @@ import {
 } from "../components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { Pagination } from "../components/ui/Pagination";
+import ActionButton from "../components/ui/ActionButton";
 import {
     getPayments,
     getPendingPayments,
@@ -48,10 +49,6 @@ import {
 import { useAlert } from "../components/ui/AlertProvider";
 
 const ITEMS_PER_PAGE = 20;
-
-/* ------------------------------------------------------------------ */
-/* Helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 const getDataArray = (response) => {
     if (!response) return [];
@@ -152,25 +149,18 @@ const ticketStatusBadge = (status) => {
     );
 };
 
-/* ------------------------------------------------------------------ */
-/* Component                                                          */
-/* ------------------------------------------------------------------ */
-
 const Payments = () => {
     const queryClient = useQueryClient();
     const notify = useAlert();
     const [tab, setTab] = useState("pending");
 
-    // ----- Pending tab state -----
     const [pendingPage, setPendingPage] = useState(1);
     const [pendingSearch, setPendingSearch] = useState("");
 
-    // ----- History tab state -----
     const [historyPage, setHistoryPage] = useState(1);
     const [historySearch, setHistorySearch] = useState("");
     const [historyStatus, setHistoryStatus] = useState("");
 
-    // ----- Record-payment dialog state -----
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [formData, setFormData] = useState({
@@ -184,11 +174,8 @@ const Payments = () => {
     });
     const [formError, setFormError] = useState("");
 
-    // ----- Ticket history dialog state -----
     const [historyTicketId, setHistoryTicketId] = useState(null);
     const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
-
-    /* ------------------------------- Queries ------------------------------- */
 
     const {
         data: pendingResponse,
@@ -222,22 +209,18 @@ const Payments = () => {
         enabled: tab === "history",
     });
 
-    const {
-        data: ticketHistoryResponse,
-        isLoading: ticketHistoryLoading,
-    } = useQuery({
-        queryKey: ["payments-by-ticket", historyTicketId],
-        queryFn: () => getPaymentsByTicket(historyTicketId),
-        enabled: !!historyTicketId && isHistoryDialogOpen,
-    });
+    const { data: ticketHistoryResponse, isLoading: ticketHistoryLoading } =
+        useQuery({
+            queryKey: ["payments-by-ticket", historyTicketId],
+            queryFn: () => getPaymentsByTicket(historyTicketId),
+            enabled: !!historyTicketId && isHistoryDialogOpen,
+        });
 
     const pendingTickets = getDataArray(pendingResponse);
     const pendingMeta = getMeta(pendingResponse);
 
     const payments = getDataArray(historyResponse);
     const historyMeta = getMeta(historyResponse);
-
-    /* ------------------------------ Mutations ------------------------------ */
 
     const createMutation = useMutation({
         mutationFn: createPayment,
@@ -274,8 +257,6 @@ const Payments = () => {
             notify.error(msg);
         },
     });
-
-    /* ------------------------------ Handlers ------------------------------- */
 
     const openPaymentDialog = (ticket) => {
         setSelectedTicket(ticket);
@@ -352,8 +333,6 @@ const Payments = () => {
         setIsHistoryDialogOpen(true);
     };
 
-    /* -------------------------------- Render ------------------------------- */
-
     const totalPendingCount = pendingMeta.total || 0;
 
     const ticketHistory = ticketHistoryResponse?.data?.ticket;
@@ -362,7 +341,6 @@ const Payments = () => {
 
     return (
         <div>
-            {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-['Oswald'] font-semibold text-[#16233F]">
@@ -406,7 +384,6 @@ const Payments = () => {
                     </TabsTrigger>
                 </TabsList>
 
-                {/* ==================== PENDING TAB ==================== */}
                 <TabsContent value="pending">
                     <Card>
                         <CardHeader>
@@ -537,28 +514,25 @@ const Payments = () => {
                                                         </TableCell>
                                                         <TableCell>{ticketStatusBadge(ticket.status)}</TableCell>
                                                         <TableCell className="text-right">
-                                                            <div className="flex items-center justify-end gap-2">
+                                                            <div className="flex items-center justify-end gap-2 flex-wrap">
                                                                 {isPartial && (
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="sm"
+                                                                    <ActionButton
+                                                                        icon={History}
+                                                                        variant="info"
                                                                         onClick={() =>
                                                                             openTicketHistory(ticket.ticket_id)
                                                                         }
-                                                                        className="text-[#16233F] hover:bg-[#E9ECF2]"
-                                                                        title="View payment history"
                                                                     >
-                                                                        <History className="w-4 h-4" />
-                                                                    </Button>
+                                                                        History
+                                                                    </ActionButton>
                                                                 )}
-                                                                <Button
-                                                                    size="sm"
+                                                                <ActionButton
+                                                                    icon={PhilippinePeso}
+                                                                    variant="primary"
                                                                     onClick={() => openPaymentDialog(ticket)}
-                                                                    className="bg-[#1E8449] hover:bg-[#186B3B]"
                                                                 >
-                                                                    <PhilippinePeso className="w-3.5 h-3.5 mr-1" />
                                                                     {isPartial ? "Add Payment" : "Record Payment"}
-                                                                </Button>
+                                                                </ActionButton>
                                                             </div>
                                                         </TableCell>
                                                     </TableRow>
@@ -580,7 +554,6 @@ const Payments = () => {
                     </Card>
                 </TabsContent>
 
-                {/* ==================== HISTORY TAB ==================== */}
                 <TabsContent value="history">
                     <Card>
                         <CardHeader>
@@ -697,19 +670,15 @@ const Payments = () => {
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         {p.ticket?.ticket_id && (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
+                                                            <ActionButton
+                                                                icon={Eye}
+                                                                variant="info"
                                                                 onClick={() =>
-                                                                    openTicketHistory(
-                                                                        p.ticket.ticket_id,
-                                                                    )
+                                                                    openTicketHistory(p.ticket.ticket_id)
                                                                 }
-                                                                className="text-[#16233F] hover:bg-[#E9ECF2]"
-                                                                title="View ticket payment history"
                                                             >
-                                                                <Eye className="w-4 h-4" />
-                                                            </Button>
+                                                                View
+                                                            </ActionButton>
                                                         )}
                                                     </TableCell>
                                                 </TableRow>
@@ -731,7 +700,6 @@ const Payments = () => {
                 </TabsContent>
             </Tabs>
 
-            {/* ==================== RECORD PAYMENT DIALOG ==================== */}
             <Dialog
                 open={isDialogOpen}
                 onOpenChange={(open) => {
@@ -987,7 +955,6 @@ const Payments = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* ==================== TICKET PAYMENT HISTORY DIALOG ==================== */}
             <Dialog
                 open={isHistoryDialogOpen}
                 onOpenChange={(open) => {
@@ -1013,7 +980,6 @@ const Payments = () => {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {/* Ticket summary */}
                             <div className="bg-[#F8F9FA] rounded-lg p-4 border border-[#E9ECF2]">
                                 <div className="grid grid-cols-2 gap-2 text-sm">
                                     <div>
@@ -1063,7 +1029,6 @@ const Payments = () => {
                                 </div>
                             </div>
 
-                            {/* Payment list */}
                             {ticketPayments.length === 0 ? (
                                 <div className="text-center py-6 text-[#64748B] text-sm">
                                     No payments recorded for this ticket yet.

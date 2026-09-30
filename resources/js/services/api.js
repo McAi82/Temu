@@ -32,7 +32,6 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
-            // avoid redirect loop on public ticket pages
             if (!window.location.pathname.startsWith('/public-ticket')) {
                 window.location.href = '/login';
             }
@@ -42,13 +41,8 @@ api.interceptors.response.use(
 );
 
 // ==================== AUTH ====================
-// Step 1 — credentials.
-//   - For admin/staff:  response.data = { requires_otp: true, challenge_id, masked_email, expires_in }
-//   - For enforcer:     response.data = { user, token, token_type }  (legacy, unchanged)
 export const login = (email, password) => api.post('/Weblogin', { email, password });
 
-// Step 2 — verify the 6-digit code.
-//   - response.data = { user, token, token_type }
 export const verifyLoginOtp = (challengeId, code) =>
     api.post('/Weblogin/otp/verify', {
         challenge_id: challengeId,
@@ -71,28 +65,63 @@ export const verifyPasswordReset = (challengeId, code, password, passwordConfirm
     });
 
 // ==================== VIOLATORS ====================
-export const getViolators = (page = 1, perPage = 20) =>
-    api.get(`/violators?page=${page}&per_page=${perPage}`);
+export const getViolators = (page = 1, perPage = 20, filters = {}) =>
+    api.get('/violators', { params: { page, per_page: perPage, ...filters } });
 export const getViolator = (id) => api.get(`/violators/${id}`);
-export const createViolator = (data) => api.post('/violators', data);
-export const updateViolator = (id, data) => api.put(`/violators/${id}`, data);
+
+export const createViolator = (data) => {
+    // FormData needs multipart/form-data so file uploads work; the
+    // browser/axios sets the boundary automatically for POST.
+    if (data instanceof FormData) {
+        return api.post('/violators', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    }
+    return api.post('/violators', data);
+};
+
+export const updateViolator = (id, data) => {
+    // Same trick the mobile client uses: POST with _method=PUT so
+    // multipart bodies survive. Plain PUT + FormData silently drops
+    // file parts on some servers.
+    if (data instanceof FormData) {
+        return api.post(`/violators/${id}?_method=PUT`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    }
+    return api.put(`/violators/${id}`, data);
+};
+
 export const deleteViolator = (id) => api.delete(`/violators/${id}`);
 export const searchViolatorByLicense = (license) =>
     api.get(`/violators/search/license/${license}`);
 
 // ==================== VEHICLES ====================
-export const getVehicles = (page = 1, perPage = 20) =>
-    api.get(`/vehicles?page=${page}&per_page=${perPage}`);
+export const getVehicles = (page = 1, perPage = 20, filters = {}) =>
+    api.get('/vehicles', { params: { page, per_page: perPage, ...filters } });
 export const getVehicle = (id) => api.get(`/vehicles/${id}`);
 export const createVehicle = (data) => api.post('/vehicles', data);
-export const updateVehicle = (id, data) => api.put(`/vehicles/${id}`, data);
+
+export const updateVehicle = (id, data) => {
+    if (data instanceof FormData) {
+        return api.post(`/vehicles/${id}?_method=PUT`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    }
+    return api.put(`/vehicles/${id}`, data);
+};
+
 export const deleteVehicle = (id) => api.delete(`/vehicles/${id}`);
 export const searchVehicleByPlate = (plate) =>
     api.get(`/vehicles/search/plate/${plate}`);
 
 // ==================== VIOLATIONS ====================
-export const getViolations = (page = 1, perPage = 20) =>
-    api.get(`/violations?page=${page}&per_page=${perPage}`);
+export const getViolations = (page = 1, perPage = 20, filters = {}) => {
+    if (typeof page === 'object' && page !== null) {
+        return api.get('/violations', { params: page });
+    }
+    return api.get('/violations', { params: { page, per_page: perPage, ...filters } });
+};
 export const getViolation = (id) => api.get(`/violations/${id}`);
 export const createViolation = (data) => api.post('/violations', data);
 export const updateViolation = (id, data) => api.put(`/violations/${id}`, data);

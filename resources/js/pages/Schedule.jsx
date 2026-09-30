@@ -1,6 +1,7 @@
 // web/src/pages/Schedule.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import ActionButton from '../components/ui/ActionButton';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import {
@@ -806,22 +807,22 @@ const Schedule = () => {
                 </select>
               )}
 
-              <Button
-                variant="ghost"
-                size="sm"
+              <ActionButton
+                icon={Pencil}
+                variant="info"
+                size="md"
                 onClick={() => handleEditGroup(group)}
-                className="text-[#16233F] hover:bg-[#E9ECF2]"
               >
-                <Pencil className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
+                Edit
+              </ActionButton>
+              <ActionButton
+                icon={Trash2}
+                variant="danger"
+                size="md"
                 onClick={() => handleDeleteGroup(group)}
-                className="text-[#C8202F] hover:bg-[#FBE7E9]"
               >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+                Delete
+              </ActionButton>
             </div>
           </div>
 

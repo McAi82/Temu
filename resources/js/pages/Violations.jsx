@@ -24,6 +24,7 @@ import {
   TableCell,
 } from "../components/ui/table";
 import { Pagination } from "../components/ui/Pagination";
+import ActionButton from "../components/ui/ActionButton";
 import {
   getViolations,
   createViolation,
@@ -43,10 +44,6 @@ import { useAlert } from "../components/ui/AlertProvider";
 
 const ITEMS_PER_PAGE = 20;
 
-/* ------------------------------------------------------------------ */
-/* Debounce                                                            */
-/* ------------------------------------------------------------------ */
-
 function useDebouncedValue(value, delay = 350) {
   const [debounced, setDebounced] = useState(value);
 
@@ -57,10 +54,6 @@ function useDebouncedValue(value, delay = 350) {
 
   return debounced;
 }
-
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
 
 const getDataArray = (response) => {
   if (!response) return [];
@@ -78,7 +71,6 @@ const getDataArray = (response) => {
 
 const getMeta = (response) => {
   if (!response) return { current_page: 1, last_page: 1, total: 0 };
-
   if (response.current_page !== undefined) {
     return {
       current_page: response.current_page,
@@ -87,7 +79,6 @@ const getMeta = (response) => {
       per_page: response.per_page,
     };
   }
-
   if (response.data && response.data.current_page !== undefined) {
     return {
       current_page: response.data.current_page,
@@ -96,17 +87,9 @@ const getMeta = (response) => {
       per_page: response.data.per_page,
     };
   }
-
-  if (response.meta) {
-    return response.meta;
-  }
-
+  if (response.meta) return response.meta;
   return { current_page: 1, last_page: 1, total: 0 };
 };
-
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
 
 const Violations = () => {
   const queryClient = useQueryClient();
@@ -125,19 +108,12 @@ const Violations = () => {
     demerit_points: 0,
   });
 
-  /* ---------------- Debounced search ---------------- */
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
 
-  // Reset to page 1 whenever the search actually changes.
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch]);
 
-  /* ---------------- Query ---------------- */
-  // NOTE: no search term in the query key. We fetch one page of data
-  // and filter it client-side — the /violations endpoint accepts a
-  // `search` param, but keeping the filter local keeps typing instant
-  // and avoids hammering the server on every keystroke.
   const {
     data: violationsResponse,
     isLoading,
@@ -150,7 +126,6 @@ const Violations = () => {
     staleTime: 1000 * 60 * 2,
   });
 
-  /* ---------------- Mutations ---------------- */
   const createMutation = useMutation({
     mutationFn: createViolation,
     onSuccess: () => {
@@ -188,11 +163,9 @@ const Violations = () => {
     },
   });
 
-  /* ---------------- Derived data ---------------- */
   const violations = getDataArray(violationsResponse);
   const meta = getMeta(violationsResponse);
 
-  /* ---------------- Client-side search filter ---------------- */
   const filteredViolations = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
     if (!term) return violations;
@@ -211,7 +184,6 @@ const Violations = () => {
     });
   }, [violations, debouncedSearch]);
 
-  /* ---------------- Handlers ---------------- */
   const handleSubmit = (e) => {
     e.preventDefault();
     const dataToSend = {
@@ -275,7 +247,6 @@ const Violations = () => {
     return colors[category] || "bg-gray-100 text-gray-700";
   };
 
-  /* ---------------- Early returns ---------------- */
   if (isLoading && !violationsResponse) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -301,7 +272,6 @@ const Violations = () => {
     );
   }
 
-  /* ---------------- Render ---------------- */
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -518,38 +488,35 @@ const Violations = () => {
                       </TableCell>
                       <TableCell>
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            violation.demerit_points > 0
-                              ? "bg-[#FBF1DC] text-[#92600A]"
-                              : "bg-gray-100 text-gray-500"
-                          }`}
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${violation.demerit_points > 0
+                            ? "bg-[#FBF1DC] text-[#92600A]"
+                            : "bg-gray-100 text-gray-500"
+                            }`}
                         >
                           {violation.demerit_points || 0}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                        <div className="flex flex-wrap gap-2">
+                          <ActionButton
+                            icon={Pencil}
+                            variant="primary"
                             onClick={() => handleEdit(violation)}
-                            className="text-[#16233F] hover:bg-[#E9ECF2]"
                           >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                            Edit
+                          </ActionButton>
+                          <ActionButton
+                            icon={Trash2}
+                            variant="danger"
                             onClick={() =>
                               handleDelete(
                                 violation.violation_id,
                                 violation.violation_name,
                               )
                             }
-                            className="text-[#C8202F] hover:bg-[#FBE7E9]"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                            Delete
+                          </ActionButton>
                         </div>
                       </TableCell>
                     </TableRow>

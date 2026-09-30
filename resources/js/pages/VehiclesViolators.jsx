@@ -29,6 +29,7 @@ import {
   TabsContent,
 } from "../components/ui/tabs";
 import { Pagination } from "../components/ui/Pagination";
+import ActionButton from "../components/ui/ActionButton";
 import {
   getVehicles,
   createVehicle,
@@ -108,9 +109,7 @@ const getMeta = (response) => {
     };
   }
 
-  if (response.meta) {
-    return response.meta;
-  }
+  if (response.meta) return response.meta;
 
   return { current_page: 1, last_page: 1, total: 0 };
 };
@@ -158,7 +157,6 @@ const VehiclesViolators = () => {
   const debouncedViolatorSearch = useDebouncedValue(violatorSearchTerm, 350);
   const debouncedVehicleSearch = useDebouncedValue(vehicleSearchTerm, 350);
 
-  // Reset to page 1 whenever the search actually changes.
   useEffect(() => {
     setViolatorPage(1);
   }, [debouncedViolatorSearch]);
@@ -168,9 +166,6 @@ const VehiclesViolators = () => {
   }, [debouncedVehicleSearch]);
 
   /* ---------------- Queries ---------------- */
-  // NOTE: no search term in the query key. We fetch one page of data and
-  // filter it client-side — the /violators and /vehicles endpoints don't
-  // accept a `search` param.
   const {
     data: violatorsResponse,
     isLoading: violatorsLoading,
@@ -271,7 +266,6 @@ const VehiclesViolators = () => {
   });
 
   /* ---------------- Helpers ---------------- */
-
   const getImageUrl = (profilePhoto) => {
     if (!profilePhoto) return null;
     if (profilePhoto.startsWith("http")) return profilePhoto;
@@ -292,10 +286,11 @@ const VehiclesViolators = () => {
     e.preventDefault();
     const formData = new FormData();
     Object.keys(violatorFormData).forEach((key) => {
-      if (key === "profile_photo" && violatorFormData[key]) {
-        formData.append(key, violatorFormData[key]);
-      } else if (key !== "profile_photo" && violatorFormData[key]) {
-        formData.append(key, violatorFormData[key]);
+      const value = violatorFormData[key];
+      if (key === "profile_photo") {
+        if (value instanceof File) formData.append(key, value);
+      } else if (value !== null && value !== undefined && value !== "") {
+        formData.append(key, String(value));
       }
     });
 
@@ -320,12 +315,12 @@ const VehiclesViolators = () => {
   const handleEditViolator = (violator) => {
     setEditingViolator(violator);
     setViolatorFormData({
-      firstname: violator.firstname,
+      firstname: violator.firstname || "",
       middlename: violator.middlename || "",
-      lastname: violator.lastname,
-      license: violator.license,
-      expiry: violator.expiry,
-      birthday: violator.birthday,
+      lastname: violator.lastname || "",
+      license: violator.license || "",
+      expiry: violator.expiry ? String(violator.expiry).slice(0, 10) : "",
+      birthday: violator.birthday ? String(violator.birthday).slice(0, 10) : "",
       gender: violator.gender || "Male",
       nationality: violator.nationality || "Filipino",
       profile_photo: null,
@@ -372,7 +367,13 @@ const VehiclesViolators = () => {
 
   const handleEditVehicle = (vehicle) => {
     setEditingVehicle(vehicle);
-    setVehicleFormData(vehicle);
+    setVehicleFormData({
+      platenumber: vehicle.platenumber || "",
+      owner: vehicle.owner || "",
+      make: vehicle.make || "",
+      model: vehicle.model || "",
+      color: vehicle.color || "",
+    });
     setIsVehicleDialogOpen(true);
   };
 
@@ -387,20 +388,16 @@ const VehiclesViolators = () => {
     });
   };
 
-  /* ---------------- Derived data ---------------- */
-
+  /* ---------------- Derived ---------------- */
   const violatorsMeta = getMeta(violatorsResponse);
   const vehiclesMeta = getMeta(vehiclesResponse);
   const violators = getDataArray(violatorsResponse);
   const vehicles = getDataArray(vehiclesResponse);
   const isLoading = violatorsLoading || vehiclesLoading;
 
-  /* ---------------- Client-side search filters ---------------- */
-
   const filteredViolators = useMemo(() => {
     const term = debouncedViolatorSearch.trim().toLowerCase();
     if (!term) return violators;
-
     return violators.filter((v) => {
       const haystack = [
         v.firstname,
@@ -420,15 +417,8 @@ const VehiclesViolators = () => {
   const filteredVehicles = useMemo(() => {
     const term = debouncedVehicleSearch.trim().toLowerCase();
     if (!term) return vehicles;
-
     return vehicles.filter((v) => {
-      const haystack = [
-        v.platenumber,
-        v.owner,
-        v.make,
-        v.model,
-        v.color,
-      ]
+      const haystack = [v.platenumber, v.owner, v.make, v.model, v.color]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -437,7 +427,6 @@ const VehiclesViolators = () => {
   }, [vehicles, debouncedVehicleSearch]);
 
   /* ---------------- Early returns ---------------- */
-
   if (violatorsError || vehiclesError) {
     return (
       <div className="flex flex-col items-center justify-center h-64">
@@ -468,7 +457,6 @@ const VehiclesViolators = () => {
   }
 
   /* ---------------- Render ---------------- */
-
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -528,25 +516,23 @@ const VehiclesViolators = () => {
                   <Users className="w-5 h-5 text-[#F0B429]" />
                   Violators List
                 </CardTitle>
-                <div className="flex gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
-                    <Input
-                      placeholder="Search by name or license..."
-                      value={violatorSearchTerm}
-                      onChange={(e) => setViolatorSearchTerm(e.target.value)}
-                      className="pl-10 pr-10 w-64 focus-visible:ring-[#F0B429]"
-                    />
-                    {violatorSearchTerm && (
-                      <button
-                        onClick={() => setViolatorSearchTerm("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
-                        title="Clear"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+                  <Input
+                    placeholder="Search by name or license..."
+                    value={violatorSearchTerm}
+                    onChange={(e) => setViolatorSearchTerm(e.target.value)}
+                    className="pl-10 pr-10 w-64 focus-visible:ring-[#F0B429]"
+                  />
+                  {violatorSearchTerm && (
+                    <button
+                      onClick={() => setViolatorSearchTerm("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                      title="Clear"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -632,25 +618,23 @@ const VehiclesViolators = () => {
                             {violator.nationality}
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                            <div className="flex flex-wrap gap-2">
+                              <ActionButton
+                                icon={Pencil}
+                                variant="primary"
                                 onClick={() => handleEditViolator(violator)}
-                                className="text-[#16233F] hover:bg-[#E9ECF2]"
                               >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                                Edit
+                              </ActionButton>
+                              <ActionButton
+                                icon={Trash2}
+                                variant="danger"
                                 onClick={() =>
                                   handleDeleteViolator(violator.violator_id)
                                 }
-                                className="text-[#C8202F] hover:bg-[#FBE7E9]"
                               >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                                Delete
+                              </ActionButton>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -678,25 +662,23 @@ const VehiclesViolators = () => {
                   <Car className="w-5 h-5 text-[#1E8449]" />
                   Vehicles List
                 </CardTitle>
-                <div className="flex gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
-                    <Input
-                      placeholder="Search by plate or owner..."
-                      value={vehicleSearchTerm}
-                      onChange={(e) => setVehicleSearchTerm(e.target.value)}
-                      className="pl-10 pr-10 w-64 focus-visible:ring-[#F0B429]"
-                    />
-                    {vehicleSearchTerm && (
-                      <button
-                        onClick={() => setVehicleSearchTerm("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
-                        title="Clear"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+                  <Input
+                    placeholder="Search by plate or owner..."
+                    value={vehicleSearchTerm}
+                    onChange={(e) => setVehicleSearchTerm(e.target.value)}
+                    className="pl-10 pr-10 w-64 focus-visible:ring-[#F0B429]"
+                  />
+                  {vehicleSearchTerm && (
+                    <button
+                      onClick={() => setVehicleSearchTerm("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                      title="Clear"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -758,25 +740,23 @@ const VehiclesViolators = () => {
                             {vehicle.color || "-"}
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                            <div className="flex flex-wrap gap-2">
+                              <ActionButton
+                                icon={Pencil}
+                                variant="primary"
                                 onClick={() => handleEditVehicle(vehicle)}
-                                className="text-[#16233F] hover:bg-[#E9ECF2]"
                               >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                                Edit
+                              </ActionButton>
+                              <ActionButton
+                                icon={Trash2}
+                                variant="danger"
                                 onClick={() =>
                                   handleDeleteVehicle(vehicle.vehicle_id)
                                 }
-                                className="text-[#C8202F] hover:bg-[#FBE7E9]"
                               >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                                Delete
+                              </ActionButton>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -795,6 +775,289 @@ const VehiclesViolators = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* -------------------- VIOLATOR DIALOG -------------------- */}
+      <Dialog
+        open={isViolatorDialogOpen}
+        onOpenChange={(open) => {
+          setIsViolatorDialogOpen(open);
+          if (!open) resetViolatorForm();
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-['Oswald'] text-[#16233F]">
+              {editingViolator ? "Edit Violator" : "Add New Violator"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleViolatorSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1 text-[#1F2937]">
+                Profile Photo
+              </label>
+              <div className="flex items-center gap-4">
+                {violatorPhotoPreview && (
+                  <img
+                    src={violatorPhotoPreview}
+                    alt="Preview"
+                    className="w-16 h-16 rounded-full object-cover border border-[#E9ECF2]"
+                  />
+                )}
+                <div className="flex-1">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleViolatorPhotoChange}
+                    className="flex-1 focus-visible:ring-[#F0B429]"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                placeholder="First Name *"
+                value={violatorFormData.firstname}
+                onChange={(e) =>
+                  setViolatorFormData({
+                    ...violatorFormData,
+                    firstname: e.target.value,
+                  })
+                }
+                required
+                className="focus-visible:ring-[#F0B429]"
+              />
+              <Input
+                placeholder="Middle Name"
+                value={violatorFormData.middlename}
+                onChange={(e) =>
+                  setViolatorFormData({
+                    ...violatorFormData,
+                    middlename: e.target.value,
+                  })
+                }
+                className="focus-visible:ring-[#F0B429]"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                placeholder="Last Name *"
+                value={violatorFormData.lastname}
+                onChange={(e) =>
+                  setViolatorFormData({
+                    ...violatorFormData,
+                    lastname: e.target.value,
+                  })
+                }
+                required
+                className="focus-visible:ring-[#F0B429]"
+              />
+              <Input
+                placeholder="License Number *"
+                value={violatorFormData.license}
+                onChange={(e) =>
+                  setViolatorFormData({
+                    ...violatorFormData,
+                    license: e.target.value.toUpperCase(),
+                  })
+                }
+                required
+                className="focus-visible:ring-[#F0B429]"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-[#1F2937]">
+                  Expiry Date *
+                </label>
+                <Input
+                  type="date"
+                  value={violatorFormData.expiry}
+                  onChange={(e) =>
+                    setViolatorFormData({
+                      ...violatorFormData,
+                      expiry: e.target.value,
+                    })
+                  }
+                  required
+                  className="focus-visible:ring-[#F0B429]"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#1F2937]">
+                  Birthday *
+                </label>
+                <Input
+                  type="date"
+                  value={violatorFormData.birthday}
+                  onChange={(e) =>
+                    setViolatorFormData({
+                      ...violatorFormData,
+                      birthday: e.target.value,
+                    })
+                  }
+                  required
+                  className="focus-visible:ring-[#F0B429]"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
+                value={violatorFormData.gender}
+                onChange={(e) =>
+                  setViolatorFormData({
+                    ...violatorFormData,
+                    gender: e.target.value,
+                  })
+                }
+              >
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+              <Input
+                placeholder="Nationality"
+                value={violatorFormData.nationality}
+                onChange={(e) =>
+                  setViolatorFormData({
+                    ...violatorFormData,
+                    nationality: e.target.value,
+                  })
+                }
+                className="focus-visible:ring-[#F0B429]"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setIsViolatorDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 bg-[#1E8449] hover:bg-[#186B3B]"
+                disabled={
+                  createViolatorMutation.isPending ||
+                  updateViolatorMutation.isPending
+                }
+              >
+                {createViolatorMutation.isPending ||
+                updateViolatorMutation.isPending
+                  ? "Saving..."
+                  : editingViolator
+                    ? "Update Violator"
+                    : "Create Violator"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* -------------------- VEHICLE DIALOG -------------------- */}
+      <Dialog
+        open={isVehicleDialogOpen}
+        onOpenChange={(open) => {
+          setIsVehicleDialogOpen(open);
+          if (!open) resetVehicleForm();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-['Oswald'] text-[#16233F]">
+              {editingVehicle ? "Edit Vehicle" : "Add New Vehicle"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleVehicleSubmit} className="space-y-4">
+            <Input
+              placeholder="Plate Number *"
+              value={vehicleFormData.platenumber}
+              onChange={(e) =>
+                setVehicleFormData({
+                  ...vehicleFormData,
+                  platenumber: e.target.value.toUpperCase(),
+                })
+              }
+              required
+              className="focus-visible:ring-[#F0B429]"
+            />
+            <Input
+              placeholder="Owner Name *"
+              value={vehicleFormData.owner}
+              onChange={(e) =>
+                setVehicleFormData({
+                  ...vehicleFormData,
+                  owner: e.target.value,
+                })
+              }
+              required
+              className="focus-visible:ring-[#F0B429]"
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                placeholder="Make (e.g., Toyota)"
+                value={vehicleFormData.make}
+                onChange={(e) =>
+                  setVehicleFormData({
+                    ...vehicleFormData,
+                    make: e.target.value,
+                  })
+                }
+                className="focus-visible:ring-[#F0B429]"
+              />
+              <Input
+                placeholder="Model"
+                value={vehicleFormData.model}
+                onChange={(e) =>
+                  setVehicleFormData({
+                    ...vehicleFormData,
+                    model: e.target.value,
+                  })
+                }
+                className="focus-visible:ring-[#F0B429]"
+              />
+            </div>
+            <Input
+              placeholder="Color"
+              value={vehicleFormData.color}
+              onChange={(e) =>
+                setVehicleFormData({
+                  ...vehicleFormData,
+                  color: e.target.value,
+                })
+              }
+              className="focus-visible:ring-[#F0B429]"
+            />
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setIsVehicleDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 bg-[#1E8449] hover:bg-[#186B3B]"
+                disabled={
+                  createVehicleMutation.isPending ||
+                  updateVehicleMutation.isPending
+                }
+              >
+                {createVehicleMutation.isPending ||
+                updateVehicleMutation.isPending
+                  ? "Saving..."
+                  : editingVehicle
+                    ? "Update Vehicle"
+                    : "Create Vehicle"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
