@@ -630,7 +630,7 @@ class DatabaseSeeder extends Seeder
             ->orderBy('ticket_id')
             ->get(['ticket_id', 'status', 'created_at']);
 
-        $methods = ['cash', 'gcash', 'maya', 'over_the_counter', 'online_banking'];
+        $methods = ['cash',];
         $now = Carbon::now();
         $rows = [];
         $counter = 0;

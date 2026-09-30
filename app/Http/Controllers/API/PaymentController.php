@@ -125,7 +125,7 @@ class PaymentController extends Controller
         'ticket_id'       => 'required|exists:tickets,ticket_id',
         'receipt_number'  => 'required|string|max:50',
         'amount_paid'     => 'required|numeric|min:0.01',
-        'payment_method'  => 'required|in:cash,online_banking,gcash,maya,over_the_counter',
+        'payment_method'  => 'required|in:cash',
         'payment_date'    => 'nullable|date',
         'transaction_id'  => 'nullable|string|max:100',
         'paid_by'         => 'nullable|string|max:100',

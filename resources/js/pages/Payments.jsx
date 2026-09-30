@@ -847,12 +847,6 @@ const Payments = () => {
                                     required
                                 >
                                     <option value="cash">Cash</option>
-                                    <option value="gcash">GCash</option>
-                                    <option value="maya">Maya</option>
-                                    <option value="online_banking">Online Banking</option>
-                                    <option value="over_the_counter">
-                                        Over the Counter
-                                    </option>
                                 </select>
                             </div>
                         </div>

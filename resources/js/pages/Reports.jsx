@@ -65,10 +65,6 @@ const STATUS_META = {
 
 const PAYMENT_METHOD_META = {
     cash: { label: 'Cash', color: COLORS.green, bg: '#E5F2EA', Icon: Banknote },
-    gcash: { label: 'GCash', color: '#1E40AF', bg: '#EEF1F5', Icon: Wallet },
-    maya: { label: 'Maya', color: '#92600A', bg: '#FBF1DC', Icon: Wallet },
-    online_banking: { label: 'Online Banking', color: COLORS.navy, bg: '#E9ECF2', Icon: CreditCard },
-    over_the_counter: { label: 'Over the Counter', color: COLORS.orange, bg: '#FBEAE2', Icon: Receipt },
 };
 
 const DATE_PRESETS = [

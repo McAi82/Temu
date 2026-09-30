@@ -22,8 +22,7 @@ return new class extends Migration
             // ---- Payment identity ----
             $table->string('payment_reference', 100)->unique();
             $table->string('receipt_number', 50)->unique();   // ← enforced unique (staff input)
-            $table->string('transaction_id', 100)->nullable()
-                ->comment('Gateway transaction ID (GCash/Maya/bank ref)');
+            $table->string('transaction_id', 100)->nullable();
 
             // ---- Amount & timing ----
             $table->decimal('amount_paid', 10, 2);
@@ -32,10 +31,6 @@ return new class extends Migration
             // ---- Method & state ----
             $table->enum('payment_method', [
                 'cash',
-                'online_banking',
-                'gcash',
-                'maya',
-                'over_the_counter',
             ]);
 
             $table->enum('payment_status', [
