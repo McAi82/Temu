@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -37,10 +37,30 @@ import {
   Search,
   RefreshCw,
   Loader2,
+  X,
 } from "lucide-react";
 import { useAlert } from "../components/ui/AlertProvider";
 
 const ITEMS_PER_PAGE = 20;
+
+/* ------------------------------------------------------------------ */
+/* Debounce                                                            */
+/* ------------------------------------------------------------------ */
+
+function useDebouncedValue(value, delay = 350) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+
+  return debounced;
+}
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
 
 const getDataArray = (response) => {
   if (!response) return [];
@@ -84,9 +104,14 @@ const getMeta = (response) => {
   return { current_page: 1, last_page: 1, total: 0 };
 };
 
+/* ------------------------------------------------------------------ */
+/* Component                                                           */
+/* ------------------------------------------------------------------ */
+
 const Violations = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
+
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -100,18 +125,32 @@ const Violations = () => {
     demerit_points: 0,
   });
 
+  /* ---------------- Debounced search ---------------- */
+  const debouncedSearch = useDebouncedValue(searchTerm, 350);
+
+  // Reset to page 1 whenever the search actually changes.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  /* ---------------- Query ---------------- */
+  // NOTE: no search term in the query key. We fetch one page of data
+  // and filter it client-side — the /violations endpoint accepts a
+  // `search` param, but keeping the filter local keeps typing instant
+  // and avoids hammering the server on every keystroke.
   const {
     data: violationsResponse,
     isLoading,
     refetch,
     error,
   } = useQuery({
-    queryKey: ["violations", page, searchTerm],
+    queryKey: ["violations", page],
     queryFn: () => getViolations(page, ITEMS_PER_PAGE),
     keepPreviousData: true,
     staleTime: 1000 * 60 * 2,
   });
 
+  /* ---------------- Mutations ---------------- */
   const createMutation = useMutation({
     mutationFn: createViolation,
     onSuccess: () => {
@@ -149,9 +188,30 @@ const Violations = () => {
     },
   });
 
+  /* ---------------- Derived data ---------------- */
   const violations = getDataArray(violationsResponse);
   const meta = getMeta(violationsResponse);
 
+  /* ---------------- Client-side search filter ---------------- */
+  const filteredViolations = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    if (!term) return violations;
+
+    return violations.filter((v) => {
+      const haystack = [
+        v.violation_code,
+        v.violation_name,
+        v.category,
+        v.description,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [violations, debouncedSearch]);
+
+  /* ---------------- Handlers ---------------- */
   const handleSubmit = (e) => {
     e.preventDefault();
     const dataToSend = {
@@ -215,6 +275,7 @@ const Violations = () => {
     return colors[category] || "bg-gray-100 text-gray-700";
   };
 
+  /* ---------------- Early returns ---------------- */
   if (isLoading && !violationsResponse) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -240,6 +301,7 @@ const Violations = () => {
     );
   }
 
+  /* ---------------- Render ---------------- */
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -380,8 +442,17 @@ const Violations = () => {
                 placeholder="Search by code, name, or category..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80 focus-visible:ring-[#F0B429]"
+                className="pl-10 pr-10 w-80 focus-visible:ring-[#F0B429]"
               />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                  title="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -390,9 +461,11 @@ const Violations = () => {
             <div className="flex justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
             </div>
-          ) : violations.length === 0 ? (
+          ) : filteredViolations.length === 0 ? (
             <div className="text-center py-8 text-[#64748B]">
-              No violations found.
+              {searchTerm
+                ? `No violations match "${searchTerm}"`
+                : "No violations found."}
             </div>
           ) : (
             <>
@@ -420,7 +493,7 @@ const Violations = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {violations.map((violation) => (
+                  {filteredViolations.map((violation) => (
                     <TableRow
                       key={violation.violation_id}
                       className="hover:bg-[#F8F9FA]"
@@ -433,7 +506,9 @@ const Violations = () => {
                       </TableCell>
                       <TableCell>
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryBadgeColor(violation.category)}`}
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryBadgeColor(
+                            violation.category,
+                          )}`}
                         >
                           {violation.category || "Uncategorized"}
                         </span>
@@ -443,7 +518,11 @@ const Violations = () => {
                       </TableCell>
                       <TableCell>
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${violation.demerit_points > 0 ? "bg-[#FBF1DC] text-[#92600A]" : "bg-gray-100 text-gray-500"}`}
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            violation.demerit_points > 0
+                              ? "bg-[#FBF1DC] text-[#92600A]"
+                              : "bg-gray-100 text-gray-500"
+                          }`}
                         >
                           {violation.demerit_points || 0}
                         </span>
