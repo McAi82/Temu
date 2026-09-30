@@ -233,9 +233,9 @@ class DatabaseSeeder extends Seeder
             /* ---------------- Admins ---------------- */
             [
                 'email' => 'occ.balasabas.johnpaul@gmail.com',
-                'firstname' => 'John',
+                'firstname' => 'Johnpaul',
                 'middlename' => 'Alonzo',
-                'lastname' => 'Santos',
+                'lastname' => 'Balasabas',
                 'role' => 'admin',
                 'contact_number' => '09171234501',
             ],
@@ -243,27 +243,27 @@ class DatabaseSeeder extends Seeder
             /* ---------------- Staff ---------------- */
             [
                 'email' => 'luiskarlcons@gmail.com',
-                'firstname' => 'Juanito',
+                'firstname' => 'Luis Karl',
                 'middlename' => 'Bautista',
-                'lastname' => 'Enerio',
+                'lastname' => 'Consolacion',
                 'role' => 'staff',
                 'contact_number' => '09171234503',
             ],
 
             /* ---------------- Enforcers ---------------- */
             [
-                'email' => 'enforcer.rosales@temu.gov.ph',
-                'firstname' => 'Maricelono',
+                'email' => 'occ.detchos.juliane@gmail.com',
+                'firstname' => 'Juliane',
                 'middlename' => 'Gonzales',
-                'lastname' => 'Rosales',
+                'lastname' => 'Detchos',
                 'role' => 'enforcer',
                 'contact_number' => '09171234510',
             ],
             [
-                'email' => 'enforcer.enolpe@temu.gov.ph',
-                'firstname' => 'Andrew',
+                'email' => 'occ.villanueva.jessamae@gmail.com',
+                'firstname' => 'Jessamae',
                 'middlename' => 'Bautista',
-                'lastname' => 'Enolpe',
+                'lastname' => 'Villanueva',
                 'role' => 'enforcer',
                 'contact_number' => '09171234511',
             ],

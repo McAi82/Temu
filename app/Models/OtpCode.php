@@ -11,6 +11,7 @@ class OtpCode extends Model
 
     public const PURPOSE_LOGIN = 'login';
     public const PURPOSE_PASSWORD_RESET = 'password_reset';
+    public const PURPOSE_DEVICE_SWITCH = 'device_switch';
 
     public const MAX_ATTEMPTS = 5;
     public const TTL_MINUTES = 10;
@@ -117,8 +118,7 @@ class OtpCode extends Model
     }
 
     /**
-     * Per-IP cap, independent of user, so a botnet spraying emails gets
-     * blocked at the network layer.
+     * Per-IP cap, independent of user.
      */
     public static function recentIpCount(string $ip, int $minutes = 60): int
     {

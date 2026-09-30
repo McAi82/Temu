@@ -24,13 +24,16 @@ class User extends Authenticatable
         'is_active',
         'profile_image',
         'has_face_registered',
+        'active_device_id',
+        'device_switch_available_at',
     ];
 
-    protected $hidden = ['password_hash',];
+    protected $hidden = ['password_hash'];
 
     protected $casts = [
         'is_active' => 'boolean',
         'has_face_registered' => 'boolean',
+        'device_switch_available_at' => 'datetime',
     ];
 
     // Helper methods
@@ -72,5 +75,17 @@ class User extends Authenticatable
     public function face()
     {
         return $this->hasOne(Face::class, 'user_id', 'user_id');
+    }
+
+    /**
+     * True when the user may request an OTP device switch right now.
+     * The cooldown is applied AFTER a successful switch, not after login.
+     */
+    public function canSwitchDevice(): bool
+    {
+        if (!$this->device_switch_available_at) {
+            return true;
+        }
+        return $this->device_switch_available_at->isPast();
     }
 }

@@ -21,11 +21,15 @@ return new class extends Migration {
             $table->datetime('last_login')->nullable();
             $table->boolean('is_active')->default(true);
             $table->boolean('has_face_registered')->default(false);
+            $table->string('active_device_id', 64)->nullable();
+            $table->timestamp('device_switch_available_at')->nullable();
+
             $table->timestamps();
 
             $table->index('role');
             $table->index('is_active');
             $table->index('email');
+            $table->index('active_device_id');
         });
     }
 

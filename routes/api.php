@@ -19,6 +19,7 @@ use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\PaymentController;
 use App\Http\Controllers\API\PasswordResetController;
+use App\Http\Controllers\API\DeviceSwitchController;
 use App\Http\Controllers\API\BiometricRequestController;
 
 /*
@@ -65,6 +66,14 @@ Route::post('/PasswordReset/request', [PasswordResetController::class, 'request'
 Route::post('/PasswordReset/verify', [PasswordResetController::class, 'verify'])
     ->middleware('throttle:10,1');
 
+// Device-switch OTP flow (public, rate-limited)
+Route::post('/DeviceSwitch/request', [DeviceSwitchController::class, 'request'])
+    ->middleware('throttle:5,1');
+Route::post('/DeviceSwitch/verify', [DeviceSwitchController::class, 'verify'])
+    ->middleware('throttle:10,1');
+Route::get('/DeviceSwitch/status', [DeviceSwitchController::class, 'status'])
+    ->middleware('throttle:30,1');
+
 /*
 |--------------------------------------------------------------------------
 | FACE SERVICE ROUTES (authenticated via X-API-Key header, NOT Sanctum)
@@ -103,7 +112,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/',             [PaymentController::class, 'store']);
     });
 
-    // Void is admin-only.
     Route::put('/payments/{id}/void', [PaymentController::class, 'void'])
         ->where('id', '[0-9]+')
         ->middleware('admin');
@@ -121,9 +129,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |----------------------- FACES (mobile — flag only) -----------------------
-    | Mobile keeps embeddings on-device. This endpoint just flips the
-    | server-side has_face_registered flag so the web dashboard stays in
-    | sync. Idempotent — safe to call on every sync retry.
     */
     Route::post('/faces/register-local', [FaceController::class, 'registerLocal']);
     Route::delete('/faces/register-local', [FaceController::class, 'unregisterLocal']);
@@ -156,7 +161,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}/status', [TicketController::class, 'updateStatus'])
             ->where('id', '[0-9]+');
 
-        // Admin-only delete
         Route::delete('/{id}',     [TicketController::class, 'destroy'])
             ->where('id', '[0-9]+')
             ->middleware('admin');
@@ -165,8 +169,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |----------------------- VIOLATORS -----------------------
-    | Read + create + update: any authenticated web user
-    | Delete: admin only
     */
     Route::prefix('violators')->group(function () {
         Route::get('/',    [ViolatorController::class, 'index']);
@@ -175,7 +177,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}',    [ViolatorController::class, 'show'])->where('id', '[0-9]+');
         Route::put('/{id}',    [ViolatorController::class, 'update'])->where('id', '[0-9]+');
 
-        // ✅ Admin-only delete
         Route::delete('/{id}', [ViolatorController::class, 'destroy'])
             ->where('id', '[0-9]+')
             ->middleware('admin');
@@ -195,14 +196,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |----------------------- VIOLATION TYPES -----------------------
-    | Read: any authenticated user
-    | Create / Update / Delete: admin only
     */
     Route::prefix('violations')->group(function () {
         Route::get('/',    [ViolationController::class, 'index']);
         Route::get('/{id}', [ViolationController::class, 'show'])->where('id', '[0-9]+');
 
-        // ✅ Admin-only mutations
         Route::middleware('admin')->group(function () {
             Route::post('/',   [ViolationController::class, 'store']);
             Route::put('/{id}', [ViolationController::class, 'update'])->where('id', '[0-9]+');
@@ -273,14 +271,12 @@ Route::middleware('auth:sanctum')->group(function () {
     |----------------------- SCHEDULES -----------------------
     */
     Route::prefix('schedules')->group(function () {
-        // ---- Literal (non-parameterized) routes FIRST ----
         Route::get('/',                    [ScheduleController::class, 'index']);
         Route::post('/',                   [ScheduleController::class, 'store']);
         Route::get('/today',               [ScheduleController::class, 'getTodaySchedules']);
         Route::get('/weekly',              [ScheduleController::class, 'getWeeklySchedules']);
         Route::get('/available-enforcers', [ScheduleController::class, 'availableEnforcers']);
 
-        // ---- Parameterized routes AFTER ----
         Route::get('/enforcer/{enforcerId}', [ScheduleController::class, 'getEnforcerSchedules'])
             ->where('enforcerId', '[0-9]+');
         Route::get('/{id}',    [ScheduleController::class, 'show'])

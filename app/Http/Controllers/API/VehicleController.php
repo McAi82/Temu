@@ -11,6 +11,13 @@ class VehicleController extends Controller
 {
     public function index(Request $request)
     {
+        // Mobile prefetch: ?all=1 returns the full vehicle list uncapped.
+        if ($request->boolean('all')) {
+            return response()->json(
+                Vehicle::orderBy('created_at', 'desc')->get()
+            );
+        }
+
         $perPage = $request->get('per_page', 20);
         $page = $request->get('page', 1);
 
@@ -27,41 +34,41 @@ class VehicleController extends Controller
     }
 
     public function store(Request $request)
-{
-    $request->validate([
-        'platenumber' => 'required|string',
-        'owner' => 'required|string|max:100',
-    ]);
+    {
+        $request->validate([
+            'platenumber' => 'required|string',
+            'owner' => 'required|string|max:100',
+        ]);
 
-    // IDEMPOTENCY: return existing vehicle if plate already exists.
-    $existing = Vehicle::where('platenumber', $request->platenumber)->first();
-    if ($existing) {
+        // IDEMPOTENCY: return existing vehicle if plate already exists.
+        $existing = Vehicle::where('platenumber', $request->platenumber)->first();
+        if ($existing) {
+            return response()->json([
+                'message' => 'Vehicle already exists',
+                'vehicle' => $existing,
+                'idempotent_replay' => true,
+            ], 200);
+        }
+
+        $vehicle = Vehicle::create($request->all());
+
+        try {
+            \App\Services\NotificationService::notifyAdmins(
+                'New Vehicle Registered',
+                "{$vehicle->platenumber} owned by {$vehicle->owner} was added",
+                \App\Models\Notification::TYPE_VEHICLE_CREATED,
+                'vehicle',
+                $vehicle->vehicle_id
+            );
+        } catch (\Throwable $ne) {
+            Log::warning('Vehicle creation notification failed: ' . $ne->getMessage());
+        }
+
         return response()->json([
-            'message' => 'Vehicle already exists',
-            'vehicle' => $existing,
-            'idempotent_replay' => true,
-        ], 200);
+            'message' => 'Vehicle created successfully',
+            'vehicle' => $vehicle,
+        ], 201);
     }
-
-    $vehicle = Vehicle::create($request->all());
-
-    try {
-        \App\Services\NotificationService::notifyAdmins(
-            'New Vehicle Registered',
-            "{$vehicle->platenumber} owned by {$vehicle->owner} was added",
-            \App\Models\Notification::TYPE_VEHICLE_CREATED,
-            'vehicle',
-            $vehicle->vehicle_id
-        );
-    } catch (\Throwable $ne) {
-        Log::warning('Vehicle creation notification failed: ' . $ne->getMessage());
-    }
-
-    return response()->json([
-        'message' => 'Vehicle created successfully',
-        'vehicle' => $vehicle,
-    ], 201);
-}
 
     public function update(Request $request, $id)
     {

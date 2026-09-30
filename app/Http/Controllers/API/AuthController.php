@@ -22,74 +22,70 @@ class AuthController extends Controller
     private const WEB_OTP_ROLES = ['admin', 'staff'];
 
     /* ==================================================================
-     |  MOBILE LOGIN (unchanged — no OTP)
+     |  MOBILE LOGIN — single-device binding enforced
      ================================================================== */
 
     public function Mobilelogin(Request $request)
     {
-        // 🔎 DEBUG: log the incoming request body
-        Log::info('[Mobilelogin] request received', [
-            'email' => $request->email,
-            'ip'    => $request->ip(),
-            'ua'    => $request->userAgent(),
-        ]);
-
         $request->validate([
-            'email'    => 'required|email',
-            'password' => 'required',
+            'email'     => 'required|email',
+            'password'  => 'required',
+            'device_id' => 'required|string|max:64',
         ]);
 
         $user = User::where('email', $request->email)->first();
 
-        // 🔎 DEBUG: did we find a user?
-        Log::info('[Mobilelogin] user lookup', [
-            'found'  => (bool) $user,
-            'role'   => $user?->role,
-            'active' => $user?->is_active,
-        ]);
-
         if (!$user || !Hash::check($request->password, $user->password_hash)) {
-            Log::warning('[Mobilelogin] invalid credentials', [
-                'email' => $request->email,
-            ]);
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
         if (!$user->is_active) {
-            Log::warning('[Mobilelogin] inactive account', [
-                'user_id' => $user->user_id,
-            ]);
             return response()->json(['message' => 'Account is deactivated'], 403);
         }
 
         if (!$user->hasMobileAccess()) {
-            Log::warning('[Mobilelogin] no mobile access', [
-                'user_id' => $user->user_id,
-                'role'    => $user->role,
-            ]);
             return response()->json([
                 'message' => 'This account does not have mobile access',
             ], 403);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $incomingDevice = (string) $request->device_id;
 
-        $payload = [
-            'message'    => 'Login successful',
-            'user'       => $this->formatUser($user),
-            'token'      => $token,
-            'token_type' => 'Bearer',
-        ];
+        // -----------------------------------------------------------
+        // Case 1: no device bound yet → bind this device and let them in.
+        // -----------------------------------------------------------
+        if (!$user->active_device_id) {
+            $user->active_device_id = $incomingDevice;
+            $user->last_login = now();
+            $user->save();
 
-        // 🔎 DEBUG: full response payload (minus the token itself)
-        Log::info('[Mobilelogin] success', [
-            'user_id'     => $user->user_id,
-            'role'        => $user->role,
-            'token_len'   => strlen($token),
-            'response'    => array_merge($payload, ['token' => '***REDACTED***']),
-        ]);
+            return $this->issueToken($user, 'Login successful');
+        }
 
-        return response()->json($payload);
+        // -----------------------------------------------------------
+        // Case 2: same device → normal login.
+        // -----------------------------------------------------------
+        if (hash_equals((string) $user->active_device_id, $incomingDevice)) {
+            $user->last_login = now();
+            $user->save();
+
+            return $this->issueToken($user, 'Login successful');
+        }
+
+        // -----------------------------------------------------------
+        // Case 3: different device → block and offer the switch flow.
+        // -----------------------------------------------------------
+        $canSwitch = $user->canSwitchDevice();
+        $availableAt = $user->device_switch_available_at;
+
+        return response()->json([
+            'message'        => 'This account is already signed in on another device.',
+            'code'           => 'DEVICE_CONFLICT',
+            'blocked'        => true,
+            'can_switch'     => $canSwitch,
+            'available_at'   => $canSwitch ? null : optional($availableAt)->toIso8601String(),
+            'cooldown_hours' => 12,
+        ], 409);
     }
 
     /* ==================================================================
@@ -116,9 +112,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Account is deactivated'], 403);
         }
 
-        // Enforcers don't get OTP — they shouldn't even be using web,
-        // but if someone hits this endpoint with an enforcer account,
-        // fall through to the legacy behavior.
+        // Enforcers don't get OTP on web — fall through to legacy.
         if (!in_array($user->role, self::WEB_OTP_ROLES, true)) {
             return $this->issueToken($user);
         }
@@ -221,8 +215,9 @@ class AuthController extends Controller
         }
 
         if (!in_array($user->role, self::WEB_OTP_ROLES, true)) {
-            // Role changed between step 1 and step 2 — bail out cleanly.
-            return response()->json(['message' => 'This account is not authorized for web login.'], 403);
+            return response()->json([
+                'message' => 'This account is not authorized for web login.',
+            ], 403);
         }
 
         $otp->update(['consumed_at' => now()]);
