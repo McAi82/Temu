@@ -28,6 +28,8 @@ import { Pagination } from "../components/ui/Pagination";
 import ActionButton from "../components/ui/ActionButton";
 import {
   getUsers,
+  createUser,
+  updateUser,
   deleteUser,
   toggleUserStatus,
   resetUserPassword,
@@ -45,12 +47,22 @@ import {
   Loader2,
   Camera,
   X,
+  Copy,
+  Check,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  MailCheck,
+  MailX,
 } from "lucide-react";
-import api from "../services/api";
 import { useAlert } from "../components/ui/AlertProvider";
 
 const API_BASE_URL = "https://ivory-gerbil-502781.hostingersite.com";
 const ITEMS_PER_PAGE = 20;
+
+/* ------------------------------------------------------------------ */
+/* Utils                                                               */
+/* ------------------------------------------------------------------ */
 
 function useDebouncedValue(value, delay = 350) {
   const [debounced, setDebounced] = useState(value);
@@ -94,6 +106,206 @@ const getMeta = (response) => {
   return { current_page: 1, last_page: 1, total: 0 };
 };
 
+const copyText = async (text) => {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy */
+  }
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
+/* ------------------------------------------------------------------ */
+/* Credential Modal                                                    */
+/* ------------------------------------------------------------------ */
+
+const CredentialsModal = ({
+  open,
+  onClose,
+  email,
+  password,
+  emailSent,
+  emailError,
+}) => {
+  const [revealed, setRevealed] = useState(true);
+  const [copied, setCopied] = useState(null);
+
+  useEffect(() => {
+    if (open) {
+      setRevealed(true);
+      setCopied(null);
+    }
+  }, [open]);
+
+  const handleCopy = async (label, value) => {
+    const ok = await copyText(value);
+    if (ok) {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-['Oswald'] text-[#16233F] flex items-center gap-2">
+            <Key className="w-5 h-5 text-[#F0B429]" />
+            New User Credentials
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Status banner */}
+        {emailSent ? (
+          <div className="flex items-start gap-2 bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-3 text-sm text-[#1E8449]">
+            <MailCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Welcome email sent</p>
+              <p className="text-xs mt-0.5">
+                The user should receive their login credentials at{" "}
+                <span className="font-mono">{email}</span> shortly.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 bg-[#FBF1DC] border border-[#F0B429]/40 rounded-lg p-3 text-sm text-[#92600A]">
+            <MailX className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Email could not be sent</p>
+              <p className="text-xs mt-0.5">
+                {emailError ||
+                  "Hand the credentials below to the user securely."}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Credential rows */}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium uppercase tracking-wide text-[#64748B]">
+              Email
+            </label>
+            <div className="mt-1 flex items-center gap-2">
+              <Input
+                readOnly
+                value={email}
+                className="font-mono text-sm bg-[#F8F9FA]"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => handleCopy("email", email)}
+                title="Copy email"
+              >
+                {copied === "email" ? (
+                  <Check className="w-4 h-4 text-[#1E8449]" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium uppercase tracking-wide text-[#64748B]">
+              Temporary Password
+            </label>
+            <div className="mt-1 flex items-center gap-2">
+              <Input
+                readOnly
+                type={revealed ? "text" : "password"}
+                value={password}
+                className="font-mono text-sm bg-[#F8F9FA] tracking-wider"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setRevealed((r) => !r)}
+                title={revealed ? "Hide password" : "Show password"}
+              >
+                {revealed ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => handleCopy("password", password)}
+                title="Copy password"
+              >
+                {copied === "password" ? (
+                  <Check className="w-4 h-4 text-[#1E8449]" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2 bg-[#FBE7E9] border border-[#C8202F]/30 rounded-lg p-3 text-xs text-[#C8202F]">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <p>
+            This password is shown <strong>once</strong>. Save it now. If
+            you close this window, you'll need to reset the password to get a
+            new one.
+          </p>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1"
+            onClick={() => handleCopy("both", `Email: ${email}\nPassword: ${password}`)}
+          >
+            {copied === "both" ? (
+              <Check className="w-4 h-4 mr-2 text-[#1E8449]" />
+            ) : (
+              <Copy className="w-4 h-4 mr-2" />
+            )}
+            {copied === "both" ? "Copied!" : "Copy both"}
+          </Button>
+          <Button
+            type="button"
+            className="flex-1 bg-[#16233F] hover:bg-[#0F1A2E]"
+            onClick={onClose}
+          >
+            Done
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
 const Users = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
@@ -102,7 +314,19 @@ const Users = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [showTempPasswords, setShowTempPasswords] = useState({});
+
+  // Session-only map of { [userId]: plaintextPassword } — set when a
+  // new user is created. Never persisted. Cleared on page reload.
+  const [freshCredentials, setFreshCredentials] = useState({});
+
+  // Credentials modal state
+  const [credentialsModal, setCredentialsModal] = useState({
+    open: false,
+    email: "",
+    password: "",
+    emailSent: true,
+    emailError: null,
+  });
 
   const [formData, setFormData] = useState({
     email: "",
@@ -117,7 +341,6 @@ const Users = () => {
 
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
 
-  // Reset to page 1 whenever the search term changes.
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch]);
@@ -140,38 +363,52 @@ const Users = () => {
     staleTime: 1000 * 60 * 2,
   });
 
+  /* -------------------------- Mutations -------------------------- */
+
   const createMutation = useMutation({
-    mutationFn: async (data) => {
-      const response = await api.post("/users", data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return response;
-    },
+    mutationFn: createUser,
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setIsDialogOpen(false);
       resetForm();
-      if (response.data.generated_password) {
-        notify.success(
-          `User created successfully!\n\n🔑 Password: ${response.data.generated_password}\n\n📧 An email has been sent to the user.`,
-          { title: "User Created" },
-        );
-      } else {
-        notify.success("User created successfully");
+
+      const payload = response?.data || {};
+      const email = payload?.user?.email || formData.email;
+      const password = payload.generated_password || null;
+      const emailSent = payload.email_sent !== false; // default true if omitted
+      const emailError = payload.email_error || null;
+
+      if (password) {
+        setFreshCredentials((prev) => ({
+          ...prev,
+          [payload.user?.user_id]: password,
+        }));
       }
+
+      // Always show the modal so the admin can copy the password —
+      // even when email was sent, it's useful as a fallback.
+      setCredentialsModal({
+        open: true,
+        email,
+        password: password || "(not returned by server)",
+        emailSent,
+        emailError,
+      });
     },
     onError: (error) => {
-      notify.error(error.response?.data?.message || "Error creating user");
+      const payload = error.response?.data || {};
+      let msg = payload.message || "Error creating user";
+
+      if (payload.errors) {
+        const flat = Object.values(payload.errors).flat().join("\n");
+        if (flat) msg = flat;
+      }
+      notify.error(msg);
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const response = await api.post(`/users/${id}?_method=PUT`, data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return response;
-    },
+    mutationFn: ({ id, data }) => updateUser(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setIsDialogOpen(false);
@@ -210,13 +447,33 @@ const Users = () => {
 
   const resetPasswordMutation = useMutation({
     mutationFn: resetUserPassword,
-    onSuccess: () => {
-      notify.success("Password reset successful. An email has been sent.");
+    onSuccess: (response, userId) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+
+      const payload = response?.data || {};
+      const email = payload.email || "";
+      const password = payload.new_password || null;
+      const emailSent = payload.email_sent !== false;
+      const emailError = payload.email_error || null;
+
+      if (password) {
+        setFreshCredentials((prev) => ({ ...prev, [userId]: password }));
+      }
+
+      setCredentialsModal({
+        open: true,
+        email,
+        password: password || "(not returned by server)",
+        emailSent,
+        emailError,
+      });
     },
     onError: (error) => {
       notify.error(error.response?.data?.message || "Error resetting password");
     },
   });
+
+  /* -------------------------- Handlers -------------------------- */
 
   const users = getDataArray(usersResponse);
   const meta = getMeta(usersResponse);
@@ -225,13 +482,6 @@ const Users = () => {
     if (!profileImage) return null;
     if (profileImage.startsWith("http")) return profileImage;
     return `${API_BASE_URL}/storage/${profileImage}`;
-  };
-
-  const toggleTempPasswordVisibility = (userId) => {
-    setShowTempPasswords((prev) => ({
-      ...prev,
-      [userId]: !prev[userId],
-    }));
   };
 
   const handleSubmit = (e) => {
@@ -330,6 +580,25 @@ const Users = () => {
     };
     return colors[role] || "bg-gray-100 text-gray-700";
   };
+
+  const handleViewFreshPassword = (user) => {
+    const password = freshCredentials[user.user_id];
+    if (!password) {
+      notify.info(
+        "This password is no longer available in this session. Use \"Reset Password\" to generate a new one.",
+      );
+      return;
+    }
+    setCredentialsModal({
+      open: true,
+      email: user.email,
+      password,
+      emailSent: true,
+      emailError: null,
+    });
+  };
+
+  /* -------------------------- Render -------------------------- */
 
   if (isLoading && !usersResponse) {
     return (
@@ -499,10 +768,12 @@ const Users = () => {
               </div>
 
               {!editingUser && (
-                <div className="bg-[#FBF1DC] p-3 rounded-md border border-[#F0B429]/30">
+                <div className="bg-[#FBF1DC] p-3 rounded-md border border-[#F0B429]/30 flex items-start gap-2">
+                  <Mail className="w-4 h-4 mt-0.5 text-[#92600A] flex-shrink-0" />
                   <p className="text-sm text-[#92600A]">
-                    A random password will be generated and sent to the user's
-                    email.
+                    A random password will be generated and emailed to the new
+                    user. You'll also see it on the next screen so you can
+                    share it manually if needed.
                   </p>
                 </div>
               )}
@@ -658,8 +929,8 @@ const Users = () => {
                       <TableCell>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
-                            ? "bg-[#E5F2EA] text-[#1E8449]"
-                            : "bg-[#FBE7E9] text-[#C8202F]"
+                              ? "bg-[#E5F2EA] text-[#1E8449]"
+                              : "bg-[#FBE7E9] text-[#C8202F]"
                             }`}
                         >
                           {user.is_active ? "Active" : "Inactive"}
@@ -696,6 +967,15 @@ const Users = () => {
                           >
                             Reset Password
                           </ActionButton>
+                          {freshCredentials[user.user_id] ? (
+                            <ActionButton
+                              icon={Eye}
+                              variant="info"
+                              onClick={() => handleViewFreshPassword(user)}
+                            >
+                              Show Password
+                            </ActionButton>
+                          ) : null}
                           <ActionButton
                             icon={Trash2}
                             variant="danger"
@@ -721,6 +1001,24 @@ const Users = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Credentials Modal */}
+      <CredentialsModal
+        open={credentialsModal.open}
+        onClose={() =>
+          setCredentialsModal({
+            open: false,
+            email: "",
+            password: "",
+            emailSent: true,
+            emailError: null,
+          })
+        }
+        email={credentialsModal.email}
+        password={credentialsModal.password}
+        emailSent={credentialsModal.emailSent}
+        emailError={credentialsModal.emailError}
+      />
     </div>
   );
 };

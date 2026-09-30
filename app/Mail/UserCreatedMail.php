@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -12,19 +13,16 @@ class UserCreatedMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $user;
-    public $password;
-
-    public function __construct($user, $password)
-    {
-        $this->user = $user;
-        $this->password = $password;
+    public function __construct(
+        public User $user,
+        public string $plainPassword,
+    ) {
     }
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Welcome to TEMU Traffic System',
+            subject: 'Your TEMU Account Has Been Created',
         );
     }
 
@@ -33,9 +31,9 @@ class UserCreatedMail extends Mailable
         return new Content(
             view: 'emails.user-created',
             with: [
-                'user' => $this->user,
-                'password' => $this->password,
-                'loginUrl' => config('app.url') . '/login',
+                'user'          => $this->user,
+                'plainPassword' => $this->plainPassword,
+                'loginUrl'      => config('app.frontend_url', config('app.url')),
             ],
         );
     }

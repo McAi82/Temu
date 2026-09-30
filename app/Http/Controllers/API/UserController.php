@@ -66,85 +66,6 @@ class UserController extends Controller
         return response()->json(User::findOrFail($id));
     }
 
-    public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email|unique:users,email',
-            'firstname' => 'required|string|max:50',
-            'lastname' => 'required|string|max:50',
-            'role' => 'required|in:admin,staff,enforcer',
-            'contact_number' => 'nullable|string|max:20',
-            'profile_image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $plainPassword = substr(
-            str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'),
-            0,
-            8
-        );
-
-        $userData = [
-            'email' => $request->email,
-            'password_hash' => Hash::make($plainPassword),
-            'firstname' => $request->firstname,
-            'middlename' => $request->middlename,
-            'lastname' => $request->lastname,
-            'role' => $request->role,
-            'contact_number' => $request->contact_number,
-            'is_active' => true,
-        ];
-
-        if ($request->hasFile('profile_image')) {
-            $file = $request->file('profile_image');
-            // UUID prevents filename collisions.
-            $filename = time() . '_' . Str::uuid() . '.' . $file->getClientOriginalExtension();
-            $userData['profile_image'] = $file->storeAs('users', $filename, 'public');
-        }
-
-        $user = User::create($userData);
-
-        try {
-            Mail::to($user->email)->send(new UserCreatedMail($user, $plainPassword));
-        } catch (\Exception $e) {
-            Log::error('Failed to send welcome email: ' . $e->getMessage());
-        }
-
-        try {
-            $fullName = trim("{$user->firstname} {$user->lastname}");
-            $roleLabel = ucfirst($user->role);
-
-            NotificationService::notifyUser(
-                $user->user_id,
-                'Welcome to TEMU',
-                "Your {$roleLabel} account has been created. Check your email for login credentials.",
-                Notification::TYPE_USER_CREATED,
-                'user',
-                $user->user_id
-            );
-
-            NotificationService::notifyAdmins(
-                'New User Created',
-                "{$fullName} ({$roleLabel}) has been added to the system",
-                Notification::TYPE_USER_CREATED,
-                'user',
-                $user->user_id
-            );
-        } catch (\Throwable $ne) {
-            Log::warning('User creation notification failed: ' . $ne->getMessage());
-        }
-
-        return response()->json([
-            'message' => 'User created successfully',
-            'user' => $user,
-            'generated_password' => $plainPassword,
-            'email_sent' => true,
-        ], 201);
-    }
-
     public function update(Request $request, $id)
     {
         $user = User::findOrFail($id);
@@ -235,22 +156,114 @@ class UserController extends Controller
         ]);
     }
 
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|unique:users,email',
+            'firstname' => 'required|string|max:50',
+            'lastname' => 'required|string|max:50',
+            'role' => 'required|in:admin,staff,enforcer',
+            'contact_number' => 'nullable|string|max:20',
+            'profile_image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $plainPassword = substr(
+            str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'),
+            0,
+            8,
+        );
+
+        $userData = [
+            'email' => $request->email,
+            'password_hash' => Hash::make($plainPassword),
+            'firstname' => $request->firstname,
+            'middlename' => $request->middlename,
+            'lastname' => $request->lastname,
+            'role' => $request->role,
+            'contact_number' => $request->contact_number,
+            'is_active' => true,
+        ];
+
+        if ($request->hasFile('profile_image')) {
+            $file = $request->file('profile_image');
+            $filename = time() . '_' . Str::uuid() . '.' . $file->getClientOriginalExtension();
+            $userData['profile_image'] = $file->storeAs('users', $filename, 'public');
+        }
+
+        $user = User::create($userData);
+
+        // ---- Send the welcome email (best-effort, non-blocking) ----
+        $emailSent = false;
+        $emailError = null;
+
+        try {
+            Mail::to($user->email)->send(new UserCreatedMail($user, $plainPassword));
+            $emailSent = true;
+        } catch (\Throwable $e) {
+            $emailError = 'Could not deliver the welcome email. Please hand the credentials to the user manually.';
+            Log::error('Failed to send welcome email to ' . $user->email . ': ' . $e->getMessage());
+        }
+
+        // ---- In-app notifications (never block the response) ----
+        try {
+            $fullName = trim("{$user->firstname} {$user->lastname}");
+            $roleLabel = ucfirst($user->role);
+
+            NotificationService::notifyUser(
+                $user->user_id,
+                'Welcome to TEMU',
+                "Your {$roleLabel} account has been created. Check your email for login credentials.",
+                Notification::TYPE_USER_CREATED,
+                'user',
+                $user->user_id
+            );
+
+            NotificationService::notifyAdmins(
+                'New User Created',
+                "{$fullName} ({$roleLabel}) has been added to the system",
+                Notification::TYPE_USER_CREATED,
+                'user',
+                $user->user_id
+            );
+        } catch (\Throwable $ne) {
+            Log::warning('User creation notification failed: ' . $ne->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'User created successfully',
+            'user' => $user,
+            'generated_password' => $plainPassword,
+            'email_sent' => $emailSent,
+            'email_error' => $emailError,
+        ], 201);
+    }
+
     public function resetPassword($id)
     {
         $user = User::findOrFail($id);
+
         $newPassword = substr(
             str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'),
             0,
-            8
+            8,
         );
 
         $user->password_hash = Hash::make($newPassword);
         $user->save();
 
+        $emailSent = false;
+        $emailError = null;
+
         try {
             Mail::to($user->email)->send(new PasswordResetMail($user, $newPassword));
-        } catch (\Exception $e) {
-            Log::error('Failed to send password reset email: ' . $e->getMessage());
+            $emailSent = true;
+        } catch (\Throwable $e) {
+            $emailError = 'Could not deliver the password reset email. Please hand the new password to the user manually.';
+            Log::error('Failed to send password reset email to ' . $user->email . ': ' . $e->getMessage());
         }
 
         try {
@@ -269,7 +282,9 @@ class UserController extends Controller
         return response()->json([
             'message' => 'Password reset successfully',
             'new_password' => $newPassword,
-            'email_sent' => true,
+            'email' => $user->email,
+            'email_sent' => $emailSent,
+            'email_error' => $emailError,
         ]);
     }
 }
