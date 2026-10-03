@@ -45,6 +45,14 @@ import {
   LayoutGrid,
   List as ListIcon,
   ScanFace,
+  User as UserIcon,
+  UserCog,
+  Phone,
+  Shield,
+  ShieldCheck,
+  Info,
+  Calendar,
+  XCircle,
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
 import { useAuth } from '../contexts/AuthContext';
@@ -170,6 +178,43 @@ const Mini = ({ children }) => (
   </i>
 );
 
+const PreviewRow = ({ icon: Icon, label, value, mono, danger, accent }) => (
+  <div className="flex items-start gap-2.5">
+    <div className="w-7 h-7 rounded-md bg-[#F5F6F8] flex items-center justify-center flex-shrink-0">
+      <Icon className="w-3.5 h-3.5 text-[#64748B]" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">
+        {label}
+      </p>
+      <p
+        className={`text-sm truncate ${mono ? 'font-mono text-[#16233F]' : 'text-[#1F2937]'
+          } ${danger ? 'text-[#C8202F] font-medium' : ''}`}
+        style={accent ? { color: accent } : undefined}
+      >
+        {value}
+      </p>
+    </div>
+  </div>
+);
+
+const AccessRow = ({ label, enabled }) => (
+  <div className="flex items-center justify-between text-sm">
+    <span className="text-[#64748B]">{label}</span>
+    {enabled ? (
+      <span className="inline-flex items-center gap-1 text-[#1E8449] font-medium text-xs">
+        <CheckCircle className="w-3.5 h-3.5" />
+        Enabled
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 text-[#94A3B8] text-xs">
+        <XCircle className="w-3.5 h-3.5" />
+        No access
+      </span>
+    )}
+  </div>
+);
+
 const ViewToggle = ({ view, setView }) => (
   <div
     className="ml-auto flex bg-[#E9ECF2] rounded-full p-1 text-xs"
@@ -184,8 +229,8 @@ const ViewToggle = ({ view, setView }) => (
           onClick={() => setView(v)}
           aria-pressed={view === v}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
-            ? 'bg-[#16233F] text-white'
-            : 'text-[#64748B] hover:text-[#16233F]'
+              ? 'bg-[#16233F] text-white'
+              : 'text-[#64748B] hover:text-[#16233F]'
             }`}
         >
           <I className="w-3.5 h-3.5" />
@@ -597,8 +642,8 @@ const Users = () => {
   const allUsers = getDataArray(usersResponse);
   const meta = getMeta(usersResponse);
 
-  // Account status counts are computed off the full server response so
-  // the numbers stay stable while the user switches between views.
+  // Account status counts computed off the full server response so the
+  // numbers stay stable while the user switches between views.
   const accountStats = useMemo(() => {
     const active = allUsers.filter((u) => u.is_active !== false);
     const deactivated = allUsers.filter((u) => u.is_active === false);
@@ -616,8 +661,8 @@ const Users = () => {
     return allUsers;
   }, [allUsers, filters.account_status]);
 
-  // Face registration counts are computed on the account-status-filtered
-  // list so the numbers reflect what the user is currently looking at.
+  // Face registration counts on the account-status-filtered list so the
+  // numbers reflect what the user is currently looking at.
   const faceStats = useMemo(() => {
     const registered = users.filter((u) => u.has_face_registered === true);
     const unregistered = users.filter((u) => u.has_face_registered !== true);
@@ -900,8 +945,8 @@ const Users = () => {
                 }
                 aria-pressed={active}
                 className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border font-medium transition-colors ${active
-                  ? 'bg-[#16233F] text-white border-[#16233F]'
-                  : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                    ? 'bg-[#16233F] text-white border-[#16233F]'
+                    : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
                   }`}
               >
                 <span className="flex items-center gap-2">
@@ -951,8 +996,8 @@ const Users = () => {
                 }
                 aria-pressed={active}
                 className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border font-medium transition-colors ${active
-                  ? 'bg-[#16233F] text-white border-[#16233F]'
-                  : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                    ? 'bg-[#16233F] text-white border-[#16233F]'
+                    : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
                   }`}
               >
                 <span className="flex items-center gap-2">
@@ -1014,8 +1059,7 @@ const Users = () => {
           variant="outline"
           className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
         >
-          Retry
-        </Button>
+          Retry        </Button>
       </div>
     );
   }
@@ -1064,172 +1108,507 @@ const Users = () => {
                   Add User
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="font-['Oswald'] text-[#16233F]">
-                    {editingUser ? 'Edit User' : 'Add New User'}
+
+              <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
+                {/* -------- Header -------- */}
+                <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+                  <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-lg bg-[#E9ECF2] flex items-center justify-center flex-shrink-0">
+                      {editingUser ? (
+                        <Pencil className="w-5 h-5 text-[#16233F]" />
+                      ) : (
+                        <UserCog className="w-5 h-5 text-[#16233F]" />
+                      )}
+                    </span>
+                    <div>
+                      <div className="leading-tight">
+                        {editingUser ? 'Edit User' : 'Add New User'}
+                      </div>
+                      <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                        {editingUser
+                          ? `Update details for ${editingUser.firstname} ${editingUser.lastname}`
+                          : 'Create an account and assign a role'}
+                      </div>
+                    </div>
                   </DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      placeholder="First Name *"
-                      value={formData.firstname}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          firstname: e.target.value,
-                        })
-                      }
-                      required
-                      className="focus-visible:ring-[#F0B429]"
-                    />
-                    <Input
-                      placeholder="Middle Name"
-                      value={formData.middlename}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          middlename: e.target.value,
-                        })
-                      }
-                      className="focus-visible:ring-[#F0B429]"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      placeholder="Last Name *"
-                      value={formData.lastname}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          lastname: e.target.value,
-                        })
-                      }
-                      required
-                      className="focus-visible:ring-[#F0B429]"
-                    />
-                    <Input
-                      placeholder="Contact Number"
-                      value={formData.contact_number}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          contact_number: e.target.value,
-                        })
-                      }
-                      className="focus-visible:ring-[#F0B429]"
-                    />
-                  </div>
-                  <Input
-                    type="email"
-                    placeholder="Email *"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        email: e.target.value,
-                      })
-                    }
-                    required
-                    disabled={!!editingUser}
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                    value={formData.role}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        role: e.target.value,
-                      })
-                    }
-                    required
-                  >
-                    <option value="admin">Admin (Full Access)</option>
-                    <option value="staff">Staff (View Only)</option>
-                    <option value="enforcer">Enforcer (Mobile Only)</option>
-                  </select>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-[#1F2937]">
-                      Profile Photo
-                    </label>
-                    <div className="flex items-center gap-4">
-                      {previewUrl && (
-                        <div className="relative">
-                          <img
-                            src={previewUrl}
-                            alt="Profile preview"
-                            className="w-16 h-16 rounded-full object-cover border border-[#E9ECF2]"
-                          />
-                          <button
-                            type="button"
-                            className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-0.5 hover:bg-[#A01622]"
-                            onClick={() => {
-                              setPreviewUrl('');
-                              setFormData({
-                                ...formData,
-                                profile_image: null,
-                              });
-                              const fileInput =
-                                document.getElementById(
-                                  'profile_image_input',
-                                );
-                              if (fileInput) fileInput.value = '';
-                            }}
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <label
-                          htmlFor="profile_image_input"
-                          className="flex items-center justify-center w-full px-4 py-2 border border-[#E9ECF2] rounded-lg cursor-pointer hover:bg-[#F5F6F8] transition-colors"
-                        >
-                          <Camera className="w-4 h-4 mr-2 text-[#64748B]" />
-                          <span className="text-sm text-[#64748B]">
-                            {previewUrl ? 'Change Photo' : 'Upload Photo'}
-                          </span>
-                          <Input
-                            id="profile_image_input"
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFileChange}
-                            className="hidden"
-                          />
-                        </label>
-                        <p className="text-xs text-[#94A3B8] mt-1">
-                          JPG, PNG, GIF up to 2MB
-                        </p>
+                <form
+                  onSubmit={handleSubmit}
+                  className="flex flex-col max-h-[calc(90vh-100px)]"
+                >
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                      {/* ============ LEFT: FORM FIELDS ============ */}
+                      <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
+                        {/* ──── PHOTO ──── */}
+                        <section>
+                          <div className="flex items-center gap-2 mb-4">
+                            <Camera className="w-4 h-4 text-[#F0B429]" />
+                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                              Photo
+                            </h3>
+                            <span className="h-px flex-1 bg-[#E3E7EE]" />
+                          </div>
+
+                          <div className="flex items-center gap-5">
+                            {previewUrl ? (
+                              <div className="relative flex-shrink-0">
+                                <img
+                                  src={previewUrl}
+                                  alt="Profile preview"
+                                  className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md"
+                                />
+                                <button
+                                  type="button"
+                                  className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-1 hover:bg-[#A01622]"
+                                  onClick={() => {
+                                    setPreviewUrl('');
+                                    setFormData({
+                                      ...formData,
+                                      profile_image: null,
+                                    });
+                                    const fileInput = document.getElementById(
+                                      'profile_image_input',
+                                    );
+                                    if (fileInput) fileInput.value = '';
+                                  }}
+                                  aria-label="Remove photo"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="w-24 h-24 flex-shrink-0 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-2xl font-['Oswald'] font-semibold border-4 border-white shadow-md">
+                                {formData.firstname?.[0] || '?'}
+                                {formData.lastname?.[0] || ''}
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <label
+                                htmlFor="profile_image_input"
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-[#CBD5E1] rounded-lg cursor-pointer hover:border-[#16233F] hover:bg-[#F8F9FA] transition-colors"
+                              >
+                                <Camera className="w-4 h-4 text-[#64748B]" />
+                                <span className="text-sm font-medium text-[#64748B]">
+                                  {previewUrl ? 'Change Photo' : 'Upload Photo'}
+                                </span>
+                                <input
+                                  id="profile_image_input"
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleFileChange}
+                                  className="hidden"
+                                />
+                              </label>
+                              <p className="text-[11px] text-[#94A3B8] mt-1.5">
+                                JPG, PNG, or GIF up to 2&nbsp;MB.
+                              </p>
+                            </div>
+                          </div>
+                        </section>
+
+                        {/* ──── IDENTITY ──── */}
+                        <section>
+                          <div className="flex items-center gap-2 mb-4">
+                            <UserIcon className="w-4 h-4 text-[#F0B429]" />
+                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                              Identity
+                            </h3>
+                            <span className="h-px flex-1 bg-[#E3E7EE]" />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                                First Name <span className="text-[#C8202F]">*</span>
+                              </label>
+                              <Input
+                                value={formData.firstname}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    firstname: e.target.value,
+                                  })
+                                }
+                                required
+                                className="focus-visible:ring-[#F0B429] h-11"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                                Middle Name
+                              </label>
+                              <Input
+                                value={formData.middlename}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    middlename: e.target.value,
+                                  })
+                                }
+                                className="focus-visible:ring-[#F0B429] h-11"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                                Last Name <span className="text-[#C8202F]">*</span>
+                              </label>
+                              <Input
+                                value={formData.lastname}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    lastname: e.target.value,
+                                  })
+                                }
+                                required
+                                className="focus-visible:ring-[#F0B429] h-11"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                            <div>
+                              <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+                                <Mail className="w-3.5 h-3.5 text-[#92600A]" />
+                                Email <span className="text-[#C8202F]">*</span>
+                              </label>
+                              <Input
+                                type="email"
+                                value={formData.email}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    email: e.target.value,
+                                  })
+                                }
+                                required
+                                disabled={!!editingUser}
+                                className="focus-visible:ring-[#F0B429] h-11 disabled:bg-[#F5F6F8] disabled:cursor-not-allowed"
+                              />
+                              {editingUser && (
+                                <p className="text-[11px] text-[#94A3B8] mt-1.5">
+                                  Email can't be changed after the account is
+                                  created.
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+                                <Phone className="w-3.5 h-3.5 text-[#92600A]" />
+                                Contact Number
+                              </label>
+                              <Input
+                                value={formData.contact_number}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    contact_number: e.target.value,
+                                  })
+                                }
+                                placeholder="09171234567"
+                                className="focus-visible:ring-[#F0B429] h-11 font-mono"
+                              />
+                            </div>
+                          </div>
+                        </section>
+
+                        {/* ──── ROLE & ACCESS ──── */}
+                        <section>
+                          <div className="flex items-center gap-2 mb-4">
+                            <Shield className="w-4 h-4 text-[#F0B429]" />
+                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                              Role &amp; Access
+                            </h3>
+                            <span className="h-px flex-1 bg-[#E3E7EE]" />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {[
+                              {
+                                value: 'admin',
+                                label: 'Admin',
+                                sub: 'Full access — manage users, archives, and settings',
+                                Icon: ShieldCheck,
+                                tint: '#E9ECF2',
+                                accent: '#16233F',
+                              },
+                              {
+                                value: 'staff',
+                                label: 'Staff',
+                                sub: 'Records payments, views users and reports',
+                                Icon: UserCog,
+                                tint: '#EEF1F5',
+                                accent: '#3B5170',
+                              },
+                              {
+                                value: 'enforcer',
+                                label: 'Enforcer',
+                                sub: 'Mobile-only — issues tickets, logs attendance',
+                                Icon: UserIcon,
+                                tint: '#E5F2EA',
+                                accent: '#1E8449',
+                              },
+                            ].map((opt) => {
+                              const active = formData.role === opt.value;
+                              const Icon = opt.Icon;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() =>
+                                    setFormData({ ...formData, role: opt.value })
+                                  }
+                                  className={`relative text-left p-4 rounded-xl border-2 transition-all ${active
+                                      ? 'border-[#16233F] shadow-sm'
+                                      : 'border-[#E3E7EE] hover:border-[#94A3B8]'
+                                    }`}
+                                  style={active ? { background: opt.tint } : undefined}
+                                >
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Icon
+                                      className="w-4 h-4"
+                                      style={{
+                                        color: active ? opt.accent : '#94A3B8',
+                                      }}
+                                    />
+                                    <span
+                                      className={`text-sm font-semibold ${active ? 'text-[#16233F]' : 'text-[#64748B]'
+                                        }`}
+                                    >
+                                      {opt.label}
+                                    </span>
+                                    {active && (
+                                      <Check className="w-3.5 h-3.5 text-[#16233F] ml-auto" />
+                                    )}
+                                  </div>
+                                  <p
+                                    className={`text-[11px] leading-snug ${active ? 'text-[#16233F]/70' : 'text-[#94A3B8]'
+                                      }`}
+                                  >
+                                    {opt.sub}
+                                  </p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+
+                        {/* ──── NOTICE ──── */}
+                        {!editingUser && (
+                          <section>
+                            <div className="bg-[#FBF1DC] p-4 rounded-lg border border-[#F0B429]/30 flex items-start gap-2.5">
+                              <Mail className="w-4 h-4 mt-0.5 text-[#92600A] flex-shrink-0" />
+                              <div className="text-xs text-[#92600A] leading-relaxed">
+                                <p className="font-semibold mb-1">
+                                  Account provisioning
+                                </p>
+                                <p>
+                                  A random password will be generated and
+                                  emailed to the new user. You'll also see it on
+                                  the next screen so you can hand it over
+                                  manually if needed.
+                                </p>
+                              </div>
+                            </div>
+                          </section>
+                        )}
+                      </div>
+
+                      {/* ============ RIGHT: PREVIEW ============ */}
+                      <div className="p-7 space-y-6 bg-[#F8F9FA]">
+                        {/* Preview card */}
+                        <section>
+                          <div className="flex items-center gap-2 mb-3">
+                            <CheckCircle className="w-4 h-4 text-[#1E8449]" />
+                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                              Preview
+                            </h3>
+                          </div>
+                          <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
+                            <div
+                              className="h-1.5"
+                              style={{
+                                background:
+                                  ROLE_META[formData.role]?.color || '#16233F',
+                              }}
+                            />
+                            <div className="p-4">
+                              <div className="flex items-center gap-3 mb-4">
+                                {previewUrl ? (
+                                  <img
+                                    src={previewUrl}
+                                    alt=""
+                                    className="w-14 h-14 rounded-full object-cover border border-[#E9ECF2] flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-14 h-14 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-lg font-bold flex-shrink-0">
+                                    {formData.firstname?.[0] || '?'}
+                                    {formData.lastname?.[0] || ''}
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="font-['Oswald'] text-base leading-tight text-[#1F2937] truncate">
+                                    {formData.lastname || 'Lastname'}
+                                    {formData.firstname
+                                      ? `, ${formData.firstname}`
+                                      : ''}
+                                  </p>
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                    <span
+                                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${ROLE_META[formData.role]?.chip ||
+                                        'bg-gray-100 text-gray-700'
+                                        }`}
+                                    >
+                                      {formData.role?.toUpperCase() || 'ENFORCER'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <dl className="grid grid-cols-1 gap-y-3">
+                                <PreviewRow
+                                  icon={Mail}
+                                  label="Email"
+                                  value={formData.email || '—'}
+                                  mono
+                                />
+                                <PreviewRow
+                                  icon={Phone}
+                                  label="Contact"
+                                  value={formData.contact_number || '—'}
+                                  mono
+                                />
+                              </dl>
+                            </div>
+                          </div>
+                        </section>
+
+                        {/* Access summary */}
+                        <section>
+                          <div className="flex items-center gap-2 mb-3">
+                            <Shield className="w-4 h-4 text-[#16233F]" />
+                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                              Access
+                            </h3>
+                          </div>
+                          <div className="rounded-xl bg-white border border-[#E3E7EE] p-4 space-y-3">
+                            <AccessRow
+                              label="Web dashboard"
+                              enabled={
+                                formData.role === 'admin' ||
+                                formData.role === 'staff'
+                              }
+                            />
+                            <AccessRow
+                              label="Mobile app"
+                              enabled={formData.role === 'enforcer'}
+                            />
+                            <AccessRow
+                              label="Manage users"
+                              enabled={formData.role === 'admin'}
+                            />
+                            <AccessRow
+                              label="Records payments"
+                              enabled={
+                                formData.role === 'admin' ||
+                                formData.role === 'staff'
+                              }
+                            />
+                            <AccessRow
+                              label="Issues tickets"
+                              enabled={formData.role === 'enforcer'}
+                            />
+                          </div>
+                        </section>
+
+                        {/* Reminders */}
+                        <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
+                          <div className="flex items-start gap-2.5">
+                            <Info className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
+                            <div className="text-xs text-[#92600A] leading-relaxed">
+                              <p className="font-semibold mb-1">Reminders</p>
+                              <ul className="space-y-1 list-disc list-inside">
+                                <li>Emails must be unique across the whole system.</li>
+                                <li>
+                                  Enforcer accounts only work through the mobile
+                                  app; they can't sign in to the web dashboard.
+                                </li>
+                                <li>
+                                  Reset the password any time from the user row
+                                  actions.
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+                        </section>
                       </div>
                     </div>
                   </div>
 
-                  {!editingUser && (
-                    <div className="bg-[#FBF1DC] p-3 rounded-md border border-[#F0B429]/30 flex items-start gap-2">
-                      <Mail className="w-4 h-4 mt-0.5 text-[#92600A] flex-shrink-0" />
-                      <p className="text-sm text-[#92600A]">
-                        A random password will be generated and emailed to the
-                        new user. You'll also see it on the next screen so you
-                        can share it manually if needed.
-                      </p>
+                  {/* ============ STICKY FOOTER ============ */}
+                  <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+                    <div className="text-xs text-[#64748B] flex items-center gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
+                      {!formData.firstname || !formData.lastname ? (
+                        <span>First and last name are required.</span>
+                      ) : !formData.email ? (
+                        <span>Enter an email address to continue.</span>
+                      ) : (
+                        <span>
+                          Ready to{' '}
+                          {editingUser ? 'save changes to' : 'create'}{' '}
+                          <strong className="text-[#16233F]">
+                            {formData.firstname} {formData.lastname}
+                          </strong>{' '}
+                          as{' '}
+                          <strong className="text-[#16233F] capitalize">
+                            {formData.role}
+                          </strong>
+                          .
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <Button
-                    type="submit"
-                    className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
-                    disabled={
-                      createMutation.isPending || updateMutation.isPending
-                    }
-                  >
-                    {createMutation.isPending || updateMutation.isPending
-                      ? 'Saving...'
-                      : editingUser
-                        ? 'Update User'
-                        : 'Create User'}
-                  </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsDialogOpen(false)}
+                        className="min-w-[100px]"
+                        disabled={
+                          createMutation.isPending || updateMutation.isPending
+                        }
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[180px]"
+                        disabled={
+                          createMutation.isPending || updateMutation.isPending
+                        }
+                      >
+                        {createMutation.isPending ||
+                          updateMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Saving…
+                          </>
+                        ) : editingUser ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Update User
+                          </>
+                        ) : (
+                          <>
+                            <UserCog className="w-4 h-4 mr-2" />
+                            Create User
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </form>
               </DialogContent>
             </Dialog>
@@ -1371,8 +1750,8 @@ const Users = () => {
                           {roleBadge(user.role)}
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
-                              ? 'bg-[#E5F2EA] text-[#1E8449]'
-                              : 'bg-[#FBE7E9] text-[#C8202F]'
+                                ? 'bg-[#E5F2EA] text-[#1E8449]'
+                                : 'bg-[#FBE7E9] text-[#C8202F]'
                               }`}
                           >
                             {user.is_active ? 'Active' : 'Inactive'}
@@ -1384,9 +1763,7 @@ const Users = () => {
                             {user.email}
                           </Spec>
                           {user.contact_number && (
-                            <Spec label="Contact">
-                              {user.contact_number}
-                            </Spec>
+                            <Spec label="Contact">{user.contact_number}</Spec>
                           )}
                         </dl>
                       </div>
@@ -1470,8 +1847,8 @@ const Users = () => {
                       <div className="flex flex-wrap items-center gap-1.5 justify-self-start">
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${user.is_active
-                            ? 'bg-[#E5F2EA] text-[#1E8449]'
-                            : 'bg-[#FBE7E9] text-[#C8202F]'
+                              ? 'bg-[#E5F2EA] text-[#1E8449]'
+                              : 'bg-[#FBE7E9] text-[#C8202F]'
                             }`}
                         >
                           {user.is_active ? 'Active' : 'Inactive'}
