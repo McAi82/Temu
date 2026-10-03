@@ -153,7 +153,7 @@ const Layout = ({ children }) => {
   const railOpen = pinned || hovered;
 
   return (
-    <div className="flex h-screen bg-[#F5F6F8]">
+    <div className="fixed inset-0 flex bg-[#F5F6F8] overflow-hidden">
       {/* Desktop rail: reserves its pinned width, overlays content while hover-expanded */}
       <div
         className="hidden lg:block relative flex-shrink-0 transition-[width] duration-300"
@@ -203,8 +203,8 @@ const Layout = ({ children }) => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-[#16233F] text-white">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-[#16233F] text-white flex-shrink-0">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
@@ -216,7 +216,7 @@ const Layout = ({ children }) => {
           <img src={temuLogo} alt="" className="w-8 h-8" />
           <span className="font-['Oswald'] font-semibold tracking-wide">TEMU</span>
         </div>
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           <div className="p-4 sm:p-8">{children}</div>
         </main>
       </div>
