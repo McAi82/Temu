@@ -2986,7 +2986,7 @@ const Reports = () => {
                                     </div>
 
                                     {data.payments_summary && (
-                                        <section className="space-y-4 print-card print-avoid-break">
+                                        <section className="bg-[#F6F1E4] space-y-4 print-card print-avoid-break">
                                             <SectionHeader note="Detailed account of payments received in the primary range: total collected, refunds, net collected, and the number of payments and tickets covered."
                                                 icon={Receipt}
                                                 color={COLORS.green}
@@ -3003,7 +3003,7 @@ const Reports = () => {
                                     )}
 
                                     {compare?.payments_summary && (
-                                        <section className="space-y-4 print-card print-avoid-break">
+                                        <section className="bg-[#F6F1E4] space-y-4 print-card print-avoid-break">
                                             <SectionHeader note="The same payment figures for the compare range, provided for reference against the primary range."
                                                 icon={Scale}
                                                 color={COLORS.compare}
