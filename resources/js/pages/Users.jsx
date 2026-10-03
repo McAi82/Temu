@@ -51,7 +51,7 @@ import {
   Shield,
   ShieldCheck,
   Info,
-  Calendar,
+  CheckCircle,
   XCircle,
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
@@ -229,8 +229,8 @@ const ViewToggle = ({ view, setView }) => (
           onClick={() => setView(v)}
           aria-pressed={view === v}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
-              ? 'bg-[#16233F] text-white'
-              : 'text-[#64748B] hover:text-[#16233F]'
+            ? 'bg-[#16233F] text-white'
+            : 'text-[#64748B] hover:text-[#16233F]'
             }`}
         >
           <I className="w-3.5 h-3.5" />
@@ -945,8 +945,8 @@ const Users = () => {
                 }
                 aria-pressed={active}
                 className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border font-medium transition-colors ${active
-                    ? 'bg-[#16233F] text-white border-[#16233F]'
-                    : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                  ? 'bg-[#16233F] text-white border-[#16233F]'
+                  : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
                   }`}
               >
                 <span className="flex items-center gap-2">
@@ -996,8 +996,8 @@ const Users = () => {
                 }
                 aria-pressed={active}
                 className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border font-medium transition-colors ${active
-                    ? 'bg-[#16233F] text-white border-[#16233F]'
-                    : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                  ? 'bg-[#16233F] text-white border-[#16233F]'
+                  : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
                   }`}
               >
                 <span className="flex items-center gap-2">
@@ -1361,8 +1361,8 @@ const Users = () => {
                                     setFormData({ ...formData, role: opt.value })
                                   }
                                   className={`relative text-left p-4 rounded-xl border-2 transition-all ${active
-                                      ? 'border-[#16233F] shadow-sm'
-                                      : 'border-[#E3E7EE] hover:border-[#94A3B8]'
+                                    ? 'border-[#16233F] shadow-sm'
+                                    : 'border-[#E3E7EE] hover:border-[#94A3B8]'
                                     }`}
                                   style={active ? { background: opt.tint } : undefined}
                                 >
@@ -1750,8 +1750,8 @@ const Users = () => {
                           {roleBadge(user.role)}
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
-                                ? 'bg-[#E5F2EA] text-[#1E8449]'
-                                : 'bg-[#FBE7E9] text-[#C8202F]'
+                              ? 'bg-[#E5F2EA] text-[#1E8449]'
+                              : 'bg-[#FBE7E9] text-[#C8202F]'
                               }`}
                           >
                             {user.is_active ? 'Active' : 'Inactive'}
@@ -1847,8 +1847,8 @@ const Users = () => {
                       <div className="flex flex-wrap items-center gap-1.5 justify-self-start">
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${user.is_active
-                              ? 'bg-[#E5F2EA] text-[#1E8449]'
-                              : 'bg-[#FBE7E9] text-[#C8202F]'
+                            ? 'bg-[#E5F2EA] text-[#1E8449]'
+                            : 'bg-[#FBE7E9] text-[#C8202F]'
                             }`}
                         >
                           {user.is_active ? 'Active' : 'Inactive'}
