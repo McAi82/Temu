@@ -43,6 +43,13 @@ import {
   Tag,
   LayoutGrid,
   List as ListIcon,
+  User as UserIcon,
+  CreditCard,
+  CalendarDays,
+  AlertCircle,
+  CheckCircle,
+  IdCard,
+  Info,
 } from "lucide-react";
 import { useAlert } from "../components/ui/AlertProvider";
 
@@ -927,7 +934,7 @@ const VehiclesViolators = () => {
         </TabsContent>
       </Tabs>
 
-      {/* -------------------- VIOLATOR DIALOG -------------------- */}
+      {/* -------------------- VIOLATOR DIALOG (redesigned, 70% width) -------------------- */}
       <Dialog
         open={isViolatorDialogOpen}
         onOpenChange={(open) => {
@@ -935,179 +942,446 @@ const VehiclesViolators = () => {
           if (!open) resetViolatorForm();
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-['Oswald'] text-[#16233F]">
-              {editingViolator ? "Edit Violator" : "Add New Violator"}
+        <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
+          {/* -------- Header -------- */}
+          <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+            <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+              <span className="w-10 h-10 rounded-lg bg-[#FBF1DC] flex items-center justify-center flex-shrink-0">
+                {editingViolator ? (
+                  <Pencil className="w-5 h-5 text-[#92600A]" />
+                ) : (
+                  <UserIcon className="w-5 h-5 text-[#92600A]" />
+                )}
+              </span>
+              <div>
+                <div className="leading-tight">
+                  {editingViolator ? 'Edit Violator' : 'Add New Violator'}
+                </div>
+                <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                  {editingViolator
+                    ? `Update the details for ${editingViolator.firstname} ${editingViolator.lastname}`
+                    : 'Register a new violator and their license details'}
+                </div>
+              </div>
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleViolatorSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1 text-[#1F2937]">
-                Profile Photo
-              </label>
-              <div className="flex items-center gap-4">
-                {violatorPhotoPreview && (
-                  <img
-                    src={violatorPhotoPreview}
-                    alt="Preview"
-                    className="w-16 h-16 rounded-full object-cover border border-[#E9ECF2]"
-                  />
-                )}
-                <div className="flex-1">
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleViolatorPhotoChange}
-                    className="flex-1 focus-visible:ring-[#F0B429]"
-                  />
+
+          <form
+            onSubmit={handleViolatorSubmit}
+            className="flex flex-col max-h-[calc(90vh-100px)]"
+          >
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                {/* ============ LEFT: FORM FIELDS ============ */}
+                <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
+                  {/* ──── PHOTO ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <UserIcon className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Photo
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div className="flex items-center gap-5">
+                      {violatorPhotoPreview ? (
+                        <div className="relative flex-shrink-0">
+                          <img
+                            src={violatorPhotoPreview}
+                            alt="Preview"
+                            className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md"
+                          />
+                          <button
+                            type="button"
+                            className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-1 hover:bg-[#A01622]"
+                            onClick={() => {
+                              setViolatorPhotoPreview(null);
+                              setViolatorFormData({
+                                ...violatorFormData,
+                                profile_photo: null,
+                              });
+                            }}
+                            aria-label="Remove photo"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-24 h-24 flex-shrink-0 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-2xl font-['Oswald'] font-semibold border-4 border-white shadow-md">
+                          {violatorFormData.firstname?.[0] || '?'}
+                          {violatorFormData.lastname?.[0] || ''}
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <label
+                          htmlFor="violator_photo_input"
+                          className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-[#CBD5E1] rounded-lg cursor-pointer hover:border-[#16233F] hover:bg-[#F8F9FA] transition-colors"
+                        >
+                          <Car className="w-4 h-4 text-[#64748B]" />
+                          <span className="text-sm font-medium text-[#64748B]">
+                            {violatorPhotoPreview ? 'Change Photo' : 'Upload Photo'}
+                          </span>
+                          <input
+                            id="violator_photo_input"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleViolatorPhotoChange}
+                            className="hidden"
+                          />
+                        </label>
+                        <p className="text-[11px] text-[#94A3B8] mt-1.5">
+                          JPG or PNG up to 2&nbsp;MB. Face should be clearly visible.
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* ──── IDENTITY ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <IdCard className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Identity
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          First Name <span className="text-[#C8202F]">*</span>
+                        </label>
+                        <Input
+                          value={violatorFormData.firstname}
+                          onChange={(e) =>
+                            setViolatorFormData({
+                              ...violatorFormData,
+                              firstname: e.target.value,
+                            })
+                          }
+                          required
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          Middle Name
+                        </label>
+                        <Input
+                          value={violatorFormData.middlename}
+                          onChange={(e) =>
+                            setViolatorFormData({
+                              ...violatorFormData,
+                              middlename: e.target.value,
+                            })
+                          }
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          Last Name <span className="text-[#C8202F]">*</span>
+                        </label>
+                        <Input
+                          value={violatorFormData.lastname}
+                          onChange={(e) =>
+                            setViolatorFormData({
+                              ...violatorFormData,
+                              lastname: e.target.value,
+                            })
+                          }
+                          required
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          Gender
+                        </label>
+                        <select
+                          className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
+                          value={violatorFormData.gender}
+                          onChange={(e) =>
+                            setViolatorFormData({
+                              ...violatorFormData,
+                              gender: e.target.value,
+                            })
+                          }
+                        >
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          Nationality
+                        </label>
+                        <Input
+                          value={violatorFormData.nationality}
+                          onChange={(e) =>
+                            setViolatorFormData({
+                              ...violatorFormData,
+                              nationality: e.target.value,
+                            })
+                          }
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+                          <CalendarDays className="w-3.5 h-3.5 text-[#92600A]" />
+                          Birthday <span className="text-[#C8202F]">*</span>
+                        </label>
+                        <Input
+                          type="date"
+                          value={violatorFormData.birthday}
+                          onChange={(e) =>
+                            setViolatorFormData({
+                              ...violatorFormData,
+                              birthday: e.target.value,
+                            })
+                          }
+                          required
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* ──── LICENSE ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <CreditCard className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        License
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          License Number <span className="text-[#C8202F]">*</span>
+                        </label>
+                        <Input
+                          value={violatorFormData.license}
+                          onChange={(e) =>
+                            setViolatorFormData({
+                              ...violatorFormData,
+                              license: e.target.value.toUpperCase(),
+                            })
+                          }
+                          required
+                          className="focus-visible:ring-[#F0B429] h-11 font-mono tracking-wider"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+                          <CalendarDays className="w-3.5 h-3.5 text-[#92600A]" />
+                          Expiry Date <span className="text-[#C8202F]">*</span>
+                        </label>
+                        <Input
+                          type="date"
+                          value={violatorFormData.expiry}
+                          onChange={(e) =>
+                            setViolatorFormData({
+                              ...violatorFormData,
+                              expiry: e.target.value,
+                            })
+                          }
+                          required
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                        {violatorFormData.expiry &&
+                          new Date(violatorFormData.expiry) <= new Date() && (
+                            <p className="text-xs text-[#C8202F] mt-1.5 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              This license has already expired.
+                            </p>
+                          )}
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                {/* ============ RIGHT: PREVIEW ============ */}
+                <div className="p-7 space-y-6 bg-[#F8F9FA]">
+                  <section>
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="w-4 h-4 text-[#1E8449]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Preview
+                      </h3>
+                    </div>
+                    <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
+                      <div
+                        className="h-1.5"
+                        style={{ background: '#F0B429' }}
+                      />
+                      <div className="p-4">
+                        <div className="flex items-center gap-3">
+                          {violatorPhotoPreview ? (
+                            <img
+                              src={violatorPhotoPreview}
+                              alt=""
+                              className="w-12 h-12 rounded-full object-cover border border-[#E9ECF2] flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-base font-bold flex-shrink-0">
+                              {violatorFormData.firstname?.[0] || '?'}
+                              {violatorFormData.lastname?.[0] || ''}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-['Oswald'] text-base leading-tight text-[#1F2937] truncate">
+                              {violatorFormData.lastname || 'Lastname'}
+                              {violatorFormData.firstname
+                                ? `, ${violatorFormData.firstname}`
+                                : ''}
+                            </p>
+                            <p className="text-[11px] text-[#64748B]">
+                              {violatorFormData.gender}
+                              {violatorFormData.nationality
+                                ? ` · ${violatorFormData.nationality}`
+                                : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <dl className="grid grid-cols-1 gap-y-3 mt-4">
+                          <PreviewRow
+                            icon={CreditCard}
+                            label="License"
+                            value={violatorFormData.license || '—'}
+                            mono
+                          />
+                          <PreviewRow
+                            icon={CalendarDays}
+                            label="Expiry"
+                            value={
+                              violatorFormData.expiry
+                                ? new Date(
+                                  violatorFormData.expiry,
+                                ).toLocaleDateString()
+                                : '—'
+                            }
+                            danger={
+                              violatorFormData.expiry &&
+                              new Date(violatorFormData.expiry) <= new Date()
+                            }
+                          />
+                          <PreviewRow
+                            icon={CalendarDays}
+                            label="Birthday"
+                            value={
+                              violatorFormData.birthday
+                                ? new Date(
+                                  violatorFormData.birthday,
+                                ).toLocaleDateString()
+                                : '—'
+                            }
+                          />
+                        </dl>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
+                    <div className="flex items-start gap-2.5">
+                      <Info className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
+                      <div className="text-xs text-[#92600A] leading-relaxed">
+                        <p className="font-semibold mb-1">Reminders</p>
+                        <ul className="space-y-1 list-disc list-inside">
+                          <li>
+                            License numbers must be unique — a duplicate will be
+                            rejected by the server.
+                          </li>
+                          <li>
+                            Use uppercase letters for the license number; the field
+                            normalises automatically.
+                          </li>
+                          <li>
+                            A profile photo makes it easier to identify the violator
+                            during enforcement.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </section>
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                placeholder="First Name *"
-                value={violatorFormData.firstname}
-                onChange={(e) =>
-                  setViolatorFormData({
-                    ...violatorFormData,
-                    firstname: e.target.value,
-                  })
-                }
-                required
-                className="focus-visible:ring-[#F0B429]"
-              />
-              <Input
-                placeholder="Middle Name"
-                value={violatorFormData.middlename}
-                onChange={(e) =>
-                  setViolatorFormData({
-                    ...violatorFormData,
-                    middlename: e.target.value,
-                  })
-                }
-                className="focus-visible:ring-[#F0B429]"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                placeholder="Last Name *"
-                value={violatorFormData.lastname}
-                onChange={(e) =>
-                  setViolatorFormData({
-                    ...violatorFormData,
-                    lastname: e.target.value,
-                  })
-                }
-                required
-                className="focus-visible:ring-[#F0B429]"
-              />
-              <Input
-                placeholder="License Number *"
-                value={violatorFormData.license}
-                onChange={(e) =>
-                  setViolatorFormData({
-                    ...violatorFormData,
-                    license: e.target.value.toUpperCase(),
-                  })
-                }
-                required
-                className="focus-visible:ring-[#F0B429]"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-[#1F2937]">
-                  Expiry Date *
-                </label>
-                <Input
-                  type="date"
-                  value={violatorFormData.expiry}
-                  onChange={(e) =>
-                    setViolatorFormData({
-                      ...violatorFormData,
-                      expiry: e.target.value,
-                    })
-                  }
-                  required
-                  className="focus-visible:ring-[#F0B429]"
-                />
+
+            {/* ============ STICKY FOOTER ============ */}
+            <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+              <div className="text-xs text-[#64748B] flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
+                {!violatorFormData.firstname || !violatorFormData.lastname ? (
+                  <span>First and last name are required.</span>
+                ) : !violatorFormData.license ? (
+                  <span>Enter the license number to continue.</span>
+                ) : (
+                  <span>
+                    Ready to{' '}
+                    {editingViolator ? 'save changes to' : 'register'}{' '}
+                    <strong className="text-[#16233F]">
+                      {violatorFormData.firstname} {violatorFormData.lastname}
+                    </strong>
+                    .
+                  </span>
+                )}
               </div>
-              <div>
-                <label className="text-sm font-medium text-[#1F2937]">
-                  Birthday *
-                </label>
-                <Input
-                  type="date"
-                  value={violatorFormData.birthday}
-                  onChange={(e) =>
-                    setViolatorFormData({
-                      ...violatorFormData,
-                      birthday: e.target.value,
-                    })
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsViolatorDialogOpen(false)}
+                  className="min-w-[100px]"
+                  disabled={
+                    createViolatorMutation.isPending ||
+                    updateViolatorMutation.isPending
                   }
-                  required
-                  className="focus-visible:ring-[#F0B429]"
-                />
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[180px]"
+                  disabled={
+                    createViolatorMutation.isPending ||
+                    updateViolatorMutation.isPending
+                  }
+                >
+                  {createViolatorMutation.isPending ||
+                    updateViolatorMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving…
+                    </>
+                  ) : editingViolator ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Update Violator
+                    </>
+                  ) : (
+                    <>
+                      <UserIcon className="w-4 h-4 mr-2" />
+                      Create Violator
+                    </>
+                  )}
+                </Button>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                value={violatorFormData.gender}
-                onChange={(e) =>
-                  setViolatorFormData({
-                    ...violatorFormData,
-                    gender: e.target.value,
-                  })
-                }
-              >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-              </select>
-              <Input
-                placeholder="Nationality"
-                value={violatorFormData.nationality}
-                onChange={(e) =>
-                  setViolatorFormData({
-                    ...violatorFormData,
-                    nationality: e.target.value,
-                  })
-                }
-                className="focus-visible:ring-[#F0B429]"
-              />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setIsViolatorDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1 bg-[#1E8449] hover:bg-[#186B3B]"
-                disabled={
-                  createViolatorMutation.isPending ||
-                  updateViolatorMutation.isPending
-                }
-              >
-                {createViolatorMutation.isPending ||
-                  updateViolatorMutation.isPending
-                  ? "Saving..."
-                  : editingViolator
-                    ? "Update Violator"
-                    : "Create Violator"}
-              </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* -------------------- VEHICLE DIALOG -------------------- */}
+      {/* -------------------- VEHICLE DIALOG (redesigned, 70% width) -------------------- */}
       <Dialog
         open={isVehicleDialogOpen}
         onOpenChange={(open) => {
@@ -1115,96 +1389,279 @@ const VehiclesViolators = () => {
           if (!open) resetVehicleForm();
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="font-['Oswald'] text-[#16233F]">
-              {editingVehicle ? "Edit Vehicle" : "Add New Vehicle"}
+        <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
+          {/* -------- Header -------- */}
+          <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+            <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+              <span className="w-10 h-10 rounded-lg bg-[#E5F2EA] flex items-center justify-center flex-shrink-0">
+                {editingVehicle ? (
+                  <Pencil className="w-5 h-5 text-[#1E8449]" />
+                ) : (
+                  <Car className="w-5 h-5 text-[#1E8449]" />
+                )}
+              </span>
+              <div>
+                <div className="leading-tight">
+                  {editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
+                </div>
+                <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                  {editingVehicle
+                    ? `Update the details for plate ${editingVehicle.platenumber}`
+                    : 'Register a new vehicle and its ownership details'}
+                </div>
+              </div>
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleVehicleSubmit} className="space-y-4">
-            <Input
-              placeholder="Plate Number *"
-              value={vehicleFormData.platenumber}
-              onChange={(e) =>
-                setVehicleFormData({
-                  ...vehicleFormData,
-                  platenumber: e.target.value.toUpperCase(),
-                })
-              }
-              required
-              className="focus-visible:ring-[#F0B429]"
-            />
-            <Input
-              placeholder="Owner Name *"
-              value={vehicleFormData.owner}
-              onChange={(e) =>
-                setVehicleFormData({
-                  ...vehicleFormData,
-                  owner: e.target.value,
-                })
-              }
-              required
-              className="focus-visible:ring-[#F0B429]"
-            />
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                placeholder="Make (e.g., Toyota)"
-                value={vehicleFormData.make}
-                onChange={(e) =>
-                  setVehicleFormData({
-                    ...vehicleFormData,
-                    make: e.target.value,
-                  })
-                }
-                className="focus-visible:ring-[#F0B429]"
-              />
-              <Input
-                placeholder="Model"
-                value={vehicleFormData.model}
-                onChange={(e) =>
-                  setVehicleFormData({
-                    ...vehicleFormData,
-                    model: e.target.value,
-                  })
-                }
-                className="focus-visible:ring-[#F0B429]"
-              />
+
+          <form
+            onSubmit={handleVehicleSubmit}
+            className="flex flex-col max-h-[calc(90vh-100px)]"
+          >
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                {/* ============ LEFT: FORM FIELDS ============ */}
+                <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
+                  {/* ──── PLATE & OWNER ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Car className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Identification
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          Plate Number <span className="text-[#C8202F]">*</span>
+                        </label>
+                        <Input
+                          value={vehicleFormData.platenumber}
+                          onChange={(e) =>
+                            setVehicleFormData({
+                              ...vehicleFormData,
+                              platenumber: e.target.value.toUpperCase(),
+                            })
+                          }
+                          required
+                          placeholder="ABC-1234"
+                          className="focus-visible:ring-[#F0B429] h-11 font-mono tracking-widest font-bold text-base"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          Owner Name <span className="text-[#C8202F]">*</span>
+                        </label>
+                        <Input
+                          value={vehicleFormData.owner}
+                          onChange={(e) =>
+                            setVehicleFormData({
+                              ...vehicleFormData,
+                              owner: e.target.value,
+                            })
+                          }
+                          required
+                          placeholder="Full name of registered owner"
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* ──── VEHICLE DETAILS ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Tag className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Vehicle Details
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          Make
+                        </label>
+                        <Input
+                          value={vehicleFormData.make}
+                          onChange={(e) =>
+                            setVehicleFormData({
+                              ...vehicleFormData,
+                              make: e.target.value,
+                            })
+                          }
+                          placeholder="Toyota, Honda, …"
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                          Model
+                        </label>
+                        <Input
+                          value={vehicleFormData.model}
+                          onChange={(e) =>
+                            setVehicleFormData({
+                              ...vehicleFormData,
+                              model: e.target.value,
+                            })
+                          }
+                          placeholder="Vios, Civic, …"
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+                          <Palette className="w-3.5 h-3.5 text-[#92600A]" />
+                          Color
+                        </label>
+                        <Input
+                          value={vehicleFormData.color}
+                          onChange={(e) =>
+                            setVehicleFormData({
+                              ...vehicleFormData,
+                              color: e.target.value,
+                            })
+                          }
+                          placeholder="White, Black, Red, …"
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                {/* ============ RIGHT: PREVIEW ============ */}
+                <div className="p-7 space-y-6 bg-[#F8F9FA]">
+                  <section>
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="w-4 h-4 text-[#1E8449]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Preview
+                      </h3>
+                    </div>
+                    <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
+                      <div
+                        className="h-1.5"
+                        style={{ background: '#1E8449' }}
+                      />
+                      <div className="p-4">
+                        {/* Plate visual */}
+                        <div className="rounded-md border-2 border-[#16233F] bg-[#FFF6D6] py-2.5 text-center font-mono text-lg font-bold tracking-[0.25em] text-[#16233F]">
+                          {vehicleFormData.platenumber || 'ABC-0000'}
+                        </div>
+
+                        <dl className="grid grid-cols-1 gap-y-3 mt-4">
+                          <PreviewRow
+                            icon={UserIcon}
+                            label="Owner"
+                            value={vehicleFormData.owner || '—'}
+                          />
+                          <PreviewRow
+                            icon={Car}
+                            label="Make / Model"
+                            value={
+                              [vehicleFormData.make, vehicleFormData.model]
+                                .filter(Boolean)
+                                .join(' ') || '—'
+                            }
+                          />
+                          <PreviewRow
+                            icon={Palette}
+                            label="Color"
+                            value={vehicleFormData.color || '—'}
+                          />
+                        </dl>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-xl border border-[#1E8449]/30 bg-[#E5F2EA] p-4">
+                    <div className="flex items-start gap-2.5">
+                      <Info className="w-4 h-4 text-[#1E8449] mt-0.5 flex-shrink-0" />
+                      <div className="text-xs text-[#1E8449] leading-relaxed">
+                        <p className="font-semibold mb-1">Reminders</p>
+                        <ul className="space-y-1 list-disc list-inside">
+                          <li>
+                            Plate numbers must be unique — a duplicate will be
+                            rejected or returned as an existing record.
+                          </li>
+                          <li>
+                            Enter the plate exactly as it appears on the physical
+                            plate, without spaces.
+                          </li>
+                          <li>
+                            Owner name should match the registered owner in the CR.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
             </div>
-            <Input
-              placeholder="Color"
-              value={vehicleFormData.color}
-              onChange={(e) =>
-                setVehicleFormData({
-                  ...vehicleFormData,
-                  color: e.target.value,
-                })
-              }
-              className="focus-visible:ring-[#F0B429]"
-            />
-            <div className="flex gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setIsVehicleDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1 bg-[#1E8449] hover:bg-[#186B3B]"
-                disabled={
-                  createVehicleMutation.isPending ||
-                  updateVehicleMutation.isPending
-                }
-              >
-                {createVehicleMutation.isPending ||
-                  updateVehicleMutation.isPending
-                  ? "Saving..."
-                  : editingVehicle
-                    ? "Update Vehicle"
-                    : "Create Vehicle"}
-              </Button>
+
+            {/* ============ STICKY FOOTER ============ */}
+            <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+              <div className="text-xs text-[#64748B] flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
+                {!vehicleFormData.platenumber ? (
+                  <span>Enter the plate number to continue.</span>
+                ) : !vehicleFormData.owner ? (
+                  <span>Enter the owner name to continue.</span>
+                ) : (
+                  <span>
+                    Ready to{' '}
+                    {editingVehicle ? 'save changes to' : 'register'}{' '}
+                    <strong className="text-[#16233F] font-mono">
+                      {vehicleFormData.platenumber}
+                    </strong>
+                    .
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsVehicleDialogOpen(false)}
+                  className="min-w-[100px]"
+                  disabled={
+                    createVehicleMutation.isPending ||
+                    updateVehicleMutation.isPending
+                  }
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[180px]"
+                  disabled={
+                    createVehicleMutation.isPending ||
+                    updateVehicleMutation.isPending
+                  }
+                >
+                  {createVehicleMutation.isPending ||
+                    updateVehicleMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving…
+                    </>
+                  ) : editingVehicle ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Update Vehicle
+                    </>
+                  ) : (
+                    <>
+                      <Car className="w-4 h-4 mr-2" />
+                      Create Vehicle
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </form>
         </DialogContent>
