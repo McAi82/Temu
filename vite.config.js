@@ -36,7 +36,7 @@ export default defineConfig({
         },
         proxy: {
             '/api': {
-                target: 'http://localhost:8000',
+                target: 'https://ivory-gerbil-502781.hostingersite.com',
                 changeOrigin: true,
             },
         },
