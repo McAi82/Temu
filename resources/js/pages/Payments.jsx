@@ -37,6 +37,8 @@ import {
     Calendar,
     LayoutGrid,
     List as ListIcon,
+    Ticket as TicketIcon,   
+    FileText,  
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
 
@@ -232,8 +234,8 @@ const ViewToggle = ({ view, setView }) => (
                     onClick={() => setView(v)}
                     aria-pressed={view === v}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
-                            ? 'bg-[#16233F] text-white'
-                            : 'text-[#64748B] hover:text-[#16233F]'
+                        ? 'bg-[#16233F] text-white'
+                        : 'text-[#64748B] hover:text-[#16233F]'
                         }`}
                 >
                     <I className="w-3.5 h-3.5" />
@@ -727,8 +729,8 @@ const Payments = () => {
                                 type="button"
                                 onClick={() => toggleHistoryStatus(opt.value)}
                                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${active
-                                        ? 'bg-[#16233F] text-white border-[#16233F]'
-                                        : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                                    ? 'bg-[#16233F] text-white border-[#16233F]'
+                                    : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
                                     }`}
                             >
                                 {opt.label}
@@ -979,8 +981,8 @@ const Payments = () => {
                 <TabsContent value="pending" className="mt-0">
                     <div
                         className={`grid gap-6 ${pendingShowFilters
-                                ? 'lg:grid-cols-[300px_minmax(0,1fr)]'
-                                : ''
+                            ? 'lg:grid-cols-[300px_minmax(0,1fr)]'
+                            : ''
                             }`}
                     >
                         {pendingShowFilters && pendingPanel}
@@ -1350,8 +1352,8 @@ const Payments = () => {
                 <TabsContent value="history" className="mt-0">
                     <div
                         className={`grid gap-6 ${historyShowFilters
-                                ? 'lg:grid-cols-[300px_minmax(0,1fr)]'
-                                : ''
+                            ? 'lg:grid-cols-[300px_minmax(0,1fr)]'
+                            : ''
                             }`}
                     >
                         {historyShowFilters && historyPanel}
@@ -1657,256 +1659,458 @@ const Payments = () => {
                     if (!open) resetForm();
                 }}
             >
-                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="font-['Oswald'] text-[#16233F] flex items-center gap-2">
-                            <Receipt className="w-5 h-5" />
-                            {selectedTicket?.status === 'partial_paid'
-                                ? 'Add Payment'
-                                : 'Record Payment'}
+                <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
+                    {/* -------- Header -------- */}
+                    <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+                        <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-lg bg-[#E5F2EA] flex items-center justify-center flex-shrink-0">
+                                <Receipt className="w-5 h-5 text-[#1E8449]" />
+                            </span>
+                            <div>
+                                <div className="leading-tight">
+                                    {selectedTicket?.status === 'partial_paid'
+                                        ? 'Add Payment'
+                                        : 'Record Payment'}
+                                </div>
+                                <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                                    {selectedTicket
+                                        ? `Ticket ${selectedTicket.ticket_number} · ${selectedTicket.violator?.firstname || ''} ${selectedTicket.violator?.lastname || ''}`.trim()
+                                        : 'Enter payment details'}
+                                </div>
+                            </div>
                         </DialogTitle>
                     </DialogHeader>
 
-                    {selectedTicket && (
-                        <div className="bg-[#F8F9FA] rounded-lg p-3 mb-2 border border-[#E9ECF2]">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-[#64748B]">Ticket</span>
-                                <span className="font-mono font-semibold text-[#16233F]">
-                                    {selectedTicket.ticket_number}
-                                </span>
-                            </div>
-                            <div className="flex justify-between text-sm mt-1">
-                                <span className="text-[#64748B]">
-                                    Violator
-                                </span>
-                                <span className="text-[#1F2937]">
-                                    {selectedTicket.violator?.firstname}{' '}
-                                    {selectedTicket.violator?.lastname}
-                                </span>
-                            </div>
-                            <div className="flex justify-between text-sm mt-1">
-                                <span className="text-[#64748B]">Plate</span>
-                                <span className="font-mono text-[#1F2937]">
-                                    {selectedTicket.vehicle?.platenumber}
-                                </span>
-                            </div>
-
-                            <div className="flex justify-between text-base mt-2 pt-2 border-t border-[#E9ECF2]">
-                                <span className="font-semibold text-[#16233F]">
-                                    Total Fine
-                                </span>
-                                <span className="font-bold text-[#C8202F]">
-                                    {formatPeso(getTotalFine(selectedTicket))}
-                                </span>
-                            </div>
-
-                            {(selectedTicket.is_partial ||
-                                (selectedTicket.total_paid ?? 0) > 0) && (
-                                    <>
-                                        <div className="flex justify-between text-sm mt-1">
-                                            <span className="text-[#64748B]">
-                                                Already Paid
-                                            </span>
-                                            <span className="font-semibold text-[#1E8449]">
-                                                {formatPeso(
-                                                    selectedTicket.total_paid || 0,
-                                                )}
+                    <form
+                        onSubmit={handleSubmit}
+                        className="flex flex-col max-h-[calc(90vh-100px)]"
+                    >
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                                {/* ============ LEFT: FORM FIELDS ============ */}
+                                <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
+                                    {formError && (
+                                        <div className="bg-[#FBE7E9] text-[#C8202F] p-3.5 rounded-md flex items-start gap-2.5 text-sm border-l-4 border-[#C8202F]">
+                                            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                            <span className="whitespace-pre-line">
+                                                {formError}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between text-sm mt-1">
-                                            <span className="text-[#64748B]">
-                                                Outstanding Balance
-                                            </span>
-                                            <span className="font-bold text-[#C2541F]">
-                                                {formatPeso(
-                                                    selectedTicket.balance ??
-                                                    getTotalFine(selectedTicket),
-                                                )}
-                                            </span>
-                                        </div>
-                                    </>
-                                )}
-                        </div>
-                    )}
-
-                    {formError && (
-                        <div className="bg-[#FBE7E9] text-[#C8202F] p-3 rounded-md flex items-start gap-2 text-sm border border-[#F3C6CA]">
-                            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                            <span className="whitespace-pre-line">
-                                {formError}
-                            </span>
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                                Receipt Number *
-                            </label>
-                            <Input
-                                placeholder="e.g., RCP-2024-000123"
-                                value={formData.receipt_number}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        receipt_number: e.target.value,
-                                    })
-                                }
-                                required
-                                autoFocus
-                                className="focus-visible:ring-[#F0B429] font-mono"
-                            />
-                            <p className="text-xs text-[#94A3B8] mt-1">
-                                Must be unique. Duplicates will be rejected.
-                            </p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                                    Amount Paid *
-                                </label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    value={formData.amount_paid}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            amount_paid: e.target.value,
-                                        })
-                                    }
-                                    required
-                                    className="focus-visible:ring-[#F0B429]"
-                                />
-                                {selectedTicket &&
-                                    parseFloat(formData.amount_paid) >
-                                    (parseFloat(
-                                        selectedTicket.balance,
-                                    ) || 0) +
-                                    0.01 && (
-                                        <p className="text-xs text-[#C8202F] mt-1">
-                                            Amount exceeds outstanding balance.
-                                        </p>
                                     )}
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                                    Payment Method *
-                                </label>
-                                <select
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                                    value={formData.payment_method}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            payment_method: e.target.value,
-                                        })
-                                    }
-                                    required
-                                >
-                                    <option value="cash">Cash</option>
-                                </select>
+
+                                    {/* ──── RECEIPT ──── */}
+                                    <section>
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <Receipt className="w-4 h-4 text-[#F0B429]" />
+                                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                Receipt
+                                            </h3>
+                                            <span className="h-px flex-1 bg-[#E3E7EE]" />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+                                                    Receipt Number
+                                                    <span className="text-[#C8202F]">*</span>
+                                                </label>
+                                                <Input
+                                                    placeholder="e.g., RCP-2024-000123"
+                                                    value={formData.receipt_number}
+                                                    onChange={(e) =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            receipt_number: e.target.value,
+                                                        })
+                                                    }
+                                                    required
+                                                    autoFocus
+                                                    className="focus-visible:ring-[#F0B429] font-mono h-11"
+                                                />
+                                                <p className="text-[11px] text-[#94A3B8] mt-1.5">
+                                                    Must be unique. Duplicate receipt numbers are rejected.
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                                                    Transaction ID
+                                                </label>
+                                                <Input
+                                                    placeholder="Optional"
+                                                    value={formData.transaction_id}
+                                                    onChange={(e) =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            transaction_id: e.target.value,
+                                                        })
+                                                    }
+                                                    className="focus-visible:ring-[#F0B429] font-mono text-xs h-11"
+                                                />
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    {/* ──── AMOUNT ──── */}
+                                    <section>
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <PhilippinePeso className="w-4 h-4 text-[#F0B429]" />
+                                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                Amount
+                                            </h3>
+                                            <span className="h-px flex-1 bg-[#E3E7EE]" />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+                                                    Amount Paid
+                                                    <span className="text-[#C8202F]">*</span>
+                                                </label>
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B] font-medium pointer-events-none">
+                                                        ₱
+                                                    </span>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0.01"
+                                                        value={formData.amount_paid}
+                                                        onChange={(e) =>
+                                                            setFormData({
+                                                                ...formData,
+                                                                amount_paid: e.target.value,
+                                                            })
+                                                        }
+                                                        required
+                                                        className="pl-8 focus-visible:ring-[#F0B429] font-mono h-11 tabular-nums"
+                                                    />
+                                                </div>
+                                                {selectedTicket &&
+                                                    parseFloat(formData.amount_paid) >
+                                                    (parseFloat(selectedTicket.balance) || 0) + 0.01 && (
+                                                        <p className="text-xs text-[#C8202F] mt-1.5 flex items-center gap-1">
+                                                            <AlertCircle className="w-3 h-3" />
+                                                            Amount exceeds outstanding balance.
+                                                        </p>
+                                                    )}
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+                                                    Payment Method
+                                                    <span className="text-[#C8202F]">*</span>
+                                                </label>
+                                                <select
+                                                    className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
+                                                    value={formData.payment_method}
+                                                    onChange={(e) =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            payment_method: e.target.value,
+                                                        })
+                                                    }
+                                                    required
+                                                >
+                                                    <option value="cash">Cash</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    {/* ──── PAYMENT INFO ──── */}
+                                    <section>
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <Calendar className="w-4 h-4 text-[#F0B429]" />
+                                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                Payment Info
+                                            </h3>
+                                            <span className="h-px flex-1 bg-[#E3E7EE]" />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                                                    Payment Date &amp; Time
+                                                </label>
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={formData.payment_date}
+                                                    onChange={(e) =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            payment_date: e.target.value,
+                                                        })
+                                                    }
+                                                    className="focus-visible:ring-[#F0B429] h-11"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
+                                                    Paid By
+                                                </label>
+                                                <Input
+                                                    placeholder="Name of payer"
+                                                    value={formData.paid_by}
+                                                    onChange={(e) =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            paid_by: e.target.value,
+                                                        })
+                                                    }
+                                                    className="focus-visible:ring-[#F0B429] h-11"
+                                                />
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    {/* ──── NOTES ──── */}
+                                    <section>
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <FileText className="w-4 h-4 text-[#F0B429]" />
+                                            <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                Notes
+                                            </h3>
+                                            <span className="h-px flex-1 bg-[#E3E7EE]" />
+                                        </div>
+
+                                        <textarea
+                                            className="flex min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
+                                            placeholder="Optional notes about this payment..."
+                                            value={formData.notes}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    notes: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </section>
+                                </div>
+
+                                {/* ============ RIGHT: SUMMARY ============ */}
+                                <div className="p-7 space-y-6 bg-[#F8F9FA]">
+                                    {/* Ticket summary */}
+                                    {selectedTicket && (
+                                        <section>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <TicketIcon className="w-4 h-4 text-[#16233F]" />
+                                                <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                    Ticket
+                                                </h3>
+                                            </div>
+                                            <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
+                                                <div
+                                                    className="h-1.5"
+                                                    style={{
+                                                        background:
+                                                            TICKET_STATUS_META[selectedTicket.status]?.color ||
+                                                            '#16233F',
+                                                    }}
+                                                />
+                                                <div className="p-4 space-y-3">
+                                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                                        <span className="font-mono text-sm font-semibold text-[#16233F]">
+                                                            {selectedTicket.ticket_number}
+                                                        </span>
+                                                        {ticketStatusBadge(selectedTicket.status)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-['Oswald'] text-base leading-tight text-[#1F2937] truncate">
+                                                            {selectedTicket.violator?.firstname}{' '}
+                                                            {selectedTicket.violator?.lastname}
+                                                        </p>
+                                                        <p className="text-xs text-[#64748B] font-mono truncate">
+                                                            {selectedTicket.violator?.license}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-xs text-[#64748B]">
+                                                        <span className="font-mono">
+                                                            {selectedTicket.vehicle?.platenumber || '—'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {/* Financial breakdown */}
+                                    {selectedTicket && (
+                                        <section>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <PhilippinePeso className="w-4 h-4 text-[#1E8449]" />
+                                                <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                    Breakdown
+                                                </h3>
+                                            </div>
+                                            <div className="rounded-xl bg-white border border-[#E3E7EE] p-4 space-y-3">
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <span className="text-[#64748B]">Total Fine</span>
+                                                    <span className="font-semibold text-[#C8202F] tabular-nums">
+                                                        {formatPeso(getTotalFine(selectedTicket))}
+                                                    </span>
+                                                </div>
+
+                                                {(selectedTicket.total_paid ?? 0) > 0 && (
+                                                    <>
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <span className="text-[#64748B]">
+                                                                Already Paid
+                                                            </span>
+                                                            <span className="font-semibold text-[#1E8449] tabular-nums">
+                                                                − {formatPeso(selectedTicket.total_paid || 0)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-sm pt-3 border-t border-dashed border-[#CBD5E1]">
+                                                            <span className="text-[#64748B] font-medium">
+                                                                Outstanding
+                                                            </span>
+                                                            <span className="font-bold text-[#C2541F] tabular-nums">
+                                                                {formatPeso(
+                                                                    selectedTicket.balance ??
+                                                                    getTotalFine(selectedTicket),
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {/* Live preview of what happens after this payment */}
+                                                {parseFloat(formData.amount_paid) > 0 && (
+                                                    <>
+                                                        <div className="pt-3 border-t border-dashed border-[#CBD5E1]">
+                                                            <p className="text-[10px] uppercase tracking-wider text-[#94A3B8] mb-2">
+                                                                After this payment
+                                                            </p>
+                                                            <div className="space-y-2">
+                                                                <div className="flex items-center justify-between text-sm">
+                                                                    <span className="text-[#64748B]">
+                                                                        Paying now
+                                                                    </span>
+                                                                    <span className="font-semibold text-[#1E8449] tabular-nums">
+                                                                        + {formatPeso(formData.amount_paid)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between text-sm">
+                                                                    <span className="text-[#64748B]">
+                                                                        New balance
+                                                                    </span>
+                                                                    <span className="font-bold text-[#16233F] tabular-nums">
+                                                                        {formatPeso(
+                                                                            Math.max(
+                                                                                0,
+                                                                                (parseFloat(
+                                                                                    selectedTicket.balance ??
+                                                                                    getTotalFine(selectedTicket),
+                                                                                ) || 0) -
+                                                                                (parseFloat(formData.amount_paid) || 0),
+                                                                            ),
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Fully paid banner */}
+                                                        {Math.max(
+                                                            0,
+                                                            (parseFloat(
+                                                                selectedTicket.balance ??
+                                                                getTotalFine(selectedTicket),
+                                                            ) || 0) -
+                                                            (parseFloat(formData.amount_paid) || 0),
+                                                        ) <= 0.01 && (
+                                                                <div className="pt-3 border-t border-dashed border-[#CBD5E1]">
+                                                                    <div className="flex items-center gap-2 bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-2.5 text-xs text-[#1E8449]">
+                                                                        <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                                                                        <span className="font-medium">
+                                                                            This payment will fully settle the ticket.
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {/* Tips */}
+                                    <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
+                                        <div className="flex items-start gap-2.5">
+                                            <AlertCircle className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
+                                            <div className="text-xs text-[#92600A] leading-relaxed">
+                                                <p className="font-semibold mb-1">Reminders</p>
+                                                <ul className="space-y-1 list-disc list-inside">
+                                                    <li>
+                                                        Confirm the receipt number matches the physical
+                                                        receipt before saving.
+                                                    </li>
+                                                    <li>
+                                                        Partial payments are allowed; the ticket stays
+                                                        open until the balance is zero.
+                                                    </li>
+                                                    <li>
+                                                        Voiding a payment is possible later from the
+                                                        Payment History tab.
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </section>
+                                </div>
                             </div>
                         </div>
 
-                        <div>
-                            <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                                Payment Date &amp; Time
-                            </label>
-                            <Input
-                                type="datetime-local"
-                                value={formData.payment_date}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        payment_date: e.target.value,
-                                    })
-                                }
-                                className="focus-visible:ring-[#F0B429]"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                                    Transaction ID
-                                </label>
-                                <Input
-                                    placeholder="Optional"
-                                    value={formData.transaction_id}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            transaction_id: e.target.value,
-                                        })
-                                    }
-                                    className="focus-visible:ring-[#F0B429] font-mono text-xs"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                                    Paid By
-                                </label>
-                                <Input
-                                    placeholder="Name of payer"
-                                    value={formData.paid_by}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            paid_by: e.target.value,
-                                        })
-                                    }
-                                    className="focus-visible:ring-[#F0B429]"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                                Notes
-                            </label>
-                            <textarea
-                                className="flex min-h-[70px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                                placeholder="Optional notes..."
-                                value={formData.notes}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        notes: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-
-                        <div className="flex gap-2 pt-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setIsDialogOpen(false)}
-                                className="flex-1"
-                                disabled={createMutation.isPending}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                className="flex-1 bg-[#1E8449] hover:bg-[#186B3B]"
-                                disabled={createMutation.isPending}
-                            >
-                                {createMutation.isPending ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Recording...
-                                    </>
+                        {/* ============ STICKY FOOTER ============ */}
+                        <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+                            <div className="text-xs text-[#64748B] flex items-center gap-2">
+                                <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
+                                {!formData.receipt_number ? (
+                                    <span>Enter the receipt number to continue.</span>
+                                ) : !formData.amount_paid ||
+                                    parseFloat(formData.amount_paid) <= 0 ? (
+                                    <span>Enter an amount greater than zero.</span>
                                 ) : (
-                                    <>
-                                        <CheckCircle className="w-4 h-4 mr-2" />
-                                        Confirm Payment
-                                    </>
+                                    <span>
+                                        Ready to record{' '}
+                                        <strong className="text-[#16233F]">
+                                            {formatPeso(formData.amount_paid)}
+                                        </strong>{' '}
+                                        against{' '}
+                                        <strong className="text-[#16233F] font-mono">
+                                            {selectedTicket?.ticket_number}
+                                        </strong>
+                                        .
+                                    </span>
                                 )}
-                            </Button>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setIsDialogOpen(false)}
+                                    className="min-w-[100px]"
+                                    disabled={createMutation.isPending}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[200px]"
+                                    disabled={createMutation.isPending}
+                                >
+                                    {createMutation.isPending ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Recording…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircle className="w-4 h-4 mr-2" />
+                                            Confirm Payment
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
                         </div>
                     </form>
                 </DialogContent>
