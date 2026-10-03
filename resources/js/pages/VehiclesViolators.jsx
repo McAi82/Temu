@@ -101,6 +101,25 @@ const getDataArray = (response) => {
   return [];
 };
 
+const PreviewRow = ({ icon: Icon, label, value, mono, danger }) => (
+  <div className="flex items-start gap-2.5">
+    <div className="w-7 h-7 rounded-md bg-[#F5F6F8] flex items-center justify-center flex-shrink-0">
+      <Icon className="w-3.5 h-3.5 text-[#64748B]" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">
+        {label}
+      </p>
+      <p
+        className={`text-sm truncate ${mono ? 'font-mono text-[#16233F]' : 'text-[#1F2937]'
+          } ${danger ? 'text-[#C8202F] font-medium' : ''}`}
+      >
+        {value}
+      </p>
+    </div>
+  </div>
+);
+
 const getMeta = (response) => {
   if (!response) return { current_page: 1, last_page: 1, total: 0 };
 
