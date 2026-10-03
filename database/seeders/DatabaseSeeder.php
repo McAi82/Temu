@@ -242,7 +242,7 @@ class DatabaseSeeder extends Seeder
 
             /* ---------------- Staff ---------------- */
             [
-                'email' => 'masterapprentice82@gmail.com',
+                'email' => 'luiskarlcons@gmail.com',
                 'firstname' => 'Luis Karl',
                 'middlename' => 'Bautista',
                 'lastname' => 'Consolacion',

@@ -32,6 +32,7 @@ import {
   Marker,
   Popup,
   ZoomControl,
+  useMap,
 } from "react-leaflet";
 import L from "leaflet";
 import { useAlert } from "../components/ui/AlertProvider";
@@ -266,6 +267,23 @@ const formatTime = (datetime) => {
     minute: "2-digit",
   });
 };
+
+/**
+ * Forces Leaflet to recalculate its container size after the dialog
+ * finishes animating open. Prevents phantom page scroll and blank tiles.
+ */
+function InvalidateMapSize() {
+  const map = useMap();
+  useEffect(() => {
+    const t1 = setTimeout(() => map.invalidateSize(), 150);
+    const t2 = setTimeout(() => map.invalidateSize(), 400);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [map]);
+  return null;
+}
 
 const Attendance = () => {
   const notify = useAlert();
@@ -952,7 +970,7 @@ const Attendance = () => {
               {photoModal.type === "in" ? "Time In Photo" : "Time Out Photo"}
             </DialogTitle>
           </DialogHeader>
-          {photoModal.attendance && photoModal.url && (
+          {photoModal.open && photoModal.attendance && photoModal.url && (
             <div className="flex flex-col items-center">
               {photoModal.loading ? (
                 <div className="flex justify-center items-center h-96">
@@ -999,9 +1017,18 @@ const Attendance = () => {
       {/* ---------------- Map Modal ---------------- */}
       <Dialog
         open={mapModal.open}
-        onOpenChange={(o) => setMapModal((s) => ({ ...s, open: o }))}
+        onOpenChange={(o) =>
+          setMapModal((s) => ({
+            ...s,
+            open: o,
+            // Fully clear state when closing so Leaflet unmounts cleanly
+            ...(o
+              ? {}
+              : { location: null, attendance: null, type: null }),
+          }))
+        }
       >
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="font-['Oswald'] text-[#16233F]">
               {mapModal.type === "in"
@@ -1009,7 +1036,8 @@ const Attendance = () => {
                 : "Time Out Location"}
             </DialogTitle>
           </DialogHeader>
-          {mapModal.location && mapModal.attendance && (
+          {/* Only render the map body when the dialog is actually open */}
+          {mapModal.open && mapModal.location && mapModal.attendance && (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-[#F8F9FA] p-4 rounded-lg space-y-2">
@@ -1061,12 +1089,13 @@ const Attendance = () => {
                 </div>
               </div>
 
+              {/* Fixed height, no 100% dependency, no scroll bleed */}
               <div className="h-[400px] w-full rounded-lg overflow-hidden border border-[#E9ECF2]">
                 <MapContainer
                   key={`map-${mapModal.location.lat}-${mapModal.location.lng}`}
                   center={[mapModal.location.lat, mapModal.location.lng]}
                   zoom={16}
-                  style={{ height: "100%", width: "100%" }}
+                  style={{ height: "400px", width: "100%" }}
                   zoomControl={false}
                   scrollWheelZoom={false}
                   dragging={true}
@@ -1076,6 +1105,7 @@ const Attendance = () => {
                     url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                   />
                   <ZoomControl position="topright" />
+                  <InvalidateMapSize />
                   <Marker
                     position={[
                       mapModal.location.lat,
