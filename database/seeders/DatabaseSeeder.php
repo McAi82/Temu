@@ -232,7 +232,7 @@ class DatabaseSeeder extends Seeder
         $users = [
             /* ---------------- Admins ---------------- */
             [
-                'email' => 'mcyorlabial82@gmail.com',
+                'email' => 'occ.balasabas.johnpaul@gmail.com',
                 'firstname' => 'Johnpaul',
                 'middlename' => 'Alonzo',
                 'lastname' => 'Balasabas',
@@ -361,26 +361,26 @@ class DatabaseSeeder extends Seeder
     private function seedViolationTypes(): void
     {
         $violations = [
-            ['TR-001', 'Reckless Driving', 'Driving without due care and caution', 2000.00, 5, 'Traffic Rules'],
-            ['TR-002', 'Over Speeding', 'Exceeding the posted speed limit', 1500.00, 3, 'Traffic Rules'],
-            ['TR-003', 'Illegal Parking', 'Parking in a no-parking zone', 500.00, 1, 'Parking'],
-            ['TR-004', 'No Seatbelt', 'Driver or passenger without seatbelt', 1000.00, 2, 'Safety'],
-            ['TR-005', 'Using Mobile Phone', 'Using a mobile phone while driving', 3000.00, 5, 'Traffic Rules'],
-            ['TR-006', 'Disregarding Traffic Signal', 'Running a red light or ignoring a stop sign', 1500.00, 3, 'Traffic Rules'],
-            ['TR-007', 'No Driver\'s License', 'Driving without a valid license', 3000.00, 5, 'Documents'],
-            ['TR-008', 'No OR/CR', 'No official receipt or certificate of registration', 2000.00, 3, 'Documents'],
-            ['TR-009', 'Expired Registration', 'Vehicle registration is expired', 1500.00, 2, 'Documents'],
+            ['TR-001', 'Reckless Driving', 'Driving without due care and caution', 5000.00, 5, 'Traffic Rules'],
+            ['TR-002', 'Over Speeding', 'Exceeding the posted speed limit', 5000.00, 3, 'Traffic Rules'],
+            ['TR-003', 'Illegal Parking', 'Parking in a no-parking zone', 5000.00, 1, 'Parking'],
+            ['TR-004', 'No Seatbelt', 'Driver or passenger without seatbelt', 5000.00, 2, 'Safety'],
+            ['TR-005', 'Using Mobile Phone', 'Using a mobile phone while driving', 5000.00, 5, 'Traffic Rules'],
+            ['TR-006', 'Disregarding Traffic Signal', 'Running a red light or ignoring a stop sign', 5000.00, 3, 'Traffic Rules'],
+            ['TR-007', 'No Driver\'s License', 'Driving without a valid license', 5000.00, 5, 'Documents'],
+            ['TR-008', 'No OR/CR', 'No official receipt or certificate of registration', 5000.00, 3, 'Documents'],
+            ['TR-009', 'Expired Registration', 'Vehicle registration is expired', 5000.00, 2, 'Documents'],
             ['TR-010', 'Drunk Driving', 'Operating a vehicle under the influence of alcohol', 5000.00, 10, 'Serious Violation'],
-            ['TR-011', 'Smoke Belching', 'Excessive smoke emission', 2000.00, 2, 'Vehicle Condition'],
-            ['TR-012', 'Modified Exhaust', 'Unauthorized exhaust modification', 2000.00, 2, 'Vehicle Condition'],
-            ['TR-013', 'No Side Mirror', 'Vehicle without a side mirror', 1000.00, 1, 'Vehicle Condition'],
-            ['TR-014', 'Defective Lights', 'Broken or missing headlights/tail lights', 1000.00, 1, 'Vehicle Condition'],
-            ['TR-015', 'No Plate Number', 'Vehicle without a plate number', 3000.00, 3, 'Documents'],
-            ['TR-016', 'Obstructing Traffic', 'Causing traffic obstruction', 1000.00, 2, 'Traffic Rules'],
-            ['TR-017', 'Wrong Turn', 'Making an illegal turn', 500.00, 1, 'Traffic Rules'],
-            ['TR-018', 'Oversized Load', 'Carrying an oversized load without a permit', 2500.00, 3, 'Cargo'],
-            ['TR-019', 'Colorum Operation', 'Unauthorized public transport operation', 6000.00, 5, 'Serious Violation'],
-            ['TR-020', 'Tinted Windows', 'Excessively dark or prohibited tint', 1500.00, 1, 'Vehicle Condition'],
+            ['TR-011', 'Smoke Belching', 'Excessive smoke emission', 5000.00, 2, 'Vehicle Condition'],
+            ['TR-012', 'Modified Exhaust', 'Unauthorized exhaust modification', 5000.00, 2, 'Vehicle Condition'],
+            ['TR-013', 'No Side Mirror', 'Vehicle without a side mirror', 5000.00, 1, 'Vehicle Condition'],
+            ['TR-014', 'Defective Lights', 'Broken or missing headlights/tail lights', 5000.00, 1, 'Vehicle Condition'],
+            ['TR-015', 'No Plate Number', 'Vehicle without a plate number', 5000.00, 3, 'Documents'],
+            ['TR-016', 'Obstructing Traffic', 'Causing traffic obstruction', 5000.00, 2, 'Traffic Rules'],
+            ['TR-017', 'Wrong Turn', 'Making an illegal turn', 5000.00, 1, 'Traffic Rules'],
+            ['TR-018', 'Oversized Load', 'Carrying an oversized load without a permit', 5000.00, 3, 'Cargo'],
+            ['TR-019', 'Colorum Operation', 'Unauthorized public transport operation', 5000.00, 5, 'Serious Violation'],
+            ['TR-020', 'Tinted Windows', 'Excessively dark or prohibited tint', 5000.00, 1, 'Vehicle Condition'],
         ];
 
         $now = now();
