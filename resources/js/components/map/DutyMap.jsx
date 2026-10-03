@@ -20,7 +20,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Card, CardContent } from "../ui/card";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +29,6 @@ import {
 import {
   Plus,
   Pencil,
-  Trash2,
   MapPin,
   Search,
   RefreshCw,
@@ -48,17 +46,25 @@ import {
   Layers,
   Maximize2,
   Minimize2,
-  ChevronRight,
   Users,
   PanelLeftClose,
   PanelLeftOpen,
   Copy,
   MapPinned,
   Navigation,
+  LayoutGrid,
+  List as ListIcon,
+  ChevronLeft,
+  ChevronRight,
+  Building2,
+  Ruler,
+  Move,
+  CheckCircle,
 } from "lucide-react";
 import { useAlert } from "../ui/AlertProvider";
 
 // ==================== LEAFLET SETUP ====================
+
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
@@ -97,6 +103,143 @@ const TILE_LAYERS = {
     icon: Layers,
   },
 };
+
+const ITEMS_PER_PAGE = 5;
+
+// ==================== SHARED UI ====================
+
+const FieldLabel = ({ icon: I, children }) => (
+  <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+    {I && <I className="w-3.5 h-3.5 text-[#92600A]" />}
+    {children}
+  </label>
+);
+
+const ViewToggle = ({ view, setView }) => (
+  <div
+    className="ml-auto flex bg-[#E9ECF2] rounded-full p-1 text-xs"
+    role="group"
+    aria-label="Choose layout"
+  >
+    {[
+      ["list", "List", ListIcon],
+      ["cards", "Cards", LayoutGrid],
+    ].map(([v, label, I]) => (
+      <button
+        key={v}
+        type="button"
+        onClick={() => setView(v)}
+        aria-pressed={view === v}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
+            ? "bg-[#16233F] text-white"
+            : "text-[#64748B] hover:text-[#16233F]"
+          }`}
+      >
+        <I className="w-3.5 h-3.5" />
+        {label}
+      </button>
+    ))}
+  </div>
+);
+
+const MiniPager = ({
+  page,
+  onPageChange,
+  total,
+  perPage = ITEMS_PER_PAGE,
+  label = "items",
+}) => {
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  if (total <= perPage) {
+    return (
+      <p className="text-xs text-[#94A3B8] mt-3">
+        Showing <span className="font-medium text-[#64748B]">{total}</span>{" "}
+        {total === 1 ? label.replace(/s$/, "") : label}
+      </p>
+    );
+  }
+
+  const from = (page - 1) * perPage + 1;
+  const to = Math.min(page * perPage, total);
+
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3 border-t border-dashed border-[#CBD5E1] pt-3">
+      <p className="text-xs text-[#94A3B8] tabular-nums">
+        Showing{" "}
+        <span className="font-medium text-[#64748B]">
+          {from}–{to}
+        </span>{" "}
+        of <span className="font-medium text-[#64748B]">{total}</span> {label}
+      </p>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="h-7 w-7 p-0 rounded-full border-[#16233F]/20 text-[#16233F] hover:bg-[#16233F] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#16233F]"
+          title="Previous"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </Button>
+        <span className="text-xs font-medium text-[#16233F] tabular-nums px-1">
+          {page} / {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="h-7 w-7 p-0 rounded-full border-[#16233F]/20 text-[#16233F] hover:bg-[#16233F] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#16233F]"
+          title="Next"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const StatTile = ({ icon: Icon, label, value, accent, tint, small }) => (
+  <div className="bg-white rounded-xl border border-[#E3E7EE] p-4 flex items-center gap-3">
+    <div
+      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+      style={{ backgroundColor: tint }}
+    >
+      <Icon className="w-5 h-5" style={{ color: accent }} />
+    </div>
+    <div className="min-w-0">
+      <p className="text-[10px] uppercase tracking-wider text-[#94A3B8] font-medium truncate">
+        {label}
+      </p>
+      <p
+        className={`font-['Oswald'] font-semibold text-[#1F2937] truncate tabular-nums ${small ? "text-sm" : "text-2xl"
+          }`}
+      >
+        {value}
+      </p>
+    </div>
+  </div>
+);
+
+const PreviewRow = ({ icon: Icon, label, value, accent }) => (
+  <div className="flex items-start gap-2.5">
+    <div className="w-7 h-7 rounded-md bg-[#F5F6F8] flex items-center justify-center flex-shrink-0">
+      <Icon className="w-3.5 h-3.5 text-[#64748B]" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">
+        {label}
+      </p>
+      <p
+        className="text-sm text-[#1F2937] truncate"
+        style={accent ? { color: accent, fontWeight: 600 } : undefined}
+      >
+        {value}
+      </p>
+    </div>
+  </div>
+);
 
 // ==================== MAP HELPERS ====================
 
@@ -215,11 +358,15 @@ const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
       const markerHtml = `
         <div class="enforcer-marker ${isOnline ? "enforcer-marker-online" : "enforcer-marker-offline"
         }">
-          <div class="enforcer-marker-bubble ${isOnline ? "enforcer-marker-bubble-online" : "enforcer-marker-bubble-offline"
+          <div class="enforcer-marker-bubble ${isOnline
+          ? "enforcer-marker-bubble-online"
+          : "enforcer-marker-bubble-offline"
         }">
             ${enforcer.firstname?.[0] || "E"}${enforcer.lastname?.[0] || ""}
           </div>
-          <div class="enforcer-marker-dot ${isOnline ? "enforcer-marker-dot-online" : "enforcer-marker-dot-offline"
+          <div class="enforcer-marker-dot ${isOnline
+          ? "enforcer-marker-dot-online"
+          : "enforcer-marker-dot-offline"
         }"></div>
           ${isOnline ? '<div class="enforcer-marker-pulse"></div>' : ""}
         </div>
@@ -238,19 +385,23 @@ const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
       const popupContent = `
         <div class="enforcer-popup-content">
           <div class="enforcer-popup-header">
-            <div class="enforcer-popup-avatar ${isOnline ? "online" : "offline"}">
+            <div class="enforcer-popup-avatar ${isOnline ? "online" : "offline"
+        }">
               ${enforcer.firstname?.[0] || "E"}${enforcer.lastname?.[0] || ""}
             </div>
             <div class="enforcer-popup-name-wrap">
-              <div class="enforcer-popup-name">${enforcer.firstname} ${enforcer.lastname}</div>
+              <div class="enforcer-popup-name">${enforcer.firstname} ${enforcer.lastname
+        }</div>
               <div class="enforcer-popup-role">${enforcer.role || "Enforcer"}</div>
             </div>
-            <div class="enforcer-popup-status-dot ${isOnline ? "online" : "offline"}"></div>
+            <div class="enforcer-popup-status-dot ${isOnline ? "online" : "offline"
+        }"></div>
           </div>
           <div class="enforcer-popup-meta">
             <div class="enforcer-popup-row">
               <span class="enforcer-popup-label">Status</span>
-              <span class="enforcer-popup-value ${isOnline ? "online" : "offline"}">
+              <span class="enforcer-popup-value ${isOnline ? "online" : "offline"
+        }">
                 ${isOnline ? "● Online" : "● Offline"}
               </span>
             </div>
@@ -270,12 +421,15 @@ const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
             ${enforcer.accuracy
           ? `<div class="enforcer-popup-row">
                     <span class="enforcer-popup-label">Accuracy</span>
-                    <span class="enforcer-popup-value">±${enforcer.accuracy.toFixed(0)}m</span>
+                    <span class="enforcer-popup-value">±${enforcer.accuracy.toFixed(
+            0,
+          )}m</span>
                   </div>`
           : ""
         }
           </div>
-          <button class="enforcer-popup-btn" onclick="window.__dutyMapLocate(${enforcer.user_id})">
+          <button class="enforcer-popup-btn" onclick="window.__dutyMapLocate(${enforcer.user_id
+        })">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
             </svg>
@@ -329,7 +483,7 @@ const EnforcerMarkers = ({ enforcers, onSelectEnforcer, onLocate }) => {
   return null;
 };
 
-// ==================== MAIN COMPONENT ====================
+// ==================== MAIN ====================
 
 const DutyMap = () => {
   const notify = useAlert();
@@ -363,6 +517,12 @@ const DutyMap = () => {
     radius: 100,
   });
 
+  const [enforcersView, setEnforcersView] = useState("list");
+  const [locationsView, setLocationsView] = useState("list");
+
+  const [enforcersPage, setEnforcersPage] = useState(1);
+  const [locationsPage, setLocationsPage] = useState(1);
+
   const mapCenter = useMemo(() => [8.558004, 124.524832], []);
   const mapZoom = 15;
 
@@ -387,9 +547,7 @@ const DutyMap = () => {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       });
       const json = await res.json();
-      const list = (json.data || []).filter(
-        (u) => u.role === "enforcer",
-      );
+      const list = (json.data || []).filter((u) => u.role === "enforcer");
       const locations = await fetchEnforcerLocations();
 
       const merged = list.map((enforcer) => {
@@ -411,7 +569,6 @@ const DutyMap = () => {
     }
   }, [fetchEnforcerLocations]);
 
-  // Sort duty locations alphabetically by name.
   const fetchDutyLocations = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
@@ -458,7 +615,6 @@ const DutyMap = () => {
     [enforcers],
   );
 
-  // Filter then sort alphabetically by lastname → firstname.
   const filterMatches = (list) => {
     const filtered = !searchTerm.trim()
       ? list
@@ -471,8 +627,12 @@ const DutyMap = () => {
       });
 
     return [...filtered].sort((a, b) => {
-      const aKey = `${(a.lastname || "").toLowerCase()}|${(a.firstname || "").toLowerCase()}`;
-      const bKey = `${(b.lastname || "").toLowerCase()}|${(b.firstname || "").toLowerCase()}`;
+      const aKey = `${(a.lastname || "").toLowerCase()}|${(
+        a.firstname || ""
+      ).toLowerCase()}`;
+      const bKey = `${(b.lastname || "").toLowerCase()}|${(
+        b.firstname || ""
+      ).toLowerCase()}`;
       return aKey.localeCompare(bKey, undefined, { sensitivity: "base" });
     });
   };
@@ -482,7 +642,6 @@ const DutyMap = () => {
   const visibleOffline =
     statusFilter === "online" ? [] : filterMatches(offlineEnforcers);
 
-  // Filter then sort duty locations alphabetically by name.
   const filteredLocations = useMemo(() => {
     const base = !searchTerm.trim()
       ? dutyLocations
@@ -500,6 +659,39 @@ const DutyMap = () => {
       }),
     );
   }, [dutyLocations, searchTerm]);
+
+  useEffect(() => {
+    setEnforcersPage(1);
+  }, [searchTerm, statusFilter]);
+
+  useEffect(() => {
+    setLocationsPage(1);
+  }, [searchTerm]);
+
+  const allVisibleEnforcers = [...visibleOnline, ...visibleOffline];
+  const enforcersTotalPages = Math.max(
+    1,
+    Math.ceil(allVisibleEnforcers.length / ITEMS_PER_PAGE),
+  );
+  const enforcersSafePage = Math.min(enforcersPage, enforcersTotalPages);
+  const paginatedVisibleOnline = visibleOnline.slice(
+    (enforcersSafePage - 1) * ITEMS_PER_PAGE,
+    enforcersSafePage * ITEMS_PER_PAGE,
+  );
+  const paginatedVisibleOffline = visibleOffline.slice(
+    (enforcersSafePage - 1) * ITEMS_PER_PAGE,
+    enforcersSafePage * ITEMS_PER_PAGE,
+  );
+
+  const locationsTotalPages = Math.max(
+    1,
+    Math.ceil(filteredLocations.length / ITEMS_PER_PAGE),
+  );
+  const locationsSafePage = Math.min(locationsPage, locationsTotalPages);
+  const paginatedLocations = filteredLocations.slice(
+    (locationsSafePage - 1) * ITEMS_PER_PAGE,
+    locationsSafePage * ITEMS_PER_PAGE,
+  );
 
   const handleLocateEnforcer = (enforcer) => {
     if (!enforcer?.latitude || !enforcer?.longitude) return;
@@ -534,7 +726,13 @@ const DutyMap = () => {
 
   const openAddDialog = () => {
     setEditingDuty(null);
-    setFormData({ name: "", address: "", latitude: "", longitude: "", radius: 100 });
+    setFormData({
+      name: "",
+      address: "",
+      latitude: "",
+      longitude: "",
+      radius: 100,
+    });
     setMarkerPosition(null);
     setIsDialogOpen(true);
   };
@@ -635,18 +833,20 @@ const DutyMap = () => {
       await fetchDutyLocations();
       setIsDialogOpen(false);
       setIsPlacingMode(false);
-      notify.success(isEdit ? "Duty location updated." : "Duty location added.");
+      notify.success(
+        isEdit ? "Duty location updated." : "Duty location added.",
+      );
     } catch (err) {
       console.error(err);
       notify.error("Failed to save duty location.");
     }
   };
 
-  const handleDeleteDuty = async (id) => {
-    const ok = await notify.confirm("Delete this duty location?", {
-      destructive: true,
-      confirmText: "Delete",
-    });
+  const handleArchiveDuty = async (id) => {
+    const ok = await notify.confirm(
+      "Archive this duty location? You can restore it later from the Archives page.",
+      { destructive: true, confirmText: "Archive" },
+    );
     if (!ok) return;
 
     try {
@@ -656,10 +856,10 @@ const DutyMap = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       await fetchDutyLocations();
-      notify.success("Duty location deleted.");
+      notify.success("Duty location archived.");
     } catch (err) {
       console.error(err);
-      notify.error("Failed to delete duty location.");
+      notify.error("Failed to archive duty location.");
     }
   };
 
@@ -681,24 +881,32 @@ const DutyMap = () => {
   }
 
   const ActiveTile = TILE_LAYERS[tileLayer];
+  const radiusNum = parseInt(formData.radius) || 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 font-['Inter']">
       <style>{mapStyles}</style>
 
-      {/* ---------- TOP HEADER ---------- */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-['Oswald'] font-semibold text-[#16233F]">
+      {/* ==================== NAVY BANNER ==================== */}
+      <header className="relative overflow-hidden rounded-2xl bg-[#16233F] text-white px-6 py-7 flex flex-wrap items-center justify-between gap-4">
+        <div
+          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(115deg, transparent 0 40px, #F0B429 40px 42px)",
+          }}
+        />
+        <div className="relative">
+          <h1 className="text-4xl font-['Oswald'] font-semibold tracking-tight">
             Duty Map
           </h1>
-          <p className="text-[#64748B] font-['Inter'] text-sm mt-1">
+          <p className="text-[#C7CEDB] text-sm mt-1">
             Live enforcer tracking and duty location management
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-lg border bg-white overflow-hidden">
+        <div className="relative flex flex-wrap items-center gap-3">
+          <div className="flex items-center rounded-lg border border-white/20 overflow-hidden">
             {Object.entries(TILE_LAYERS).map(([key, layer]) => {
               const Icon = layer.icon;
               const active = tileLayer === key;
@@ -707,8 +915,8 @@ const DutyMap = () => {
                   key={key}
                   onClick={() => setTileLayer(key)}
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${active
-                    ? "bg-[#16233F] text-white"
-                    : "text-[#64748B] hover:bg-[#F5F6F8]"
+                      ? "bg-[#F0B429] text-[#16233F]"
+                      : "text-white hover:bg-white/10"
                     }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -723,7 +931,7 @@ const DutyMap = () => {
             size="sm"
             onClick={() => fetchData(false)}
             disabled={refreshing}
-            className="border-[#1E8449]/30 text-[#1E8449] hover:bg-[#E5F2EA]"
+            className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
           >
             <RefreshCw
               className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
@@ -734,38 +942,38 @@ const DutyMap = () => {
           <Button
             size="sm"
             onClick={openAddDialog}
-            className="bg-[#1E8449] hover:bg-[#186B3B]"
+            className="bg-[#1E8449] hover:bg-[#186B3B] text-white"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Duty Location
           </Button>
         </div>
-      </div>
+      </header>
 
-      {/* ---------- STATS STRIP ---------- */}
+      {/* ==================== STATS STRIP ==================== */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
+        <StatTile
           icon={Wifi}
           label="Online Enforcers"
           value={onlineEnforcers.length}
           accent="#1E8449"
           tint="#E5F2EA"
         />
-        <StatCard
+        <StatTile
           icon={WifiOff}
           label="Offline Enforcers"
           value={offlineEnforcers.length}
           accent="#64748B"
           tint="#F1F5F9"
         />
-        <StatCard
+        <StatTile
           icon={MapPinned}
           label="Duty Locations"
           value={dutyLocations.length}
           accent="#92600A"
           tint="#FBF1DC"
         />
-        <StatCard
+        <StatTile
           icon={Clock}
           label="Last Sync"
           value={lastSync ? lastSync.toLocaleTimeString() : "—"}
@@ -775,19 +983,19 @@ const DutyMap = () => {
         />
       </div>
 
-      {/* ---------- MAIN GRID ---------- */}
+      {/* ==================== MAIN GRID ==================== */}
       <div
-        className={`grid gap-4 transition-all duration-300 ${sidebarOpen ? "lg:grid-cols-[1fr_360px]" : "grid-cols-1"
+        className={`grid gap-6 transition-all duration-300 ${sidebarOpen ? "lg:grid-cols-[minmax(0,1fr)_380px]" : "grid-cols-1"
           }`}
       >
         {/* ---------- MAP PANEL ---------- */}
-        <div>
-          <Card className="overflow-hidden">
-            <CardContent className="p-0 relative">
-              <div className="absolute top-3 left-3 z-[1000] flex items-center gap-2">
+        <div className="min-w-0">
+          <div className="bg-white rounded-xl border border-[#E3E7EE] overflow-hidden">
+            <div className="relative">
+              <div className="absolute top-3 left-3 z-999 flex items-center gap-2">
                 <button
                   onClick={() => setSidebarOpen((s) => !s)}
-                  className="bg-white/95 backdrop-blur border shadow-md rounded-lg px-3 py-2 text-xs font-medium text-[#16233F] hover:bg-white flex items-center gap-1.5"
+                  className="bg-white/95 backdrop-blur border border-[#E3E7EE] shadow-md rounded-lg px-3 py-2 text-xs font-medium text-[#16233F] hover:bg-white flex items-center gap-1.5"
                   title={sidebarOpen ? "Hide panel" : "Show panel"}
                 >
                   {sidebarOpen ? (
@@ -801,17 +1009,17 @@ const DutyMap = () => {
                 </button>
               </div>
 
-              <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-2">
+              <div className="absolute top-3 right-3 z-1000 flex flex-col gap-2">
                 <button
                   onClick={handleLocateMe}
-                  className="bg-white/95 backdrop-blur border shadow-md rounded-lg p-2 hover:bg-white"
+                  className="bg-white/95 backdrop-blur border border-[#E3E7EE] shadow-md rounded-lg p-2 hover:bg-white"
                   title="Center on my location"
                 >
                   <Crosshair className="w-4 h-4 text-[#16233F]" />
                 </button>
                 <button
                   onClick={() => setIsFullscreen((v) => !v)}
-                  className="bg-white/95 backdrop-blur border shadow-md rounded-lg p-2 hover:bg-white"
+                  className="bg-white/95 backdrop-blur border border-[#E3E7EE] shadow-md rounded-lg p-2 hover:bg-white"
                   title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                 >
                   {isFullscreen ? (
@@ -822,7 +1030,7 @@ const DutyMap = () => {
                 </button>
               </div>
 
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[999] hidden md:flex">
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-999 hidden md:flex">
                 <div className="bg-[#16233F]/85 text-white text-[11px] px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
                   <MousePointer className="w-3 h-3" />
                   Click the map to place a duty marker
@@ -924,10 +1132,10 @@ const DutyMap = () => {
                                 Edit
                               </button>
                               <button
-                                onClick={() => handleDeleteDuty(location.id)}
+                                onClick={() => handleArchiveDuty(location.id)}
                                 className="flex-1 bg-[#FBE7E9] text-[#C8202F] text-xs py-1.5 rounded hover:bg-[#F5D0D4]"
                               >
-                                Delete
+                                Archive
                               </button>
                             </div>
                           </div>
@@ -951,7 +1159,7 @@ const DutyMap = () => {
                 </MapContainer>
               </div>
 
-              <div className="absolute bottom-3 left-3 z-[999] bg-white/95 backdrop-blur border shadow-md rounded-lg px-3 py-2 flex items-center gap-3 text-[11px] font-medium text-[#475569]">
+              <div className="absolute bottom-3 left-3 z-999 bg-white/95 backdrop-blur border border-[#E3E7EE] shadow-md rounded-lg px-3 py-2 flex items-center gap-3 text-[11px] font-medium text-[#475569]">
                 <span className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#16233F] inline-block" />
                   Enforcer
@@ -965,174 +1173,156 @@ const DutyMap = () => {
                   Duty Zone
                 </span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* ---------- SIDEBAR ---------- */}
         {sidebarOpen && (
           <div className="space-y-4">
-            <Card className="overflow-hidden">
-              <div className="px-4 py-3 border-b bg-[#F8F9FA]">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-[#16233F]" />
-                    <h3 className="font-['Oswald'] font-medium text-[#16233F] text-sm">
-                      Enforcers
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-[#64748B]">
+            {/* Enforcers panel */}
+            <div className="bg-white rounded-xl border border-[#E3E7EE] p-4">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-[#16233F]" />
+                  <h3 className="font-['Oswald'] font-medium text-[#16233F] text-sm">
+                    Enforcers
+                  </h3>
+                  <span className="text-[11px] text-[#64748B] tabular-nums">
                     {onlineEnforcers.length} / {enforcers.length}
                   </span>
                 </div>
-
-                <div className="relative mb-2">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#94A3B8]" />
-                  <Input
-                    placeholder="Search enforcers..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8 h-8 text-xs"
-                  />
-                  {searchTerm && (
-                    <button
-                      onClick={() => setSearchTerm("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex gap-1.5">
-                  {[
-                    { key: "all", label: "All", count: enforcers.length },
-                    { key: "online", label: "Online", count: onlineEnforcers.length },
-                    { key: "offline", label: "Offline", count: offlineEnforcers.length },
-                  ].map((chip) => (
-                    <button
-                      key={chip.key}
-                      onClick={() => setStatusFilter(chip.key)}
-                      className={`flex-1 text-[11px] px-2 py-1 rounded-md border font-medium transition-colors ${statusFilter === chip.key
-                        ? "bg-[#16233F] text-white border-[#16233F]"
-                        : "bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]"
-                        }`}
-                    >
-                      {chip.label} ({chip.count})
-                    </button>
-                  ))}
-                </div>
+                <ViewToggle view={enforcersView} setView={setEnforcersView} />
               </div>
 
-              <div className="max-h-[340px] overflow-y-auto p-3 space-y-4">
-                {visibleOnline.length > 0 && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-semibold text-[#1E8449] mb-2 flex items-center gap-1.5">
-                      <Wifi className="w-3 h-3" />
-                      Online · {visibleOnline.length}
-                    </p>
-                    <div className="space-y-1.5">
-                      {visibleOnline.map((e) => (
-                        <EnforcerRow
-                          key={`on-${e.user_id}`}
-                          enforcer={e}
-                          online
-                          active={selectedEnforcer?.user_id === e.user_id}
-                          onClick={() => handleLocateEnforcer(e)}
-                        />
-                      ))}
-                    </div>
-                  </div>
+              <div className="relative mb-2">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#94A3B8]" />
+                <Input
+                  placeholder="Search enforcers..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8 pr-8 h-8 text-xs rounded-full focus-visible:ring-[#F0B429]"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
+              </div>
 
-                {visibleOffline.length > 0 && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider font-semibold text-[#94A3B8] mb-2 flex items-center gap-1.5">
-                      <WifiOff className="w-3 h-3" />
-                      Offline / No Location · {visibleOffline.length}
-                    </p>
-                    <div className="space-y-1.5">
-                      {visibleOffline.map((e) => (
-                        <EnforcerRow
-                          key={`off-${e.user_id}`}
-                          enforcer={e}
-                          online={false}
-                          active={selectedEnforcer?.user_id === e.user_id}
-                          onClick={() => handleLocateEnforcer(e)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="flex gap-1.5 mb-3">
+                {[
+                  { key: "all", label: "All", count: enforcers.length },
+                  { key: "online", label: "Online", count: onlineEnforcers.length },
+                  { key: "offline", label: "Offline", count: offlineEnforcers.length },
+                ].map((chip) => (
+                  <button
+                    key={chip.key}
+                    onClick={() => setStatusFilter(chip.key)}
+                    className={`flex-1 text-[11px] px-2 py-1 rounded-full border font-medium transition-colors ${statusFilter === chip.key
+                        ? "bg-[#16233F] text-white border-[#16233F]"
+                        : "bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]"
+                      }`}
+                  >
+                    {chip.label} ({chip.count})
+                  </button>
+                ))}
+              </div>
 
-                {visibleOnline.length === 0 && visibleOffline.length === 0 && (
+              <div className="max-h-[380px] overflow-y-auto">
+                {allVisibleEnforcers.length === 0 ? (
                   <div className="text-center py-6">
                     <Search className="w-8 h-8 text-[#CBD5E1] mx-auto mb-2" />
                     <p className="text-xs text-[#94A3B8]">
                       No enforcers match your filter
                     </p>
                   </div>
+                ) : enforcersView === "cards" ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {[...paginatedVisibleOnline, ...paginatedVisibleOffline].map(
+                      (e) => (
+                        <EnforcerCard
+                          key={e.user_id}
+                          enforcer={e}
+                          online={e.is_online && e.latitude}
+                          active={selectedEnforcer?.user_id === e.user_id}
+                          onClick={() => handleLocateEnforcer(e)}
+                        />
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {paginatedVisibleOnline.length > 0 && (
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider font-semibold text-[#1E8449] mb-2 flex items-center gap-1.5">
+                          <Wifi className="w-3 h-3" />
+                          Online · {visibleOnline.length}
+                        </p>
+                        <div className="space-y-1.5">
+                          {paginatedVisibleOnline.map((e) => (
+                            <EnforcerRow
+                              key={`on-${e.user_id}`}
+                              enforcer={e}
+                              online
+                              active={selectedEnforcer?.user_id === e.user_id}
+                              onClick={() => handleLocateEnforcer(e)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {paginatedVisibleOffline.length > 0 && (
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider font-semibold text-[#94A3B8] mb-2 flex items-center gap-1.5">
+                          <WifiOff className="w-3 h-3" />
+                          Offline · {visibleOffline.length}
+                        </p>
+                        <div className="space-y-1.5">
+                          {paginatedVisibleOffline.map((e) => (
+                            <EnforcerRow
+                              key={`off-${e.user_id}`}
+                              enforcer={e}
+                              online={false}
+                              active={selectedEnforcer?.user_id === e.user_id}
+                              onClick={() => handleLocateEnforcer(e)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </div>
-            </Card>
 
-            <Card className="overflow-hidden">
-              <div className="px-4 py-3 border-b bg-[#F8F9FA] flex items-center justify-between">
+                <MiniPager
+                  page={enforcersSafePage}
+                  onPageChange={setEnforcersPage}
+                  total={allVisibleEnforcers.length}
+                  label="enforcers"
+                />
+              </div>
+            </div>
+
+            {/* Duty Locations panel */}
+            <div className="bg-white rounded-xl border border-[#E3E7EE] p-4">
+              <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
                   <MapPinned className="w-4 h-4 text-[#92600A]" />
                   <h3 className="font-['Oswald'] font-medium text-[#16233F] text-sm">
                     Duty Locations
                   </h3>
+                  <span className="text-[11px] text-[#64748B] tabular-nums">
+                    {filteredLocations.length}
+                  </span>
                 </div>
-                <span className="text-[11px] text-[#64748B]">
-                  {filteredLocations.length}
-                </span>
+                <ViewToggle view={locationsView} setView={setLocationsView} />
               </div>
 
-              <div className="max-h-[260px] overflow-y-auto p-3 space-y-2">
-                {filteredLocations.map((loc) => (
-                  <div
-                    key={`loc-${loc.id}`}
-                    className="group border border-[#E9ECF2] rounded-lg p-2.5 hover:border-[#F0B429] hover:bg-[#FFFBF0] transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <MapPin className="w-3.5 h-3.5 text-[#F0B429] flex-shrink-0" />
-                          <p className="text-xs font-medium text-[#1F2937] truncate">
-                            {loc.name}
-                          </p>
-                        </div>
-                        <p className="text-[10px] font-mono text-[#94A3B8] truncate">
-                          {loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}
-                        </p>
-                        {loc.radius > 0 && (
-                          <p className="text-[10px] text-[#94A3B8]">
-                            Radius {loc.radius}m
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => openEditDialog(loc)}
-                          className="p-1 rounded hover:bg-[#E9ECF2]"
-                          title="Edit"
-                        >
-                          <Pencil className="w-3 h-3 text-[#16233F]" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDuty(loc.id)}
-                          className="p-1 rounded hover:bg-[#FBE7E9]"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3 h-3 text-[#C8202F]" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {filteredLocations.length === 0 && (
+              <div className="max-h-[340px] overflow-y-auto">
+                {filteredLocations.length === 0 ? (
                   <div className="text-center py-6">
                     <MapPinned className="w-8 h-8 text-[#CBD5E1] mx-auto mb-2" />
                     <p className="text-xs text-[#94A3B8] mb-3">
@@ -1149,14 +1339,43 @@ const DutyMap = () => {
                       </button>
                     )}
                   </div>
+                ) : locationsView === "cards" ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {paginatedLocations.map((loc) => (
+                      <LocationCard
+                        key={`loc-${loc.id}`}
+                        location={loc}
+                        onEdit={() => openEditDialog(loc)}
+                        onArchive={() => handleArchiveDuty(loc.id)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {paginatedLocations.map((loc) => (
+                      <LocationRow
+                        key={`loc-${loc.id}`}
+                        location={loc}
+                        onEdit={() => openEditDialog(loc)}
+                        onArchive={() => handleArchiveDuty(loc.id)}
+                      />
+                    ))}
+                  </div>
                 )}
+
+                <MiniPager
+                  page={locationsSafePage}
+                  onPageChange={setLocationsPage}
+                  total={filteredLocations.length}
+                  label="locations"
+                />
               </div>
-            </Card>
+            </div>
           </div>
         )}
       </div>
 
-      {/* ---------- SELECTED ENFORCER DETAIL ---------- */}
+      {/* ==================== SELECTED ENFORCER DETAIL ==================== */}
       {selectedEnforcer && (
         <EnforcerDetailCard
           enforcer={selectedEnforcer}
@@ -1166,7 +1385,9 @@ const DutyMap = () => {
         />
       )}
 
-      {/* ---------- ADD / EDIT DUTY DIALOG ---------- */}
+      {/* ============================================================== */}
+      {/*  ADD / EDIT DUTY DIALOG — 80% width, two-column redesign       */}
+      {/* ============================================================== */}
       <Dialog
         open={isDialogOpen}
         onOpenChange={(open) => {
@@ -1177,261 +1398,462 @@ const DutyMap = () => {
           }
         }}
       >
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto p-0 gap-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b">
-            <DialogTitle className="font-['Oswald'] text-[#16233F] text-lg">
-              {editingDuty ? "Edit Duty Location" : "Add Duty Location"}
+        <DialogContent className="w-[80vw] max-w-[1200px] max-h-[90vh] overflow-hidden p-0 gap-0 z-1000">
+          <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+            <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+              <span className="w-10 h-10 rounded-lg bg-[#FBF1DC] flex items-center justify-center flex-shrink-0">
+                {editingDuty ? (
+                  <Pencil className="w-5 h-5 text-[#92600A]" />
+                ) : (
+                  <MapPinned className="w-5 h-5 text-[#92600A]" />
+                )}
+              </span>
+              <div>
+                <div className="leading-tight">
+                  {editingDuty ? "Edit Duty Location" : "Add Duty Location"}
+                </div>
+                <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                  {editingDuty
+                    ? "Update the pin, name, or patrol radius for this location"
+                    : "Define a new patrol zone with a pin and optional radius"}
+                </div>
+              </div>
             </DialogTitle>
           </DialogHeader>
 
-          <div className="px-6 py-3 bg-[#FBF1DC] border-b border-[#F0B429]/30">
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
-              <div className="flex-1 text-xs text-[#92600A] leading-relaxed">
-                <p className="font-semibold mb-0.5">
-                  Pick a location using any method:
-                </p>
-                <p>
-                  <span className="font-mono bg-white/60 px-1 rounded">
-                    1
-                  </span>{" "}
-                  Search address,{" "}
-                  <span className="font-mono bg-white/60 px-1 rounded">
-                    2
-                  </span>{" "}
-                  Click the map, or{" "}
-                  <span className="font-mono bg-white/60 px-1 rounded">
-                    3
-                  </span>{" "}
-                  Use "My Location."
-                </p>
+          <form
+            onSubmit={handleSubmitDuty}
+            className="flex flex-col max-h-[calc(90vh-100px)]"
+          >
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                {/* ============ LEFT: FORM ============ */}
+                <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
+                  {/* ──── LOCATION ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Building2 className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Location
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <FieldLabel icon={MapPinned}>
+                          Name <span className="text-[#C8202F]">*</span>
+                        </FieldLabel>
+                        <Input
+                          placeholder="e.g., City Hall, Main Intersection"
+                          value={formData.name}
+                          onChange={(e) =>
+                            setFormData((f) => ({
+                              ...f,
+                              name: e.target.value,
+                            }))
+                          }
+                          required
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel icon={Navigation}>Address</FieldLabel>
+                        <Input
+                          placeholder="Street or landmark"
+                          value={formData.address}
+                          onChange={(e) =>
+                            setFormData((f) => ({
+                              ...f,
+                              address: e.target.value,
+                            }))
+                          }
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* ──── COORDINATES ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <MapPin className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Coordinates
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <FieldLabel>Latitude *</FieldLabel>
+                        <Input
+                          type="number"
+                          step="0.000001"
+                          value={formData.latitude}
+                          onChange={(e) =>
+                            setFormData((f) => ({
+                              ...f,
+                              latitude: e.target.value,
+                            }))
+                          }
+                          required
+                          className="font-mono text-xs focus-visible:ring-[#F0B429] h-11 tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>Longitude *</FieldLabel>
+                        <Input
+                          type="number"
+                          step="0.000001"
+                          value={formData.longitude}
+                          onChange={(e) =>
+                            setFormData((f) => ({
+                              ...f,
+                              longitude: e.target.value,
+                            }))
+                          }
+                          required
+                          className="font-mono text-xs focus-visible:ring-[#F0B429] h-11 tabular-nums"
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* ──── PATROL ZONE ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Ruler className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Patrol zone
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                      <div className="md:col-span-2">
+                        <FieldLabel icon={Ruler}>
+                          Radius (meters)
+                        </FieldLabel>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="10000"
+                          step="10"
+                          value={formData.radius}
+                          onChange={(e) =>
+                            setFormData((f) => ({
+                              ...f,
+                              radius: e.target.value,
+                            }))
+                          }
+                          className="font-mono text-sm focus-visible:ring-[#F0B429] h-11 tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>Quick pick</FieldLabel>
+                        <div className="flex gap-1.5">
+                          {[50, 100, 250, 500].map((r) => {
+                            const active = radiusNum === r;
+                            return (
+                              <button
+                                key={r}
+                                type="button"
+                                onClick={() =>
+                                  setFormData((f) => ({
+                                    ...f,
+                                    radius: String(r),
+                                  }))
+                                }
+                                className={`flex-1 text-xs px-2 py-2 rounded-lg font-medium border transition-colors tabular-nums ${active
+                                    ? "bg-[#16233F] text-white border-[#16233F]"
+                                    : "bg-white text-[#64748B] border-[#E3E7EE] hover:bg-[#F8F9FA]"
+                                  }`}
+                              >
+                                {r}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="mt-2 text-[11px] text-[#94A3B8]">
+                      Enforcers assigned to this location get an amber circle
+                      of the same size on the map.
+                    </p>
+                  </section>
+
+                  {/* ──── PICK ON MAP ──── */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <MousePointer className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Pick on map
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+
+                    <div>
+                      <FieldLabel>Search address</FieldLabel>
+                      <LocationSearchInput
+                        onSelect={(result) => {
+                          setFormData((f) => ({
+                            ...f,
+                            name: f.name || result.name,
+                            address: result.address,
+                            latitude: result.lat.toFixed(6),
+                            longitude: result.lng.toFixed(6),
+                          }));
+                          setMarkerPosition({
+                            lat: result.lat,
+                            lng: result.lng,
+                          });
+                          setIsPlacingMode(true);
+                        }}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsPlacingMode((v) => !v)}
+                      className={`w-full mt-3 flex items-center justify-between px-3 py-2.5 rounded-lg border-2 transition-colors text-sm font-medium ${isPlacingMode
+                          ? "border-[#1E8449] bg-[#E5F2EA] text-[#1E8449]"
+                          : "border-dashed border-[#CBD5E1] bg-[#F8F9FA] text-[#64748B] hover:border-[#16233F] hover:text-[#16233F]"
+                        }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Move className="w-4 h-4" />
+                        {isPlacingMode
+                          ? "Click the map or drag the pin to adjust"
+                          : "Enable placing mode and drop a pin"}
+                      </span>
+                      {isPlacingMode ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                    </button>
+
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={useMyLocation}
+                        disabled={isGettingLocation}
+                        className="flex-1 border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
+                      >
+                        {isGettingLocation ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Crosshair className="w-4 h-4 mr-2" />
+                        )}
+                        Use My Location
+                      </Button>
+                      {markerPosition && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setMarkerPosition(null);
+                            setFormData((f) => ({
+                              ...f,
+                              latitude: "",
+                              longitude: "",
+                            }));
+                          }}
+                          className="text-[#64748B]"
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Clear pin
+                        </Button>
+                      )}
+                    </div>
+
+                    {isPlacingMode && (
+                      <div className="mt-3 rounded-lg overflow-hidden border border-[#E9ECF2] h-56 relative">
+                        <MapContainer
+                          center={
+                            markerPosition
+                              ? [markerPosition.lat, markerPosition.lng]
+                              : mapCenter
+                          }
+                          zoom={16}
+                          style={{ height: "100%", width: "100%" }}
+                          zoomControl={false}
+                        >
+                          <TileLayer
+                            attribution={ActiveTile.attribution}
+                            url={ActiveTile.url}
+                          />
+                          <MapEventHandler
+                            onMapClick={handleMapClick}
+                            onMarkerDrag={handleMarkerDrag}
+                            markerPosition={markerPosition}
+                            setMarkerPosition={setMarkerPosition}
+                            isPlacingMode
+                          />
+                          {markerPosition && radiusNum > 0 && (
+                            <Circle
+                              center={[
+                                markerPosition.lat,
+                                markerPosition.lng,
+                              ]}
+                              radius={radiusNum}
+                              pathOptions={{
+                                color: "#F0B429",
+                                fillColor: "#F0B429",
+                                fillOpacity: 0.15,
+                                weight: 1.5,
+                              }}
+                            />
+                          )}
+                          <InvalidateOnResize />
+                        </MapContainer>
+                      </div>
+                    )}
+                  </section>
+                </div>
+
+                {/* ============ RIGHT: PREVIEW ============ */}
+                <div className="p-7 space-y-6 bg-[#F8F9FA]">
+                  <section>
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="w-4 h-4 text-[#1E8449]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Preview
+                      </h3>
+                    </div>
+                    <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
+                      <div
+                        className="h-1.5"
+                        style={{ background: "#F0B429" }}
+                      />
+                      <div className="p-4 space-y-3">
+                        <PreviewRow
+                          icon={Building2}
+                          label="Name"
+                          value={formData.name || "Untitled location"}
+                        />
+                        <PreviewRow
+                          icon={Navigation}
+                          label="Address"
+                          value={formData.address || "No address"}
+                        />
+                        <PreviewRow
+                          icon={MapPin}
+                          label="Coordinates"
+                          value={
+                            formData.latitude && formData.longitude
+                              ? `${parseFloat(formData.latitude).toFixed(
+                                5,
+                              )}, ${parseFloat(formData.longitude).toFixed(
+                                5,
+                              )}`
+                              : "Not selected yet"
+                          }
+                          accent={
+                            formData.latitude && formData.longitude
+                              ? "#1E8449"
+                              : "#94A3B8"
+                          }
+                        />
+                        <PreviewRow
+                          icon={Ruler}
+                          label="Patrol radius"
+                          value={
+                            radiusNum > 0
+                              ? `${radiusNum} meters`
+                              : "No radius"
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {formData.latitude && formData.longitude && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyToClipboard(
+                            `${formData.latitude},${formData.longitude}`,
+                          )
+                        }
+                        className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs py-2 rounded-lg border border-[#E3E7EE] bg-white text-[#16233F] hover:bg-[#F8F9FA] font-medium"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Copy coordinates
+                      </button>
+                    )}
+                  </section>
+
+                  <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
+                      <div className="text-xs text-[#92600A] leading-relaxed">
+                        <p className="font-semibold mb-1">Tips</p>
+                        <ul className="space-y-1 list-disc list-inside">
+                          <li>Search an address to auto-fill coordinates</li>
+                          <li>Or click the map in placing mode</li>
+                          <li>Or use "My Location" to drop a pin here</li>
+                          <li>
+                            Drag the pin to fine-tune its exact position
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </section>
+                </div>
               </div>
             </div>
-          </div>
 
-          {isPlacingMode && (
-            <div className="px-6 pt-4">
-              <div className="rounded-lg overflow-hidden border border-[#E9ECF2] h-48 relative">
-                <MapContainer
-                  center={
-                    markerPosition
-                      ? [markerPosition.lat, markerPosition.lng]
-                      : mapCenter
-                  }
-                  zoom={16}
-                  style={{ height: "100%", width: "100%" }}
-                  zoomControl={false}
-                >
-                  <TileLayer
-                    attribution={ActiveTile.attribution}
-                    url={ActiveTile.url}
-                  />
-                  <MapEventHandler
-                    onMapClick={handleMapClick}
-                    onMarkerDrag={handleMarkerDrag}
-                    markerPosition={markerPosition}
-                    setMarkerPosition={setMarkerPosition}
-                    isPlacingMode
-                  />
-                  <InvalidateOnResize />
-                </MapContainer>
-              </div>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmitDuty} className="px-6 py-4 space-y-4">
-            <div>
-              <label className="text-xs font-medium text-[#1F2937] mb-1.5 block">
-                Search location
-              </label>
-              <LocationSearchInput
-                onSelect={(result) => {
-                  setFormData((f) => ({
-                    ...f,
-                    name: f.name || result.name,
-                    address: result.address,
-                    latitude: result.lat.toFixed(6),
-                    longitude: result.lng.toFixed(6),
-                  }));
-                  setMarkerPosition({ lat: result.lat, lng: result.lng });
-                  setIsPlacingMode(true);
-                }}
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsPlacingMode((v) => !v)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border-2 transition-colors text-sm font-medium ${isPlacingMode
-                ? "border-[#1E8449] bg-[#E5F2EA] text-[#1E8449]"
-                : "border-dashed border-[#CBD5E1] bg-[#F8F9FA] text-[#64748B] hover:border-[#16233F] hover:text-[#16233F]"
-                }`}
-            >
-              <span className="flex items-center gap-2">
-                <MousePointer className="w-4 h-4" />
-                {isPlacingMode
-                  ? "Click on the map to adjust location"
-                  : "Or place a pin on the map"}
-              </span>
-              {isPlacingMode ? (
-                <Check className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-            </button>
-
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={useMyLocation}
-                disabled={isGettingLocation}
-                className="flex-1 border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
-              >
-                {isGettingLocation ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            {/* ============ STICKY FOOTER ============ */}
+            <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+              <div className="text-xs text-[#64748B] flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
+                {!formData.latitude || !formData.longitude ? (
+                  <span>Pick a location on the map to continue.</span>
+                ) : !formData.name ? (
+                  <span>Give this location a name.</span>
                 ) : (
-                  <Crosshair className="w-4 h-4 mr-2" />
+                  <span>
+                    Ready to{' '}
+                    {editingDuty ? "save changes to" : "create"}{" "}
+                    <strong className="text-[#16233F]">
+                      {formData.name}
+                    </strong>
+                    .
+                  </span>
                 )}
-                Use My Location
-              </Button>
-              {markerPosition && (
+              </div>
+              <div className="flex gap-2">
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setMarkerPosition(null);
-                    setFormData((f) => ({
-                      ...f,
-                      latitude: "",
-                      longitude: "",
-                    }));
-                  }}
-                  className="text-[#64748B]"
+                  variant="outline"
+                  onClick={() => setIsDialogOpen(false)}
+                  className="min-w-[100px]"
                 >
-                  <X className="w-4 h-4 mr-1" />
-                  Clear
+                  Cancel
                 </Button>
-              )}
-            </div>
-
-            {formData.latitude && formData.longitude && (
-              <div className="bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-[#1E8449] text-xs font-medium mb-1">
-                  <Check className="w-3.5 h-3.5" />
-                  Location selected
-                </div>
-                <div className="font-mono text-xs text-[#1E8449] flex items-center justify-between">
-                  <span>
-                    {formData.latitude}, {formData.longitude}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      copyToClipboard(`${formData.latitude},${formData.longitude}`)
-                    }
-                    className="text-[#1E8449] hover:text-[#0F5A2E]"
-                    title="Copy coordinates"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <Button
+                  type="submit"
+                  className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[180px]"
+                  disabled={!formData.latitude || !formData.longitude}
+                >
+                  {editingDuty ? (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Save Changes
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Location
+                    </>
+                  )}
+                </Button>
               </div>
-            )}
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-[#1F2937] mb-1.5 block">
-                  Location name *
-                </label>
-                <Input
-                  placeholder="e.g., City Hall, Main Intersection"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData((f) => ({ ...f, name: e.target.value }))
-                  }
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-[#1F2937] mb-1.5 block">
-                  Address
-                </label>
-                <Input
-                  placeholder="Street or landmark"
-                  value={formData.address}
-                  onChange={(e) =>
-                    setFormData((f) => ({ ...f, address: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-1">
-                  <label className="text-xs font-medium text-[#1F2937] mb-1.5 block">
-                    Latitude *
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.000001"
-                    value={formData.latitude}
-                    onChange={(e) =>
-                      setFormData((f) => ({ ...f, latitude: e.target.value }))
-                    }
-                    required
-                    className="font-mono text-xs"
-                  />
-                </div>
-                <div className="col-span-1">
-                  <label className="text-xs font-medium text-[#1F2937] mb-1.5 block">
-                    Longitude *
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.000001"
-                    value={formData.longitude}
-                    onChange={(e) =>
-                      setFormData((f) => ({ ...f, longitude: e.target.value }))
-                    }
-                    required
-                    className="font-mono text-xs"
-                  />
-                </div>
-                <div className="col-span-1">
-                  <label className="text-xs font-medium text-[#1F2937] mb-1.5 block">
-                    Radius (m)
-                  </label>
-                  <Input
-                    type="number"
-                    value={formData.radius}
-                    onChange={(e) =>
-                      setFormData((f) => ({ ...f, radius: e.target.value }))
-                    }
-                    className="font-mono text-xs"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsDialogOpen(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1 bg-[#1E8449] hover:bg-[#186B3B]"
-                disabled={!formData.latitude || !formData.longitude}
-              >
-                {editingDuty ? "Save Changes" : "Add Location"}
-              </Button>
             </div>
           </form>
         </DialogContent>
@@ -1442,35 +1864,14 @@ const DutyMap = () => {
 
 // ==================== SUB-COMPONENTS ====================
 
-const StatCard = ({ icon: Icon, label, value, accent, tint, small }) => (
-  <div className="bg-white rounded-xl border border-[#E9ECF2] p-3 flex items-center gap-3">
-    <div
-      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-      style={{ backgroundColor: tint }}
-    >
-      <Icon className="w-5 h-5" style={{ color: accent }} />
-    </div>
-    <div className="min-w-0">
-      <p className="text-[10px] uppercase tracking-wider text-[#94A3B8] font-medium truncate">
-        {label}
-      </p>
-      <p
-        className={`font-bold text-[#1F2937] truncate ${small ? "text-sm" : "text-xl"}`}
-      >
-        {value}
-      </p>
-    </div>
-  </div>
-);
-
 const EnforcerRow = ({ enforcer, online, active, onClick }) => (
   <button
     onClick={onClick}
     className={`w-full text-left flex items-center gap-2.5 p-2 rounded-lg border transition-all ${active
-      ? "border-[#16233F] bg-[#E9ECF2] shadow-sm"
-      : online
-        ? "border-transparent hover:border-[#1E8449]/40 hover:bg-[#F0FBF5]"
-        : "border-transparent hover:bg-[#F5F6F8] opacity-70"
+        ? "border-[#16233F] bg-[#E9ECF2] shadow-sm"
+        : online
+          ? "border-transparent hover:border-[#1E8449]/40 hover:bg-[#F0FBF5]"
+          : "border-transparent hover:bg-[#F5F6F8] opacity-70"
       }`}
   >
     <div className="relative flex-shrink-0">
@@ -1505,8 +1906,129 @@ const EnforcerRow = ({ enforcer, online, active, onClick }) => (
   </button>
 );
 
+const EnforcerCard = ({ enforcer, online, active, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`text-left rounded-lg border p-2.5 transition-all ${active
+        ? "border-[#16233F] bg-[#E9ECF2] shadow-sm"
+        : online
+          ? "border-[#E3E7EE] bg-white hover:border-[#1E8449]/40"
+          : "border-[#E3E7EE] bg-white hover:bg-[#F5F6F8] opacity-70"
+      }`}
+  >
+    <div className="flex items-center gap-2 mb-1.5">
+      <div className="relative flex-shrink-0">
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold ${online ? "bg-[#1E8449]" : "bg-[#94A3B8]"
+            }`}
+        >
+          {enforcer.firstname?.[0] || "E"}
+          {enforcer.lastname?.[0] || ""}
+        </div>
+        {online && (
+          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#1E8449] border-2 border-white"></span>
+        )}
+      </div>
+      <span
+        className={`inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${online
+            ? "bg-[#E5F2EA] text-[#1E8449]"
+            : "bg-[#F1F5F9] text-[#94A3B8]"
+          }`}
+      >
+        {online ? (
+          <Wifi className="w-2.5 h-2.5" />
+        ) : (
+          <WifiOff className="w-2.5 h-2.5" />
+        )}
+        {online ? "ON" : "OFF"}
+      </span>
+    </div>
+    <p className="text-xs font-semibold text-[#1F2937] truncate">
+      {enforcer.firstname} {enforcer.lastname}
+    </p>
+    <p className="text-[10px] text-[#94A3B8] mt-0.5 tabular-nums">
+      {enforcer.last_updated
+        ? new Date(enforcer.last_updated).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+        : "No data"}
+    </p>
+  </button>
+);
+
+const LocationRow = ({ location, onEdit, onArchive }) => (
+  <div className="group border border-[#E3E7EE] rounded-lg p-2.5 hover:border-[#F0B429] hover:bg-[#FFFBF0] transition-colors">
+    <div className="flex items-start justify-between gap-2">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <MapPin className="w-3.5 h-3.5 text-[#F0B429] flex-shrink-0" />
+          <p className="text-xs font-medium text-[#1F2937] truncate">
+            {location.name}
+          </p>
+        </div>
+        <p className="text-[10px] font-mono text-[#94A3B8] truncate">
+          {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+        </p>
+        {location.radius > 0 && (
+          <p className="text-[10px] text-[#94A3B8]">
+            Radius {location.radius}m
+          </p>
+        )}
+      </div>
+      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={onEdit}
+          className="p-1 rounded hover:bg-[#E9ECF2]"
+          title="Edit"
+        >
+          <Pencil className="w-3 h-3 text-[#16233F]" />
+        </button>
+        <button
+          onClick={onArchive}
+          className="p-1 rounded hover:bg-[#FBE7E9]"
+          title="Archive"
+        >
+          <X className="w-3 h-3 text-[#C8202F]" />
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const LocationCard = ({ location, onEdit, onArchive }) => (
+  <div className="rounded-lg border border-[#E3E7EE] bg-white p-2.5 hover:border-[#F0B429] transition-colors">
+    <div className="flex items-center gap-1.5 mb-1">
+      <MapPin className="w-3.5 h-3.5 text-[#F0B429] flex-shrink-0" />
+      <p className="text-xs font-medium text-[#1F2937] truncate">
+        {location.name}
+      </p>
+    </div>
+    <p className="text-[10px] font-mono text-[#94A3B8] truncate">
+      {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+    </p>
+    {location.radius > 0 && (
+      <p className="text-[10px] text-[#94A3B8]">Radius {location.radius}m</p>
+    )}
+    <div className="flex gap-1 mt-2">
+      <button
+        onClick={onEdit}
+        className="flex-1 text-[10px] font-medium py-1 rounded bg-[#16233F] text-white hover:bg-[#0F1A2E]"
+      >
+        Edit
+      </button>
+      <button
+        onClick={onArchive}
+        className="flex-1 text-[10px] font-medium py-1 rounded bg-[#FBE7E9] text-[#C8202F] hover:bg-[#F5D0D4]"
+      >
+        Archive
+      </button>
+    </div>
+  </div>
+);
+
 const EnforcerDetailCard = ({ enforcer, onClose, onLocate, onCopy }) => (
-  <div className="fixed bottom-6 right-6 z-[1000] w-80 bg-white rounded-2xl shadow-2xl border border-[#E9ECF2] overflow-hidden">
+  <div className="fixed bottom-6 right-6 z-1000 w-80 bg-white rounded-2xl shadow-2xl border border-[#E3E7EE] overflow-hidden">
     <div
       className={`h-20 ${enforcer.is_online ? "bg-[#16233F]" : "bg-[#64748B]"
         } relative`}
@@ -1639,16 +2161,16 @@ const LocationSearchInput = ({ onSelect }) => {
   return (
     <div className="relative">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#94A3B8]" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
         <Input
           placeholder="Search address or landmark..."
           value={query}
           onChange={onChange}
           onFocus={() => results.length && setOpen(true)}
-          className="pl-8 pr-8 h-9 text-sm"
+          className="pl-10 pr-10 h-11 text-sm rounded-full focus-visible:ring-[#F0B429]"
         />
         {loading && (
-          <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#16233F] animate-spin" />
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#16233F] animate-spin" />
         )}
         {!loading && query && (
           <button
@@ -1658,14 +2180,14 @@ const LocationSearchInput = ({ onSelect }) => {
               setResults([]);
               setOpen(false);
             }}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#64748B]"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-4 h-4" />
           </button>
         )}
       </div>
       {open && results.length > 0 && (
-        <div className="absolute z-[2000] w-full mt-1 bg-white border rounded-lg shadow-lg max-h-56 overflow-y-auto">
+        <div className="absolute z-1000 w-full mt-1 bg-white border border-[#E3E7EE] rounded-lg shadow-lg max-h-56 overflow-y-auto">
           {results.map((r, i) => (
             <button
               key={i}
@@ -1680,7 +2202,7 @@ const LocationSearchInput = ({ onSelect }) => {
                 setQuery(r.display_name);
                 setOpen(false);
               }}
-              className="w-full text-left px-3 py-2 hover:bg-[#E9ECF2] border-b last:border-b-0"
+              className="w-full text-left px-3 py-2 hover:bg-[#E9ECF2] border-b border-dashed border-[#CBD5E1] last:border-b-0"
             >
               <p className="text-xs font-medium text-[#1F2937] truncate">
                 {r.display_name.split(",")[0]}

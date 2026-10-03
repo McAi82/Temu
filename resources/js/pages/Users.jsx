@@ -1,31 +1,17 @@
 // web/src/pages/Users.jsx
-import React, { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../components/ui/card";
+import React, { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "../components/ui/dialog";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "../components/ui/table";
-import { Pagination } from "../components/ui/Pagination";
-import ActionButton from "../components/ui/ActionButton";
+} from '../components/ui/dialog';
+import { Pagination } from '../components/ui/Pagination';
+import ActionButton from '../components/ui/ActionButton';
 import {
   getUsers,
   createUser,
@@ -33,15 +19,14 @@ import {
   deleteUser,
   toggleUserStatus,
   resetUserPassword,
-} from "../services/api";
+} from '../services/api';
 import {
   Plus,
   Pencil,
-  Trash2,
+  Archive,
   Search,
   Key,
   Mail,
-  Phone,
   UserCheck,
   UserX,
   Loader2,
@@ -54,24 +39,56 @@ import {
   EyeOff,
   MailCheck,
   MailX,
-} from "lucide-react";
-import { useAlert } from "../components/ui/AlertProvider";
+  Filter,
+  RefreshCw,
+  Users as UsersIcon,
+  LayoutGrid,
+  List as ListIcon,
+} from 'lucide-react';
+import { useAlert } from '../components/ui/AlertProvider';
 
-const API_BASE_URL = "https://ivory-gerbil-502781.hostingersite.com";
+const API_BASE_URL = 'https://ivory-gerbil-502781.hostingersite.com';
 const ITEMS_PER_PAGE = 20;
 
-/* ------------------------------------------------------------------ */
-/* Utils                                                               */
-/* ------------------------------------------------------------------ */
+const ROLE_OPTIONS = [
+  { value: '', label: 'All Roles' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'staff', label: 'Staff' },
+  { value: 'enforcer', label: 'Enforcer' },
+];
+
+const ROLE_META = {
+  admin: {
+    color: '#16233F',
+    soft: '#E9ECF2',
+    text: '#16233F',
+    chip: 'bg-[#16233F] text-white',
+  },
+  staff: {
+    color: '#3B5170',
+    soft: '#EEF1F5',
+    text: '#3B5170',
+    chip: 'bg-[#EEF1F5] text-[#3B5170]',
+  },
+  enforcer: {
+    color: '#1E8449',
+    soft: '#E5F2EA',
+    text: '#1E8449',
+    chip: 'bg-[#E5F2EA] text-[#1E8449]',
+  },
+};
+
+/* Shared grid: flex-wrap on mobile, 7-column grid on md+ */
+const ROW_CLASS =
+  'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
+  'md:grid md:grid-cols-[minmax(0,auto)_minmax(0,1.6fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,.8fr)_minmax(0,14rem)] md:gap-4';
 
 function useDebouncedValue(value, delay = 350) {
   const [debounced, setDebounced] = useState(value);
-
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delay);
     return () => clearTimeout(t);
   }, [value, delay]);
-
   return debounced;
 }
 
@@ -116,13 +133,13 @@ const copyText = async (text) => {
     /* fall through to legacy */
   }
   try {
-    const el = document.createElement("textarea");
+    const el = document.createElement('textarea');
     el.value = text;
-    el.style.position = "fixed";
-    el.style.left = "-9999px";
+    el.style.position = 'fixed';
+    el.style.left = '-9999px';
     document.body.appendChild(el);
     el.select();
-    const ok = document.execCommand("copy");
+    const ok = document.execCommand('copy');
     document.body.removeChild(el);
     return ok;
   } catch {
@@ -130,9 +147,97 @@ const copyText = async (text) => {
   }
 };
 
-/* ------------------------------------------------------------------ */
-/* Credential Modal                                                    */
-/* ------------------------------------------------------------------ */
+const Chip = ({ label, onClear }) => (
+  <span className="inline-flex items-center gap-1 bg-[#E9ECF2] text-[#16233F] px-2.5 py-1 rounded-md text-xs">
+    {label}
+    <button onClick={onClear} className="hover:text-[#C8202F]">
+      <X className="w-3 h-3" />
+    </button>
+  </span>
+);
+
+const L = ({ icon: I, children }) => (
+  <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+    {I && <I className="w-3.5 h-3.5 text-[#92600A]" />}
+    {children}
+  </label>
+);
+
+const Mini = ({ children }) => (
+  <i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">
+    {children}
+  </i>
+);
+
+const ViewToggle = ({ view, setView }) => (
+  <div
+    className="ml-auto flex bg-[#E9ECF2] rounded-full p-1 text-xs"
+    role="group"
+    aria-label="Choose layout"
+  >
+    {[['list', 'List', ListIcon], ['cards', 'Cards', LayoutGrid]].map(
+      ([v, label, I]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => setView(v)}
+          aria-pressed={view === v}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
+              ? 'bg-[#16233F] text-white'
+              : 'text-[#64748B] hover:text-[#16233F]'
+            }`}
+        >
+          <I className="w-3.5 h-3.5" />
+          {label}
+        </button>
+      ),
+    )}
+  </div>
+);
+
+const FilterShell = ({ title, onClose, onReset, children }) => (
+  <aside className="self-start rounded-xl bg-[#FBF1DC] border-t-4 border-[#F0B429] p-5 space-y-5 lg:sticky lg:top-4">
+    <div className="flex justify-between items-center">
+      <h3 className="text-base font-['Oswald'] font-medium text-[#16233F]">
+        {title}
+      </h3>
+      <button
+        onClick={onClose}
+        className="p-1 rounded hover:bg-[#F0B429]/25"
+      >
+        <X className="w-4 h-4 text-[#92600A]" />
+      </button>
+    </div>
+    {children}
+    <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
+      <Button onClick={onClose} className="bg-[#1E8449] hover:bg-[#186B3B]">
+        Apply Filters
+      </Button>
+      <Button
+        onClick={onReset}
+        variant="ghost"
+        className="text-[#64748B] hover:text-[#C8202F]"
+      >
+        <X className="w-4 h-4 mr-1" />
+        Reset
+      </Button>
+    </div>
+  </aside>
+);
+
+const Spec = ({ label, children, mono }) => (
+  <div className="min-w-0">
+    <dt className="text-[10px] text-[#94A3B8]">{label}</dt>
+    <dd
+      className={`text-sm truncate ${mono ? 'font-mono text-[#16233F]' : 'text-[#1F2937]'
+        }`}
+    >
+      {children}
+    </dd>
+  </div>
+);
+
+/* ---------------- Credentials Modal ---------------- */
 
 const CredentialsModal = ({
   open,
@@ -172,15 +277,15 @@ const CredentialsModal = ({
           </DialogTitle>
         </DialogHeader>
 
-        {/* Status banner */}
         {emailSent ? (
           <div className="flex items-start gap-2 bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-3 text-sm text-[#1E8449]">
             <MailCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <div>
               <p className="font-medium">Welcome email sent</p>
               <p className="text-xs mt-0.5">
-                The user should receive their login credentials at{" "}
-                <span className="font-mono">{email}</span> shortly.
+                The user should receive their login credentials
+                at <span className="font-mono">{email}</span>{' '}
+                shortly.
               </p>
             </div>
           </div>
@@ -188,16 +293,17 @@ const CredentialsModal = ({
           <div className="flex items-start gap-2 bg-[#FBF1DC] border border-[#F0B429]/40 rounded-lg p-3 text-sm text-[#92600A]">
             <MailX className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium">Email could not be sent</p>
+              <p className="font-medium">
+                Email could not be sent
+              </p>
               <p className="text-xs mt-0.5">
                 {emailError ||
-                  "Hand the credentials below to the user securely."}
+                  'Hand the credentials below to the user securely.'}
               </p>
             </div>
           </div>
         )}
 
-        {/* Credential rows */}
         <div className="space-y-3">
           <div>
             <label className="text-xs font-medium uppercase tracking-wide text-[#64748B]">
@@ -213,10 +319,10 @@ const CredentialsModal = ({
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => handleCopy("email", email)}
+                onClick={() => handleCopy('email', email)}
                 title="Copy email"
               >
-                {copied === "email" ? (
+                {copied === 'email' ? (
                   <Check className="w-4 h-4 text-[#1E8449]" />
                 ) : (
                   <Copy className="w-4 h-4" />
@@ -232,7 +338,7 @@ const CredentialsModal = ({
             <div className="mt-1 flex items-center gap-2">
               <Input
                 readOnly
-                type={revealed ? "text" : "password"}
+                type={revealed ? 'text' : 'password'}
                 value={password}
                 className="font-mono text-sm bg-[#F8F9FA] tracking-wider"
               />
@@ -241,7 +347,11 @@ const CredentialsModal = ({
                 variant="outline"
                 size="icon"
                 onClick={() => setRevealed((r) => !r)}
-                title={revealed ? "Hide password" : "Show password"}
+                title={
+                  revealed
+                    ? 'Hide password'
+                    : 'Show password'
+                }
               >
                 {revealed ? (
                   <EyeOff className="w-4 h-4" />
@@ -253,10 +363,12 @@ const CredentialsModal = ({
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => handleCopy("password", password)}
+                onClick={() =>
+                  handleCopy('password', password)
+                }
                 title="Copy password"
               >
-                {copied === "password" ? (
+                {copied === 'password' ? (
                   <Check className="w-4 h-4 text-[#1E8449]" />
                 ) : (
                   <Copy className="w-4 h-4" />
@@ -269,9 +381,9 @@ const CredentialsModal = ({
         <div className="flex items-start gap-2 bg-[#FBE7E9] border border-[#C8202F]/30 rounded-lg p-3 text-xs text-[#C8202F]">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <p>
-            This password is shown <strong>once</strong>. Save it now. If
-            you close this window, you'll need to reset the password to get a
-            new one.
+            This password is shown <strong>once</strong>. Save it
+            now. If you close this window, you'll need to reset the
+            password to get a new one.
           </p>
         </div>
 
@@ -280,14 +392,19 @@ const CredentialsModal = ({
             type="button"
             variant="outline"
             className="flex-1"
-            onClick={() => handleCopy("both", `Email: ${email}\nPassword: ${password}`)}
+            onClick={() =>
+              handleCopy(
+                'both',
+                `Email: ${email}\nPassword: ${password}`,
+              )
+            }
           >
-            {copied === "both" ? (
+            {copied === 'both' ? (
               <Check className="w-4 h-4 mr-2 text-[#1E8449]" />
             ) : (
               <Copy className="w-4 h-4 mr-2" />
             )}
-            {copied === "both" ? "Copied!" : "Copy both"}
+            {copied === 'both' ? 'Copied!' : 'Copy both'}
           </Button>
           <Button
             type="button"
@@ -302,48 +419,50 @@ const CredentialsModal = ({
   );
 };
 
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
+/* ---------------- Page ---------------- */
 
 const Users = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
+  const [view, setView] = useState('list');
 
   const [page, setPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
 
-  // Session-only map of { [userId]: plaintextPassword } — set when a
-  // new user is created. Never persisted. Cleared on page reload.
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    role: '',
+    active_only: true,
+  });
+
   const [freshCredentials, setFreshCredentials] = useState({});
 
-  // Credentials modal state
   const [credentialsModal, setCredentialsModal] = useState({
     open: false,
-    email: "",
-    password: "",
+    email: '',
+    password: '',
     emailSent: true,
     emailError: null,
   });
 
   const [formData, setFormData] = useState({
-    email: "",
-    firstname: "",
-    middlename: "",
-    lastname: "",
-    role: "enforcer",
-    contact_number: "",
+    email: '',
+    firstname: '',
+    middlename: '',
+    lastname: '',
+    role: 'enforcer',
+    contact_number: '',
     profile_image: null,
   });
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewUrl, setPreviewUrl] = useState('');
 
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, filters]);
 
   const {
     data: usersResponse,
@@ -352,30 +471,31 @@ const Users = () => {
     refetch,
     error,
   } = useQuery({
-    queryKey: ["users", page, debouncedSearch],
+    queryKey: ['users', page, debouncedSearch, filters],
     queryFn: () =>
       getUsers(page, ITEMS_PER_PAGE, {
         search: debouncedSearch || undefined,
-        sort_by: "lastname",
-        sort_dir: "asc",
+        role: filters.role || undefined,
+        sort_by: 'lastname',
+        sort_dir: 'asc',
       }),
     keepPreviousData: true,
     staleTime: 1000 * 60 * 2,
   });
 
-  /* -------------------------- Mutations -------------------------- */
+  /* ---------------- Mutations ---------------- */
 
   const createMutation = useMutation({
     mutationFn: createUser,
     onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
       setIsDialogOpen(false);
       resetForm();
 
       const payload = response?.data || {};
       const email = payload?.user?.email || formData.email;
       const password = payload.generated_password || null;
-      const emailSent = payload.email_sent !== false; // default true if omitted
+      const emailSent = payload.email_sent !== false;
       const emailError = payload.email_error || null;
 
       if (password) {
@@ -385,22 +505,19 @@ const Users = () => {
         }));
       }
 
-      // Always show the modal so the admin can copy the password —
-      // even when email was sent, it's useful as a fallback.
       setCredentialsModal({
         open: true,
         email,
-        password: password || "(not returned by server)",
+        password: password || '(not returned by server)',
         emailSent,
         emailError,
       });
     },
     onError: (error) => {
       const payload = error.response?.data || {};
-      let msg = payload.message || "Error creating user";
-
+      let msg = payload.message || 'Error creating user';
       if (payload.errors) {
-        const flat = Object.values(payload.errors).flat().join("\n");
+        const flat = Object.values(payload.errors).flat().join('\n');
         if (flat) msg = flat;
       }
       notify.error(msg);
@@ -410,37 +527,41 @@ const Users = () => {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => updateUser(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
       setIsDialogOpen(false);
       resetForm();
-      notify.success("User updated successfully");
+      notify.success('User updated successfully');
     },
     onError: (error) => {
-      console.error("Update error:", error);
-      notify.error(error.response?.data?.message || "Error updating user");
+      notify.error(
+        error.response?.data?.message || 'Error updating user',
+      );
     },
   });
 
-  const deleteMutation = useMutation({
+  const archiveMutation = useMutation({
     mutationFn: deleteUser,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      notify.success("User deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['archives'] });
+      notify.success('User archived successfully');
     },
     onError: (error) => {
-      notify.error(error.response?.data?.message || "Error deleting user");
+      notify.error(
+        error.response?.data?.message || 'Error archiving user',
+      );
     },
   });
 
   const toggleStatusMutation = useMutation({
     mutationFn: toggleUserStatus,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-      notify.success("User status updated successfully");
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      notify.success('User status updated successfully');
     },
     onError: (error) => {
       notify.error(
-        error.response?.data?.message || "Error updating user status",
+        error.response?.data?.message || 'Error updating user status',
       );
     },
   });
@@ -448,79 +569,95 @@ const Users = () => {
   const resetPasswordMutation = useMutation({
     mutationFn: resetUserPassword,
     onSuccess: (response, userId) => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
 
       const payload = response?.data || {};
-      const email = payload.email || "";
+      const email = payload.email || '';
       const password = payload.new_password || null;
       const emailSent = payload.email_sent !== false;
       const emailError = payload.email_error || null;
 
       if (password) {
-        setFreshCredentials((prev) => ({ ...prev, [userId]: password }));
+        setFreshCredentials((prev) => ({
+          ...prev,
+          [userId]: password,
+        }));
       }
 
       setCredentialsModal({
         open: true,
         email,
-        password: password || "(not returned by server)",
+        password: password || '(not returned by server)',
         emailSent,
         emailError,
       });
     },
     onError: (error) => {
-      notify.error(error.response?.data?.message || "Error resetting password");
+      notify.error(
+        error.response?.data?.message || 'Error resetting password',
+      );
     },
   });
 
-  /* -------------------------- Handlers -------------------------- */
+  /* ---------------- Derived ---------------- */
 
-  const users = getDataArray(usersResponse);
+  const allUsers = getDataArray(usersResponse);
   const meta = getMeta(usersResponse);
+
+  const users = useMemo(() => {
+    if (!filters.active_only) return allUsers;
+    return allUsers.filter((u) => u.is_active !== false);
+  }, [allUsers, filters.active_only]);
 
   const getImageUrl = (profileImage) => {
     if (!profileImage) return null;
-    if (profileImage.startsWith("http")) return profileImage;
+    if (profileImage.startsWith('http')) return profileImage;
     return `${API_BASE_URL}/storage/${profileImage}`;
   };
+
+  /* ---------------- Handlers ---------------- */
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
     const formDataToSend = new FormData();
-    formDataToSend.append("email", formData.email);
-    formDataToSend.append("firstname", formData.firstname);
-    formDataToSend.append("middlename", formData.middlename || "");
-    formDataToSend.append("lastname", formData.lastname);
-    formDataToSend.append("role", formData.role);
-    formDataToSend.append("contact_number", formData.contact_number || "");
+    formDataToSend.append('email', formData.email);
+    formDataToSend.append('firstname', formData.firstname);
+    formDataToSend.append('middlename', formData.middlename || '');
+    formDataToSend.append('lastname', formData.lastname);
+    formDataToSend.append('role', formData.role);
+    formDataToSend.append('contact_number', formData.contact_number || '');
 
     if (formData.profile_image instanceof File) {
-      formDataToSend.append("profile_image", formData.profile_image);
+      formDataToSend.append('profile_image', formData.profile_image);
     }
 
     if (editingUser) {
-      updateMutation.mutate({ id: editingUser.user_id, data: formDataToSend });
+      updateMutation.mutate({
+        id: editingUser.user_id,
+        data: formDataToSend,
+      });
     } else {
       createMutation.mutate(formDataToSend);
     }
   };
 
-  const handleDelete = async (id, email) => {
+  const handleArchive = async (id, email) => {
     const ok = await notify.confirm(
-      `Are you sure you want to delete ${email}?`,
-      { destructive: true, confirmText: "Delete" },
+      `Archive ${email}? The account will be signed out and hidden from the users list. You can restore it later from the Archives page.`,
+      { destructive: true, confirmText: 'Archive' },
     );
-    if (ok) deleteMutation.mutate(id);
+    if (ok) archiveMutation.mutate(id);
   };
 
   const handleToggleStatus = async (id, currentStatus, email) => {
-    const action = currentStatus ? "deactivate" : "activate";
+    const action = currentStatus ? 'deactivate' : 'activate';
     const ok = await notify.confirm(
       `Are you sure you want to ${action} ${email}?`,
       {
         destructive: currentStatus,
-        confirmText: action === "deactivate" ? "Deactivate" : "Activate",
+        confirmText:
+          action === 'deactivate' ? 'Deactivate' : 'Activate',
       },
     );
     if (ok) toggleStatusMutation.mutate(id);
@@ -528,7 +665,7 @@ const Users = () => {
 
   const handleResetPassword = async (id, email) => {
     const ok = await notify.confirm(`Reset password for ${email}?`, {
-      confirmText: "Reset",
+      confirmText: 'Reset',
     });
     if (ok) resetPasswordMutation.mutate(id);
   };
@@ -538,10 +675,10 @@ const Users = () => {
     setFormData({
       email: user.email,
       firstname: user.firstname,
-      middlename: user.middlename || "",
+      middlename: user.middlename || '',
       lastname: user.lastname,
       role: user.role,
-      contact_number: user.contact_number || "",
+      contact_number: user.contact_number || '',
       profile_image: null,
     });
     setPreviewUrl(getImageUrl(user.profile_image));
@@ -551,15 +688,15 @@ const Users = () => {
   const resetForm = () => {
     setEditingUser(null);
     setFormData({
-      email: "",
-      firstname: "",
-      middlename: "",
-      lastname: "",
-      role: "enforcer",
-      contact_number: "",
+      email: '',
+      firstname: '',
+      middlename: '',
+      lastname: '',
+      role: 'enforcer',
+      contact_number: '',
       profile_image: null,
     });
-    setPreviewUrl("");
+    setPreviewUrl('');
   };
 
   const handleFileChange = (e) => {
@@ -572,20 +709,11 @@ const Users = () => {
     }
   };
 
-  const getRoleBadgeColor = (role) => {
-    const colors = {
-      admin: "bg-[#16233F] text-white",
-      staff: "bg-[#EEF1F5] text-[#3B5170]",
-      enforcer: "bg-[#E5F2EA] text-[#1E8449]",
-    };
-    return colors[role] || "bg-gray-100 text-gray-700";
-  };
-
   const handleViewFreshPassword = (user) => {
     const password = freshCredentials[user.user_id];
     if (!password) {
       notify.info(
-        "This password is no longer available in this session. Use \"Reset Password\" to generate a new one.",
+        'This password is no longer available in this session. Use "Reset Password" to generate a new one.',
       );
       return;
     }
@@ -598,7 +726,131 @@ const Users = () => {
     });
   };
 
-  /* -------------------------- Render -------------------------- */
+  const clearFilters = () => setFilters({ role: '', active_only: true });
+
+  const activeFilterCount = useMemo(() => {
+    let c = 0;
+    if (searchTerm) c++;
+    if (filters.role) c++;
+    if (!filters.active_only) c++;
+    return c;
+  }, [searchTerm, filters]);
+
+  const roleBadge = (role) => {
+    const meta = ROLE_META[role] || ROLE_META.enforcer;
+    return (
+      <span
+        className={`inline-block px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${meta.chip}`}
+      >
+        {role?.toUpperCase() || '—'}
+      </span>
+    );
+  };
+
+  const rowActions = (user) => (
+    <div className="flex flex-wrap gap-2">
+      <ActionButton
+        icon={Pencil}
+        variant="primary"
+        onClick={() => handleEdit(user)}
+      >
+        Edit
+      </ActionButton>
+      <ActionButton
+        icon={user.is_active ? UserX : UserCheck}
+        variant={user.is_active ? 'warning' : 'primary'}
+        onClick={() =>
+          handleToggleStatus(
+            user.user_id,
+            user.is_active,
+            user.email,
+          )
+        }
+      >
+        {user.is_active ? 'Deactivate' : 'Activate'}
+      </ActionButton>
+      <ActionButton
+        icon={Key}
+        variant="warning"
+        onClick={() => handleResetPassword(user.user_id, user.email)}
+      >
+        Reset Password
+      </ActionButton>
+      {freshCredentials[user.user_id] && (
+        <ActionButton
+          icon={Eye}
+          variant="info"
+          onClick={() => handleViewFreshPassword(user)}
+        >
+          Show Password
+        </ActionButton>
+      )}
+      <ActionButton
+        icon={Archive}
+        variant="danger"
+        onClick={() => handleArchive(user.user_id, user.email)}
+      >
+        Archive
+      </ActionButton>
+    </div>
+  );
+
+  /* ---------------- Filter panel ---------------- */
+
+  const panel = (
+    <FilterShell
+      title="Filter Users"
+      onClose={() => setShowFilters(false)}
+      onReset={clearFilters}
+    >
+      <div>
+        <L icon={UsersIcon}>Role</L>
+        <select
+          className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-[#1F2937] focus-visible:ring-[#F0B429]"
+          value={filters.role}
+          onChange={(e) =>
+            setFilters({ ...filters, role: e.target.value })
+          }
+        >
+          {ROLE_OPTIONS.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="flex items-center gap-2 text-sm text-[#92600A] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={filters.active_only}
+            onChange={(e) =>
+              setFilters({
+                ...filters,
+                active_only: e.target.checked,
+              })
+            }
+            className="w-4 h-4 accent-[#92600A]"
+          />
+          Show active users only
+        </label>
+      </div>
+    </FilterShell>
+  );
+
+  const chips = [
+    searchTerm && [`Search: ${searchTerm}`, () => setSearchTerm('')],
+    filters.role && [
+      `Role: ${filters.role}`,
+      () => setFilters({ ...filters, role: '' }),
+    ],
+    !filters.active_only && [
+      'Showing inactive too',
+      () => setFilters({ ...filters, active_only: true }),
+    ],
+  ].filter(Boolean);
+
+  /* ---------------- Early returns ---------------- */
 
   if (isLoading && !usersResponse) {
     return (
@@ -626,259 +878,446 @@ const Users = () => {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-['Oswald'] font-semibold text-[#16233F]">
+    <div className="space-y-6 font-['Inter']">
+      {/* Navy banner */}
+      <header className="relative overflow-hidden rounded-2xl bg-[#16233F] text-white px-6 py-7 flex flex-wrap items-center justify-between gap-4">
+        <div
+          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(115deg, transparent 0 40px, #F0B429 40px 42px)',
+          }}
+        />
+        <div className="relative">
+          <h1 className="text-4xl font-['Oswald'] font-semibold tracking-tight">
             User Management
           </h1>
-          <p className="text-[#64748B] font-['Inter'] text-sm mt-1">
+          <p className="text-[#C7CEDB] text-sm mt-1">
             Manage system users and their access levels
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button
-              onClick={resetForm}
-              className="bg-[#1E8449] hover:bg-[#186B3B]"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add User
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="font-['Oswald'] text-[#16233F]">
-                {editingUser ? "Edit User" : "Add New User"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  placeholder="First Name *"
-                  value={formData.firstname}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstname: e.target.value })
-                  }
-                  required
-                  className="focus-visible:ring-[#F0B429]"
-                />
-                <Input
-                  placeholder="Middle Name"
-                  value={formData.middlename}
-                  onChange={(e) =>
-                    setFormData({ ...formData, middlename: e.target.value })
-                  }
-                  className="focus-visible:ring-[#F0B429]"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  placeholder="Last Name *"
-                  value={formData.lastname}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastname: e.target.value })
-                  }
-                  required
-                  className="focus-visible:ring-[#F0B429]"
-                />
-                <Input
-                  placeholder="Contact Number"
-                  value={formData.contact_number}
-                  onChange={(e) =>
-                    setFormData({ ...formData, contact_number: e.target.value })
-                  }
-                  className="focus-visible:ring-[#F0B429]"
-                />
-              </div>
-              <Input
-                type="email"
-                placeholder="Email *"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
-                required
-                disabled={!!editingUser}
-                className="focus-visible:ring-[#F0B429]"
-              />
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                value={formData.role}
-                onChange={(e) =>
-                  setFormData({ ...formData, role: e.target.value })
-                }
-                required
-              >
-                <option value="admin">Admin (Full Access)</option>
-                <option value="staff">Staff (View Only)</option>
-                <option value="enforcer">Enforcer (Mobile Only)</option>
-              </select>
+        <div className="relative flex gap-2">
+          <Button
+            onClick={() => refetch()}
+            variant="outline"
+            className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
+          >
+            <RefreshCw
+              className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''
+                }`}
+            />
+            Refresh
+          </Button>
 
-              <div>
-                <label className="block text-sm font-medium mb-1 text-[#1F2937]">
-                  Profile Photo
-                </label>
-                <div className="flex items-center gap-4">
-                  {previewUrl && (
-                    <div className="relative">
-                      <img
-                        src={previewUrl}
-                        alt="Profile preview"
-                        className="w-16 h-16 rounded-full object-cover border border-[#E9ECF2]"
-                      />
-                      <button
-                        type="button"
-                        className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-0.5 hover:bg-[#A01622]"
-                        onClick={() => {
-                          setPreviewUrl("");
-                          setFormData({ ...formData, profile_image: null });
-                          const fileInput = document.getElementById(
-                            "profile_image_input",
-                          );
-                          if (fileInput) fileInput.value = "";
-                        }}
+          <Dialog
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+          >
+            <DialogTrigger asChild>
+              <Button
+                onClick={resetForm}
+                className="bg-[#1E8449] hover:bg-[#186B3B]"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add User
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="font-['Oswald'] text-[#16233F]">
+                  {editingUser
+                    ? 'Edit User'
+                    : 'Add New User'}
+                </DialogTitle>
+              </DialogHeader>
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    placeholder="First Name *"
+                    value={formData.firstname}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        firstname: e.target.value,
+                      })
+                    }
+                    required
+                    className="focus-visible:ring-[#F0B429]"
+                  />
+                  <Input
+                    placeholder="Middle Name"
+                    value={formData.middlename}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        middlename: e.target.value,
+                      })
+                    }
+                    className="focus-visible:ring-[#F0B429]"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    placeholder="Last Name *"
+                    value={formData.lastname}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        lastname: e.target.value,
+                      })
+                    }
+                    required
+                    className="focus-visible:ring-[#F0B429]"
+                  />
+                  <Input
+                    placeholder="Contact Number"
+                    value={formData.contact_number}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        contact_number: e.target.value,
+                      })
+                    }
+                    className="focus-visible:ring-[#F0B429]"
+                  />
+                </div>
+                <Input
+                  type="email"
+                  placeholder="Email *"
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      email: e.target.value,
+                    })
+                  }
+                  required
+                  disabled={!!editingUser}
+                  className="focus-visible:ring-[#F0B429]"
+                />
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
+                  value={formData.role}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      role: e.target.value,
+                    })
+                  }
+                  required
+                >
+                  <option value="admin">
+                    Admin (Full Access)
+                  </option>
+                  <option value="staff">
+                    Staff (View Only)
+                  </option>
+                  <option value="enforcer">
+                    Enforcer (Mobile Only)
+                  </option>
+                </select>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-[#1F2937]">
+                    Profile Photo
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {previewUrl && (
+                      <div className="relative">
+                        <img
+                          src={previewUrl}
+                          alt="Profile preview"
+                          className="w-16 h-16 rounded-full object-cover border border-[#E9ECF2]"
+                        />
+                        <button
+                          type="button"
+                          className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-0.5 hover:bg-[#A01622]"
+                          onClick={() => {
+                            setPreviewUrl('');
+                            setFormData({
+                              ...formData,
+                              profile_image: null,
+                            });
+                            const fileInput =
+                              document.getElementById(
+                                'profile_image_input',
+                              );
+                            if (fileInput)
+                              fileInput.value =
+                                '';
+                          }}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <label
+                        htmlFor="profile_image_input"
+                        className="flex items-center justify-center w-full px-4 py-2 border border-[#E9ECF2] rounded-lg cursor-pointer hover:bg-[#F5F6F8] transition-colors"
                       >
-                        <X className="w-3 h-3" />
-                      </button>
+                        <Camera className="w-4 h-4 mr-2 text-[#64748B]" />
+                        <span className="text-sm text-[#64748B]">
+                          {previewUrl
+                            ? 'Change Photo'
+                            : 'Upload Photo'}
+                        </span>
+                        <Input
+                          id="profile_image_input"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                      <p className="text-xs text-[#94A3B8] mt-1">
+                        JPG, PNG, GIF up to 2MB
+                      </p>
                     </div>
-                  )}
-                  <div className="flex-1">
-                    <label
-                      htmlFor="profile_image_input"
-                      className="flex items-center justify-center w-full px-4 py-2 border border-[#E9ECF2] rounded-lg cursor-pointer hover:bg-[#F5F6F8] transition-colors"
-                    >
-                      <Camera className="w-4 h-4 mr-2 text-[#64748B]" />
-                      <span className="text-sm text-[#64748B]">
-                        {previewUrl ? "Change Photo" : "Upload Photo"}
-                      </span>
-                      <Input
-                        id="profile_image_input"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                    </label>
-                    <p className="text-xs text-[#94A3B8] mt-1">
-                      JPG, PNG, GIF up to 2MB
-                    </p>
                   </div>
                 </div>
-              </div>
 
-              {!editingUser && (
-                <div className="bg-[#FBF1DC] p-3 rounded-md border border-[#F0B429]/30 flex items-start gap-2">
-                  <Mail className="w-4 h-4 mt-0.5 text-[#92600A] flex-shrink-0" />
-                  <p className="text-sm text-[#92600A]">
-                    A random password will be generated and emailed to the new
-                    user. You'll also see it on the next screen so you can
-                    share it manually if needed.
-                  </p>
-                </div>
+                {!editingUser && (
+                  <div className="bg-[#FBF1DC] p-3 rounded-md border border-[#F0B429]/30 flex items-start gap-2">
+                    <Mail className="w-4 h-4 mt-0.5 text-[#92600A] flex-shrink-0" />
+                    <p className="text-sm text-[#92600A]">
+                      A random password will be generated
+                      and emailed to the new user. You'll
+                      also see it on the next screen so
+                      you can share it manually if
+                      needed.
+                    </p>
+                  </div>
+                )}
+                <Button
+                  type="submit"
+                  className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
+                  disabled={
+                    createMutation.isPending ||
+                    updateMutation.isPending
+                  }
+                >
+                  {createMutation.isPending ||
+                    updateMutation.isPending
+                    ? 'Saving...'
+                    : editingUser
+                      ? 'Update User'
+                      : 'Create User'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </header>
+
+      <div
+        className={`grid gap-6 ${showFilters ? 'lg:grid-cols-[300px_minmax(0,1fr)]' : ''
+          }`}
+      >
+        {showFilters && panel}
+
+        <div className="space-y-4 min-w-0">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters((v) => !v)}
+              className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="ml-2 bg-[#16233F] text-white text-xs rounded-full px-2 py-0.5">
+                  {activeFilterCount}
+                </span>
               )}
-              <Button
-                type="submit"
-                className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
-                disabled={createMutation.isPending || updateMutation.isPending}
-              >
-                {createMutation.isPending || updateMutation.isPending
-                  ? "Saving..."
-                  : editingUser
-                    ? "Update User"
-                    : "Create User"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+            </Button>
 
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle className="font-['Oswald'] font-medium text-[#16233F] flex items-center gap-2">
-              Users List
-              <span className="text-xs font-normal text-[#64748B] font-['Inter']">
-                (alphabetical by last name)
-              </span>
-            </CardTitle>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
               <Input
                 placeholder="Search by name, email, or role..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-10 w-80 focus-visible:ring-[#F0B429]"
+                className="pl-10 pr-10 rounded-full focus-visible:ring-[#F0B429]"
               />
               {isFetching && (
                 <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-[#94A3B8]" />
               )}
               {searchTerm && (
                 <button
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                  onClick={() => setSearchTerm('')}
                   title="Clear"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
             </div>
+
+            <ViewToggle view={view} setView={setView} />
           </div>
-        </CardHeader>
-        <CardContent>
+
+          {/* Chips */}
+          {chips.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {chips.map(([label, clear]) => (
+                <Chip
+                  key={label}
+                  label={label}
+                  onClear={clear}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Section title */}
+          <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
+            <UsersIcon className="w-5 h-5 text-[#F0B429]" />
+            Users List
+            <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+              (alphabetical by last name)
+            </span>
+          </h2>
+
+          {/* Body */}
           {isLoading ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
             </div>
           ) : users.length === 0 ? (
-            <div className="text-center py-8 text-[#64748B]">
-              {searchTerm
-                ? `No users match "${searchTerm}"`
-                : "No users found."}
+            <div className="text-center py-14 text-[#64748B]">
+              {activeFilterCount > 0
+                ? 'No users match the current filters.'
+                : 'No users found.'}
+            </div>
+          ) : view === 'cards' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {users.map((user) => {
+                const roleMeta =
+                  ROLE_META[user.role] ||
+                  ROLE_META.enforcer;
+                return (
+                  <article
+                    key={user.user_id}
+                    className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                  >
+                    <div
+                      className="h-2"
+                      style={{
+                        background: roleMeta.color,
+                      }}
+                    />
+                    <div className="p-4 flex gap-4">
+                      {user.profile_image ? (
+                        <img
+                          src={getImageUrl(
+                            user.profile_image,
+                          )}
+                          alt={`${user.firstname} ${user.lastname}`}
+                          className="w-16 h-20 shrink-0 rounded-md object-cover border border-[#E9ECF2]"
+                          onError={(e) => {
+                            e.target.src = '';
+                            e.target.alt =
+                              'No image';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-16 h-20 shrink-0 rounded-md bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-xl font-['Oswald'] font-semibold">
+                          {user.firstname?.[0]}
+                          {user.lastname?.[0]}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
+                          {user.lastname},{' '}
+                          {user.firstname}
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {roleBadge(user.role)}
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
+                                ? 'bg-[#E5F2EA] text-[#1E8449]'
+                                : 'bg-[#FBE7E9] text-[#C8202F]'
+                              }`}
+                          >
+                            {user.is_active
+                              ? 'Active'
+                              : 'Inactive'}
+                          </span>
+                        </div>
+                        <dl className="grid grid-cols-1 gap-y-2 mt-3">
+                          <Spec
+                            label="Email"
+                            mono
+                          >
+                            {user.email}
+                          </Spec>
+                          {user.contact_number && (
+                            <Spec label="Contact">
+                              {
+                                user.contact_number
+                              }
+                            </Spec>
+                          )}
+                        </dl>
+                      </div>
+                    </div>
+                    <div className="px-4 pb-4">
+                      {rowActions(user)}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-[#E9ECF2] hover:bg-[#E9ECF2]">
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Photo
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Name
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Email
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Role
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Contact
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Status
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Actions
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((user) => (
-                    <TableRow
+            <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
+              <div
+                className={`hidden ${ROW_CLASS} bg-[#16233F] text-white text-xs font-semibold`}
+              >
+                {[
+                  'Photo',
+                  'Name',
+                  'Email',
+                  'Role',
+                  'Contact',
+                  'Status',
+                  'Actions',
+                ].map((c) => (
+                  <span key={c}>{c}</span>
+                ))}
+              </div>
+              <ul className="divide-y divide-[#EEF0F4]">
+                {users.map((user) => {
+                  const roleMeta =
+                    ROLE_META[user.role] ||
+                    ROLE_META.enforcer;
+                  return (
+                    <li
                       key={user.user_id}
-                      className="hover:bg-[#F8F9FA]"
+                      className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
+                      style={{
+                        borderLeftColor:
+                          user.is_active
+                            ? roleMeta.color
+                            : '#94A3B8',
+                      }}
                     >
-                      <TableCell>
+                      <span className="shrink-0">
                         {user.profile_image ? (
                           <img
-                            src={getImageUrl(user.profile_image)}
+                            src={getImageUrl(
+                              user.profile_image,
+                            )}
                             alt={`${user.firstname} ${user.lastname}`}
                             className="w-10 h-10 rounded-full object-cover border border-[#E9ECF2]"
                             onError={(e) => {
-                              e.target.src = "";
-                              e.target.alt = "No image";
+                              e.target.src = '';
+                              e.target.alt =
+                                'No image';
                             }}
                           />
                         ) : (
@@ -887,129 +1326,70 @@ const Users = () => {
                             {user.lastname?.[0]}
                           </div>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium text-[#1F2937]">
-                          {user.lastname}, {user.firstname}
-                          {user.middlename ? ` ${user.middlename[0]}.` : ""}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-medium text-[#1F2937] truncate">
+                          {user.lastname},{' '}
+                          {user.firstname}
+                          {user.middlename
+                            ? ` ${user.middlename[0]}.`
+                            : ''}
                         </div>
                         <div className="text-xs text-[#64748B]">
                           ID: {user.user_id}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Mail className="w-3 h-3 text-[#64748B]" />
-                          <span className="text-sm text-[#1F2937]">
-                            {user.email}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(
-                            user.role,
-                          )}`}
-                        >
-                          {user.role.toUpperCase()}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {user.contact_number ? (
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-3 h-3 text-[#64748B]" />
-                            <span className="text-sm text-[#1F2937]">
-                              {user.contact_number}
-                            </span>
-                          </div>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
-                              ? "bg-[#E5F2EA] text-[#1E8449]"
-                              : "bg-[#FBE7E9] text-[#C8202F]"
-                            }`}
-                        >
-                          {user.is_active ? "Active" : "Inactive"}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <ActionButton
-                            icon={Pencil}
-                            variant="primary"
-                            onClick={() => handleEdit(user)}
-                          >
-                            Edit
-                          </ActionButton>
-                          <ActionButton
-                            icon={user.is_active ? UserX : UserCheck}
-                            variant={user.is_active ? "warning" : "primary"}
-                            onClick={() =>
-                              handleToggleStatus(
-                                user.user_id,
-                                user.is_active,
-                                user.email,
-                              )
-                            }
-                          >
-                            {user.is_active ? "Deactivate" : "Activate"}
-                          </ActionButton>
-                          <ActionButton
-                            icon={Key}
-                            variant="warning"
-                            onClick={() =>
-                              handleResetPassword(user.user_id, user.email)
-                            }
-                          >
-                            Reset Password
-                          </ActionButton>
-                          {freshCredentials[user.user_id] ? (
-                            <ActionButton
-                              icon={Eye}
-                              variant="info"
-                              onClick={() => handleViewFreshPassword(user)}
-                            >
-                              Show Password
-                            </ActionButton>
-                          ) : null}
-                          <ActionButton
-                            icon={Trash2}
-                            variant="danger"
-                            onClick={() =>
-                              handleDelete(user.user_id, user.email)
-                            }
-                          >
-                            Delete
-                          </ActionButton>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <Pagination
-                currentPage={meta.current_page}
-                totalPages={meta.last_page}
-                onPageChange={setPage}
-                totalItems={meta.total}
-              />
-            </>
+                      </div>
+                      <span className="text-sm text-[#1F2937] min-w-0 truncate">
+                        <Mini>Email</Mini>
+                        {user.email}
+                      </span>
+                      <span className="justify-self-start">
+                        <Mini>Role</Mini>
+                        {roleBadge(user.role)}
+                      </span>
+                      <span className="text-sm text-[#1F2937] min-w-0 truncate">
+                        <Mini>Contact</Mini>
+                        {user.contact_number || '—'}
+                      </span>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap justify-self-start ${user.is_active
+                            ? 'bg-[#E5F2EA] text-[#1E8449]'
+                            : 'bg-[#FBE7E9] text-[#C8202F]'
+                          }`}
+                      >
+                        {user.is_active
+                          ? 'Active'
+                          : 'Inactive'}
+                      </span>
+                      <div className="justify-self-end md:justify-self-start">
+                        {rowActions(user)}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           )}
-        </CardContent>
-      </Card>
 
-      {/* Credentials Modal */}
+          {!isLoading && users.length > 0 && (
+            <Pagination
+              currentPage={meta.current_page}
+              totalPages={meta.last_page}
+              onPageChange={setPage}
+              totalItems={meta.total}
+              itemsPerPage={ITEMS_PER_PAGE}
+            />
+          )}
+        </div>
+      </div>
+
       <CredentialsModal
         open={credentialsModal.open}
         onClose={() =>
           setCredentialsModal({
             open: false,
-            email: "",
-            password: "",
+            email: '',
+            password: '',
             emailSent: true,
             emailError: null,
           })

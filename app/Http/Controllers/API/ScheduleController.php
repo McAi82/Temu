@@ -13,14 +13,25 @@ use App\Models\User;
 
 class ScheduleController extends Controller
 {
+    /* ==================================================================
+     |  LIST
+     ================================================================== */
+
     public function index(Request $request)
     {
-        $perPage = $request->get('per_page', 20);
+        $perPage = (int) $request->get('per_page', 20);
         $date = $request->get('date');
         $startDate = $request->get('start_date');
         $endDate = $request->get('end_date');
 
         $query = EnforcerSchedule::with(['enforcer', 'dutyLocation']);
+
+        $visibility = $request->get('visibility', 'active');
+        if ($visibility === 'archived') {
+            $query->archived();
+        } elseif ($visibility !== 'all') {
+            $query->active();
+        }
 
         if ($date && !$startDate && !$endDate) {
             $query->whereDate('schedule_date', $date);
@@ -61,6 +72,10 @@ class ScheduleController extends Controller
         return response()->json($schedules);
     }
 
+    /* ==================================================================
+     |  STORE
+     ================================================================== */
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -78,16 +93,14 @@ class ScheduleController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Build full datetime strings for the DB (columns are datetime now).
         $startDt = $request->schedule_date . ' ' . $request->start_time . ':00';
         $endDt = $request->schedule_date . ' ' . $request->end_time . ':00';
 
-        // Conflict detection: standard interval-overlap predicate.
-        // Two intervals [s1,e1] and [s2,e2] overlap iff s1 < e2 AND e1 > s2.
         $conflict = EnforcerSchedule::where('enforcer_id', $request->enforcer_id)
             ->whereDate('schedule_date', $request->schedule_date)
             ->where('start_time', '<', $endDt)
             ->where('end_time', '>', $startDt)
+            ->active()
             ->exists();
 
         if ($conflict) {
@@ -145,9 +158,13 @@ class ScheduleController extends Controller
     public function show($id)
     {
         return response()->json(
-            EnforcerSchedule::with(['enforcer', 'dutyLocation'])->findOrFail($id)
+            EnforcerSchedule::with(['enforcer', 'dutyLocation', 'archivedBy'])->findOrFail($id)
         );
     }
+
+    /* ==================================================================
+     |  UPDATE
+     ================================================================== */
 
     public function update(Request $request, $id)
     {
@@ -171,7 +188,6 @@ class ScheduleController extends Controller
 
         $data = $request->all();
 
-        // If a time or date was updated, reconstruct the full datetime.
         $dateForBuild = $request->schedule_date
             ?? optional($schedule->schedule_date)->format('Y-m-d');
         if ($request->has('start_time')) {
@@ -180,7 +196,6 @@ class ScheduleController extends Controller
         if ($request->has('end_time')) {
             $data['end_time'] = $dateForBuild . ' ' . $request->end_time . ':00';
         }
-        // If only the date changed but times stayed, rebuild both.
         if ($request->has('schedule_date') && !$request->has('start_time') && !$request->has('end_time')) {
             $data['start_time'] = $dateForBuild . ' ' . $schedule->start_time->format('H:i') . ':00';
             $data['end_time'] = $dateForBuild . ' ' . $schedule->end_time->format('H:i') . ':00';
@@ -207,29 +222,50 @@ class ScheduleController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    /* ==================================================================
+     |  ARCHIVE (replaces destroy)
+     ================================================================== */
+
+    public function destroy(Request $request, $id)
     {
         $schedule = EnforcerSchedule::findOrFail($id);
-        $enforcerId = $schedule->enforcer_id;
-        $scheduleId = $schedule->schedule_id;
 
-        $schedule->delete();
-
-        try {
-            NotificationService::notifyUser(
-                $enforcerId,
-                'Schedule Cancelled',
-                'One of your shifts has been cancelled',
-                Notification::TYPE_SCHEDULE_CANCELLED,
-                'schedule',
-                $scheduleId
-            );
-        } catch (\Throwable $ne) {
-            Log::warning('Schedule cancel notification failed: ' . $ne->getMessage());
+        if ($schedule->is_archived) {
+            return response()->json(['message' => 'Schedule is already archived.'], 400);
         }
 
-        return response()->json(['message' => 'Schedule deleted successfully']);
+        try {
+            $enforcerId = $schedule->enforcer_id;
+            $scheduleId = $schedule->schedule_id;
+
+            $schedule->archive($request->user()->user_id);
+
+            try {
+                NotificationService::notifyUser(
+                    $enforcerId,
+                    'Schedule Archived',
+                    'One of your shifts has been archived',
+                    Notification::TYPE_SCHEDULE_ARCHIVED,
+                    'schedule',
+                    $scheduleId
+                );
+            } catch (\Throwable $ne) {
+                Log::warning('Schedule archive notification failed: ' . $ne->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Schedule archived successfully',
+                'archived' => true,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Schedule archive failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to archive schedule'], 500);
+        }
     }
+
+    /* ==================================================================
+     |  OTHER LISTS
+     ================================================================== */
 
     public function getEnforcerSchedules(Request $request, $enforcerId)
     {
@@ -238,7 +274,8 @@ class ScheduleController extends Controller
         $dateFilter = $request->get('date');
 
         $query = EnforcerSchedule::with(['enforcer', 'dutyLocation'])
-            ->where('enforcer_id', $enforcerId);
+            ->where('enforcer_id', $enforcerId)
+            ->active();
 
         if ($dateFilter) {
             $query->whereDate('schedule_date', $dateFilter);
@@ -255,7 +292,10 @@ class ScheduleController extends Controller
     {
         return response()->json(
             EnforcerSchedule::with(['enforcer', 'dutyLocation'])
-                ->today()->orderBy('start_time')->get()
+                ->today()
+                ->active()
+                ->orderBy('start_time')
+                ->get()
         );
     }
 
@@ -267,8 +307,11 @@ class ScheduleController extends Controller
         return response()->json(
             EnforcerSchedule::with(['enforcer', 'dutyLocation'])
                 ->whereBetween('schedule_date', [$startDate, $endDate])
-                ->orderBy('schedule_date')->orderBy('start_time')
-                ->get()->groupBy('schedule_date')
+                ->active()
+                ->orderBy('schedule_date')
+                ->orderBy('start_time')
+                ->get()
+                ->groupBy('schedule_date')
         );
     }
 
@@ -306,188 +349,177 @@ class ScheduleController extends Controller
         ]);
     }
 
-    /**
- * GET /api/schedules/available-enforcers
- * Returns enforcers with NO schedule on the given date.
- *
- * Query params:
- *   date        (required, Y-m-d)
- *   exclude_id  (optional, schedule_id to ignore — used when editing)
- *   search      (optional, name filter)
- */
-public function availableEnforcers(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'date'       => 'required|date',
-        'exclude_id' => 'nullable|integer|exists:enforcer_schedules,schedule_id',
-        'search'     => 'nullable|string|max:100',
-    ]);
+    /* ==================================================================
+     |  AVAILABLE ENFORCERS
+     ================================================================== */
 
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
-
-    $date      = $request->date;
-    $excludeId = $request->exclude_id;
-
-    // Enforcer IDs already booked that day.
-    $bookedIds = EnforcerSchedule::whereDate('schedule_date', $date)
-        ->when($excludeId, fn ($q) => $q->where('schedule_id', '!=', $excludeId))
-        ->pluck('enforcer_id')
-        ->unique()
-        ->values()
-        ->toArray();
-
-    $query = User::where('role', 'enforcer')
-        ->where('is_active', true)
-        ->whereNotIn('user_id', $bookedIds);
-
-    if ($request->filled('search')) {
-        $s = $request->search;
-        $query->where(function ($q) use ($s) {
-            $q->where('firstname', 'like', "%{$s}%")
-              ->orWhere('lastname', 'like', "%{$s}%")
-              ->orWhere('email', 'like', "%{$s}%");
-        });
-    }
-
-    $enforcers = $query->orderBy('firstname')
-        ->orderBy('lastname')
-        ->get()
-        ->map(fn ($u) => [
-            'user_id'        => $u->user_id,
-            'firstname'      => $u->firstname,
-            'lastname'       => $u->lastname,
-            'email'          => $u->email,
-            'contact_number' => $u->contact_number,
-            'full_name'      => trim("{$u->firstname} {$u->lastname}"),
+    public function availableEnforcers(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'date'       => 'required|date',
+            'exclude_id' => 'nullable|integer|exists:enforcer_schedules,schedule_id',
+            'search'     => 'nullable|string|max:100',
         ]);
 
-    return response()->json([
-        'date'      => $date,
-        'booked'    => count($bookedIds),
-        'available' => $enforcers,
-        'count'     => $enforcers->count(),
-    ]);
-}
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
 
-/**
- * PUT /api/schedules/{id}/replace-enforcer
- * Body: { enforcer_id: int, reason?: string }
- *
- * Swaps the enforcer on an existing schedule. All other fields
- * (date, time, location, duties, notes) remain unchanged.
- */
-public function replaceEnforcer(Request $request, $id)
-{
-    $schedule = EnforcerSchedule::with(['enforcer', 'dutyLocation'])
-        ->findOrFail($id);
+        $date      = $request->date;
+        $excludeId = $request->exclude_id;
 
-    $validator = Validator::make($request->all(), [
-        'enforcer_id' => 'required|exists:users,user_id',
-        'reason'      => 'nullable|string|max:500',
-    ]);
+        $bookedIds = EnforcerSchedule::whereDate('schedule_date', $date)
+            ->active()
+            ->when($excludeId, fn($q) => $q->where('schedule_id', '!=', $excludeId))
+            ->pluck('enforcer_id')
+            ->unique()
+            ->values()
+            ->toArray();
 
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
+        $query = User::where('role', 'enforcer')
+            ->where('is_active', true)
+            ->where('is_archived', false)
+            ->whereNotIn('user_id', $bookedIds);
 
-    $newEnforcer = User::where('user_id', $request->enforcer_id)
-        ->where('role', 'enforcer')
-        ->where('is_active', true)
-        ->first();
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('firstname', 'like', "%{$s}%")
+                    ->orWhere('lastname', 'like', "%{$s}%")
+                    ->orWhere('email', 'like', "%{$s}%");
+            });
+        }
 
-    if (!$newEnforcer) {
+        $enforcers = $query->orderBy('firstname')
+            ->orderBy('lastname')
+            ->get()
+            ->map(fn($u) => [
+                'user_id'        => $u->user_id,
+                'firstname'      => $u->firstname,
+                'lastname'       => $u->lastname,
+                'email'          => $u->email,
+                'contact_number' => $u->contact_number,
+                'full_name'      => trim("{$u->firstname} {$u->lastname}"),
+            ]);
+
         return response()->json([
-            'message' => 'Selected user is not an active enforcer.',
-        ], 422);
+            'date'      => $date,
+            'booked'    => count($bookedIds),
+            'available' => $enforcers,
+            'count'     => $enforcers->count(),
+        ]);
     }
 
-    if ($newEnforcer->user_id === $schedule->enforcer_id) {
+    /* ==================================================================
+     |  REPLACE ENFORCER
+     ================================================================== */
+
+    public function replaceEnforcer(Request $request, $id)
+    {
+        $schedule = EnforcerSchedule::with(['enforcer', 'dutyLocation'])
+            ->findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'enforcer_id' => 'required|exists:users,user_id',
+            'reason'      => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $newEnforcer = User::where('user_id', $request->enforcer_id)
+            ->where('role', 'enforcer')
+            ->where('is_active', true)
+            ->where('is_archived', false)
+            ->first();
+
+        if (!$newEnforcer) {
+            return response()->json([
+                'message' => 'Selected user is not an active enforcer.',
+            ], 422);
+        }
+
+        if ($newEnforcer->user_id === $schedule->enforcer_id) {
+            return response()->json([
+                'message' => 'That enforcer is already assigned to this schedule.',
+            ], 422);
+        }
+
+        $conflict = EnforcerSchedule::where('enforcer_id', $newEnforcer->user_id)
+            ->whereDate('schedule_date', $schedule->schedule_date)
+            ->where('schedule_id', '!=', $schedule->schedule_id)
+            ->active()
+            ->exists();
+
+        if ($conflict) {
+            return response()->json([
+                'message' => 'The selected enforcer already has a schedule on this date.',
+            ], 422);
+        }
+
+        $oldEnforcerId   = $schedule->enforcer_id;
+        $oldEnforcerName = $schedule->enforcer
+            ? trim("{$schedule->enforcer->firstname} {$schedule->enforcer->lastname}")
+            : 'Unknown';
+
+        $schedule->enforcer_id = $newEnforcer->user_id;
+        $schedule->save();
+        $schedule->load(['enforcer', 'dutyLocation']);
+
+        try {
+            $dateStr = \Carbon\Carbon::parse($schedule->schedule_date)->format('M d, Y');
+            $start   = \Carbon\Carbon::parse($schedule->start_time)->format('h:i A');
+            $end     = \Carbon\Carbon::parse($schedule->end_time)->format('h:i A');
+            $admin   = $request->user();
+            $adminName = trim("{$admin->firstname} {$admin->lastname}");
+            $newName   = trim("{$newEnforcer->firstname} {$newEnforcer->lastname}");
+            $reason    = $request->reason;
+
+            NotificationService::notifyUser(
+                $newEnforcer->user_id,
+                'Schedule Assigned (Replacement)',
+                "You have been assigned to cover {$oldEnforcerName}'s shift on {$dateStr} from {$start} to {$end}."
+                    . ($reason ? " Reason: {$reason}" : ''),
+                Notification::TYPE_SCHEDULE_ASSIGNED,
+                'schedule',
+                $schedule->schedule_id
+            );
+
+            NotificationService::notifyUser(
+                $oldEnforcerId,
+                'Schedule Reassigned',
+                "Your shift on {$dateStr} ({$start}–{$end}) has been reassigned to {$newName}."
+                    . ($reason ? " Reason: {$reason}" : ''),
+                Notification::TYPE_SCHEDULE_UPDATED,
+                'schedule',
+                $schedule->schedule_id
+            );
+
+            NotificationService::notifyAdmins(
+                'Enforcer Replaced',
+                "{$adminName} replaced {$oldEnforcerName} with {$newName} on {$dateStr}.",
+                Notification::TYPE_SCHEDULE_UPDATED,
+                'schedule',
+                $schedule->schedule_id
+            );
+        } catch (\Throwable $ne) {
+            Log::warning('Replace enforcer notification failed: ' . $ne->getMessage());
+        }
+
         return response()->json([
-            'message' => 'That enforcer is already assigned to this schedule.',
-        ], 422);
-    }
-
-    // Make sure the new enforcer has no other schedule that day.
-    $conflict = EnforcerSchedule::where('enforcer_id', $newEnforcer->user_id)
-        ->whereDate('schedule_date', $schedule->schedule_date)
-        ->where('schedule_id', '!=', $schedule->schedule_id)
-        ->exists();
-
-    if ($conflict) {
-        return response()->json([
-            'message' => 'The selected enforcer already has a schedule on this date.',
-        ], 422);
-    }
-
-    $oldEnforcerId   = $schedule->enforcer_id;
-    $oldEnforcerName = $schedule->enforcer
-        ? trim("{$schedule->enforcer->firstname} {$schedule->enforcer->lastname}")
-        : 'Unknown';
-
-    $schedule->enforcer_id = $newEnforcer->user_id;
-    $schedule->save();
-    $schedule->load(['enforcer', 'dutyLocation']);
-
-    // ---------------- Notifications ----------------
-    try {
-        $dateStr = \Carbon\Carbon::parse($schedule->schedule_date)->format('M d, Y');
-        $start   = \Carbon\Carbon::parse($schedule->start_time)->format('h:i A');
-        $end     = \Carbon\Carbon::parse($schedule->end_time)->format('h:i A');
-        $admin   = $request->user();
-        $adminName = trim("{$admin->firstname} {$admin->lastname}");
-        $newName   = trim("{$newEnforcer->firstname} {$newEnforcer->lastname}");
-        $reason    = $request->reason;
-
-        // Notify the newly assigned enforcer.
-        NotificationService::notifyUser(
-            $newEnforcer->user_id,
-            'Schedule Assigned (Replacement)',
-            "You have been assigned to cover {$oldEnforcerName}'s shift on {$dateStr} from {$start} to {$end}."
-                . ($reason ? " Reason: {$reason}" : ''),
-            Notification::TYPE_SCHEDULE_ASSIGNED,
-            'schedule',
-            $schedule->schedule_id
-        );
-
-        // Notify the original enforcer.
-        NotificationService::notifyUser(
-            $oldEnforcerId,
-            'Schedule Reassigned',
-            "Your shift on {$dateStr} ({$start}–{$end}) has been reassigned to {$newName}."
-                . ($reason ? " Reason: {$reason}" : ''),
-            Notification::TYPE_SCHEDULE_UPDATED,
-            'schedule',
-            $schedule->schedule_id
-        );
-
-        // Notify admins.
-        NotificationService::notifyAdmins(
-            'Enforcer Replaced',
-            "{$adminName} replaced {$oldEnforcerName} with {$newName} on {$dateStr}.",
-            Notification::TYPE_SCHEDULE_UPDATED,
-            'schedule',
-            $schedule->schedule_id
-        );
-    } catch (\Throwable $ne) {
-        Log::warning('Replace enforcer notification failed: ' . $ne->getMessage());
-    }
-
-    return response()->json([
-        'message'  => 'Enforcer replaced successfully',
-        'data'     => $schedule,
-        'replaced' => [
-            'from' => [
-                'user_id'   => $oldEnforcerId,
-                'full_name' => $oldEnforcerName,
+            'message'  => 'Enforcer replaced successfully',
+            'data'     => $schedule,
+            'replaced' => [
+                'from' => [
+                    'user_id'   => $oldEnforcerId,
+                    'full_name' => $oldEnforcerName,
+                ],
+                'to' => [
+                    'user_id'   => $newEnforcer->user_id,
+                    'full_name' => trim("{$newEnforcer->firstname} {$newEnforcer->lastname}"),
+                ],
             ],
-            'to' => [
-                'user_id'   => $newEnforcer->user_id,
-                'full_name' => trim("{$newEnforcer->firstname} {$newEnforcer->lastname}"),
-            ],
-        ],
-    ]);
-}
-
+        ]);
+    }
 }

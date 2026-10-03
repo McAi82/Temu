@@ -1,7 +1,7 @@
 // web/src/services/api.js
 import axios from 'axios';
 
-const API_BASE_URL = 'https://ivory-gerbil-502781.hostingersite.com/api';
+const API_BASE_URL = 'http://localhost:8000/api';
 
 console.log('🌐 API Base URL:', API_BASE_URL);
 
@@ -70,8 +70,6 @@ export const getViolators = (page = 1, perPage = 20, filters = {}) =>
 export const getViolator = (id) => api.get(`/violators/${id}`);
 
 export const createViolator = (data) => {
-    // FormData needs multipart/form-data so file uploads work; the
-    // browser/axios sets the boundary automatically for POST.
     if (data instanceof FormData) {
         return api.post('/violators', data, {
             headers: { 'Content-Type': 'multipart/form-data' },
@@ -81,9 +79,6 @@ export const createViolator = (data) => {
 };
 
 export const updateViolator = (id, data) => {
-    // Same trick the mobile client uses: POST with _method=PUT so
-    // multipart bodies survive. Plain PUT + FormData silently drops
-    // file parts on some servers.
     if (data instanceof FormData) {
         return api.post(`/violators/${id}?_method=PUT`, data, {
             headers: { 'Content-Type': 'multipart/form-data' },
@@ -128,9 +123,13 @@ export const updateViolation = (id, data) => api.put(`/violations/${id}`, data);
 export const deleteViolation = (id) => api.delete(`/violations/${id}`);
 
 // ==================== TICKETS ====================
-export const getTickets = (page = 1, perPage = 20) =>
-    api.get(`/tickets?page=${page}&per_page=${perPage}`);
+export const getTickets = (page = 1, perPage = 20, filters = {}) =>
+    api.get('/tickets', {
+        params: { page, per_page: perPage, ...filters },
+    });
+
 export const getTicket = (id) => api.get(`/tickets/${id}`);
+
 export const getTicketStatistics = async () => {
     try {
         return await api.get('/tickets/statistics');
@@ -163,21 +162,53 @@ export const getUsers = (page = 1, perPage = 20, filters = {}) =>
         params: { page, per_page: perPage, ...filters },
     });
 export const getUser = (id) => api.get(`/users/${id}`);
-export const createUser = (data) => api.post('/users', data);
-export const updateUser = (id, data) => api.put(`/users/${id}`, data);
+
+export const createUser = (data) => {
+    if (data instanceof FormData) {
+        return api.post('/users', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    }
+    return api.post('/users', data);
+};
+
+export const updateUser = (id, data) => {
+    if (data instanceof FormData) {
+        return api.post(`/users/${id}?_method=PUT`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    }
+    return api.put(`/users/${id}`, data);
+};
+
 export const deleteUser = (id) => api.delete(`/users/${id}`);
 export const toggleUserStatus = (id) => api.put(`/users/${id}/toggle-status`);
 export const resetUserPassword = (id) => api.post(`/users/${id}/reset-password`);
 
 // ==================== ATTENDANCE ====================
-export const getAttendance = (page = 1, perPage = 20) =>
-    api.get(`/attendance?page=${page}&per_page=${perPage}`);
+export const getAttendance = (page = 1, perPage = 20, filters = {}) =>
+    api.get('/attendance', { params: { page, per_page: perPage, ...filters } });
 
 // ==================== REPORTS ====================
 export const getTodayReport = () => api.get('/reports/today');
 export const getWeeklyReport = (params) => api.get('/reports/weekly', { params });
 export const exportReport = (params) =>
     api.get('/reports/export', { params, responseType: 'blob' });
+
+/**
+ * Unified report endpoint.
+ *
+ * @param {object} params
+ *   period: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'
+ *   date:        YYYY-MM-DD                (daily)
+ *   week:        YYYY-Www                  (weekly)
+ *   month:       YYYY-MM                   (monthly)
+ *   year:        YYYY                      (yearly)
+ *   start_date, end_date                   (custom / weekly fallback)
+ *   include_archived: boolean
+ *   compare:     boolean
+ */
+export const getReport = (params) => api.get('/reports', { params });
 
 // ==================== NOTIFICATIONS ====================
 export const getNotifications = (params = {}) => api.get('/notifications', { params });
@@ -218,6 +249,19 @@ export const getAvailableEnforcers = (date, excludeId = null, search = '') =>
 
 export const replaceScheduleEnforcer = (id, payload) =>
     api.put(`/schedules/${id}/replace-enforcer`, payload);
+
+// ==================== ARCHIVES ====================
+/**
+ * List archived records. Resource is one of:
+ *   tickets | violators | vehicles | violations | users | schedules | duty-locations | payments
+ */
+export const getArchived = (resource, page = 1, perPage = 20, filters = {}) =>
+    api.get(`/archives/${resource}`, {
+        params: { page, per_page: perPage, ...filters },
+    });
+
+export const restoreArchived = (resource, id) =>
+    api.put(`/archives/${resource}/${id}/restore`);
 
 // ==================== BIOMETRIC REQUESTS ====================
 export const getBiometricRequests = (page = 1, perPage = 20, filters = {}) =>

@@ -29,12 +29,19 @@ class Violator extends Model
         'contact_number',
         'address',
         'profile_photo',
+        'is_archived',
+        'archived_at',
+        'archived_by',
     ];
 
     protected $casts = [
-        'expiry' => 'date',
-        'birthday' => 'date',
+        'expiry'       => 'date',
+        'birthday'     => 'date',
+        'is_archived'  => 'boolean',
+        'archived_at'  => 'datetime',
     ];
+
+    /* ---------------- Relations ---------------- */
 
     public function tickets()
     {
@@ -58,7 +65,13 @@ class Violator extends Model
         return $this->hasMany(Appeal::class, 'violator_id', 'violator_id');
     }
 
-    // Accessor for full name
+    public function archivedBy()
+    {
+        return $this->belongsTo(User::class, 'archived_by', 'user_id');
+    }
+
+    /* ---------------- Accessors ---------------- */
+
     public function getFullNameAttribute()
     {
         $name = trim("{$this->firstname} {$this->middlename} {$this->lastname}");
@@ -66,5 +79,33 @@ class Violator extends Model
             $name .= " {$this->suffix}";
         }
         return $name;
+    }
+
+    /* ---------------- Archive ---------------- */
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_archived', false);
+    }
+
+    public function scopeArchived($query)
+    {
+        return $query->where('is_archived', true);
+    }
+
+    public function archive(?int $userId = null): void
+    {
+        $this->is_archived = true;
+        $this->archived_at = now();
+        $this->archived_by = $userId;
+        $this->save();
+    }
+
+    public function restoreArchive(): void
+    {
+        $this->is_archived = false;
+        $this->archived_at = null;
+        $this->archived_by = null;
+        $this->save();
     }
 }

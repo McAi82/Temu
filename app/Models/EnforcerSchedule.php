@@ -23,13 +23,18 @@ class EnforcerSchedule extends Model
         'notes',
         'is_recurring',
         'recurrence_pattern',
+        'is_archived',
+        'archived_at',
+        'archived_by',
     ];
 
     protected $casts = [
         'schedule_date' => 'date',
-        'start_time' => 'datetime',
-        'end_time' => 'datetime',
-        'is_recurring' => 'boolean',
+        'start_time'    => 'datetime',
+        'end_time'      => 'datetime',
+        'is_recurring'  => 'boolean',
+        'is_archived'   => 'boolean',
+        'archived_at'   => 'datetime',
     ];
 
     public function enforcer()
@@ -42,21 +47,44 @@ class EnforcerSchedule extends Model
         return $this->belongsTo(DutyLocation::class, 'duty_location_id', 'id');
     }
 
-    // Scope for today's schedules
+    public function archivedBy()
+    {
+        return $this->belongsTo(User::class, 'archived_by', 'user_id');
+    }
+
     public function scopeToday($query)
     {
         return $query->whereDate('schedule_date', now()->toDateString());
     }
 
-    // Scope for upcoming schedules
     public function scopeUpcoming($query)
     {
         return $query->whereDate('schedule_date', '>=', now()->toDateString());
     }
 
-    // Scope for active schedules
     public function scopeActive($query)
     {
-        return $query->whereIn('status', ['scheduled', 'in_progress']);
+        return $query->where('is_archived', false);
+    }
+
+    public function scopeArchived($query)
+    {
+        return $query->where('is_archived', true);
+    }
+
+    public function archive(?int $userId = null): void
+    {
+        $this->is_archived = true;
+        $this->archived_at = now();
+        $this->archived_by = $userId;
+        $this->save();
+    }
+
+    public function restoreArchive(): void
+    {
+        $this->is_archived = false;
+        $this->archived_at = null;
+        $this->archived_by = null;
+        $this->save();
     }
 }

@@ -1,3 +1,4 @@
+// web/src/App.jsx
 import React from 'react';
 import {
     BrowserRouter as Router,
@@ -24,6 +25,7 @@ import Schedule from './pages/Schedule';
 import PublicTicketView from './pages/PublicTicket';
 import NotificationToasts from './components/notifications/NotificationToasts';
 import Payments from './pages/Payments';
+import Archives from './pages/Archives';
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -69,6 +71,7 @@ const AppRoutes = () => {
                 <Route path="/duty-map" element={<ProtectedRoute><Layout><DutyMap /></Layout></ProtectedRoute>} />
                 <Route path="/schedule" element={<ProtectedRoute><Layout><Schedule /></Layout></ProtectedRoute>} />
                 <Route path="/payments" element={<ProtectedRoute><Layout><Payments /></Layout></ProtectedRoute>} />
+                <Route path="/archives" element={<ProtectedRoute><Layout><Archives /></Layout></ProtectedRoute>} />
             </Routes>
 
             {user && <NotificationToasts />}
@@ -78,7 +81,7 @@ const AppRoutes = () => {
 
 function App() {
     return (
-        <QueryClientProvider client={queryClient}>
+        <QueryClientProvider client={queryClient} >
             <Router>
                 <AlertProvider>
                     <AuthProvider>
@@ -86,7 +89,7 @@ function App() {
                     </AuthProvider>
                 </AlertProvider>
             </Router>
-        </QueryClientProvider>
+        </QueryClientProvider >
     );
 }
 

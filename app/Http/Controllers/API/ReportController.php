@@ -8,83 +8,89 @@ use App\Models\Ticket;
 use App\Models\TicketViolation;
 use App\Models\Violator;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ReportController extends Controller
 {
     /* ==================================================================
-     |  TODAY
+     |  UNIFIED REPORT (daily / weekly / monthly / yearly / custom)
+     |  GET /reports?period=...&...
+     ================================================================== */
+
+    public function report(Request $request)
+    {
+        try {
+            [$start, $end, $label] = $this->resolvePeriod($request);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $includeArchived = $request->boolean('include_archived', false);
+
+        $payload = $this->buildReport($start, $end, $includeArchived);
+        $payload['period'] = $request->get('period', 'custom');
+        $payload['label']  = $label;
+        $payload['date_range'] = [
+            'start' => $start->toDateString(),
+            'end'   => $end->toDateString(),
+        ];
+
+        // -------- Explicit comparison range --------
+        // Frontend now sends compare_start / compare_end alongside compare=1.
+        // If either is missing, we skip the comparison block entirely.
+        if (
+            $request->boolean('compare')
+            && $request->filled('compare_start')
+            && $request->filled('compare_end')
+        ) {
+            $compareStart = Carbon::parse($request->compare_start)->startOfDay();
+            $compareEnd   = Carbon::parse($request->compare_end)->endOfDay();
+
+            if ($compareStart->lte($compareEnd)) {
+                $compare = $this->buildReport($compareStart, $compareEnd, $includeArchived);
+
+                $payload['compare'] = [
+                    'date_range' => [
+                        'start' => $compareStart->toDateString(),
+                        'end'   => $compareEnd->toDateString(),
+                    ],
+                    'label'    => 'Compare — '
+                        . $compareStart->format('M d, Y') . ' to '
+                        . $compareEnd->format('M d, Y'),
+                    'summary'           => $compare['summary'],
+                    'payments_summary'  => $compare['payments_summary'],
+                    'daily_breakdown'   => $compare['daily_breakdown'],
+                    'top_violations'    => $compare['top_violations'],
+                    'top_violators'     => $compare['top_violators'],
+                    'enforcer_performance' => $compare['enforcer_performance'],
+                    'deltas' => $this->computeDeltas($payload['summary'], $compare['summary']),
+                ];
+            }
+        }
+
+        return response()->json($payload);
+    }
+
+    /* ==================================================================
+     |  TODAY (kept for backwards compatibility)
      ================================================================== */
 
     public function todayReport(Request $request)
     {
-        $today = now()->toDateString();
+        $today = now()->startOfDay();
+        $payload = $this->buildReport($today, $today->copy()->endOfDay(), false);
 
-        // Tickets issued today
-        $todayTickets = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
-            ->whereDate('created_at', $today)
-            ->get();
-
-        // Statistics
-        $totalTickets    = $todayTickets->count();
-        $totalViolations = TicketViolation::whereIn('ticket_id', $todayTickets->pluck('ticket_id'))->count();
-        $totalFines      = TicketViolation::whereIn('ticket_id', $todayTickets->pluck('ticket_id'))->sum('fine_amount');
-        $paidTickets     = $todayTickets->where('status', 'paid')->count();
-        $issuedTickets   = $todayTickets->where('status', 'issued')->count();
-
-        // Collection rate (based on ticket status, not payments)
-        $collectionRate = $totalTickets > 0 ? round(($paidTickets / $totalTickets) * 100, 2) : 0;
-
-        // Top violations today
-        $topViolations = TicketViolation::select(
-            'violation_types.violation_name',
-            DB::raw('COUNT(*) as count')
-        )
-            ->join('violation_types', 'ticket_violations.violation_id', '=', 'violation_types.violation_id')
-            ->whereIn('ticket_id', $todayTickets->pluck('ticket_id'))
-            ->groupBy('violation_types.violation_name')
-            ->orderBy('count', 'desc')
-            ->limit(5)
-            ->get();
-
-        // Enforcer performance today
-        $enforcerStats = User::where('role', 'enforcer')
-            ->withCount(['tickets' => function ($query) use ($today) {
-                $query->whereDate('created_at', $today);
-            }])
-            ->get()
-            ->map(function ($enforcer) {
-                return [
-                    'name'          => $enforcer->firstname . ' ' . $enforcer->lastname,
-                    'tickets_count' => $enforcer->tickets_count,
-                ];
-            })
-            ->filter(fn ($enforcer) => $enforcer['tickets_count'] > 0)
-            ->values();
-
-        // Payments collected today
-        $paymentsSummary = $this->buildPaymentsSummary($today, $today);
-
-        return response()->json([
-            'date'    => $today,
-            'summary' => [
-                'total_tickets'    => $totalTickets,
-                'total_violations' => $totalViolations,
-                'total_fines'      => $totalFines,
-                'paid_tickets'     => $paidTickets,
-                'issued_tickets'   => $issuedTickets,
-                'collection_rate'  => $collectionRate,
-            ],
-            'recent_tickets'       => $todayTickets->take(10),
-            'top_violations'       => $topViolations,
-            'enforcer_performance' => $enforcerStats,
-            'payments_summary'     => $paymentsSummary,
-        ]);
+        return response()->json(array_merge($payload, [
+            'date' => $today->toDateString(),
+            'recent_tickets' => $payload['recent_tickets'],
+        ]));
     }
 
     /* ==================================================================
-     |  WEEKLY / RANGE
+     |  WEEKLY / RANGE (kept)
      ================================================================== */
 
     public function weeklyReport(Request $request)
@@ -92,93 +98,17 @@ class ReportController extends Controller
         $startDate = $request->get('start_date', now()->startOfWeek()->toDateString());
         $endDate   = $request->get('end_date', now()->endOfWeek()->toDateString());
 
-        // Tickets in date range
-        $weeklyTickets = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->get();
+        $start = Carbon::parse($startDate)->startOfDay();
+        $end   = Carbon::parse($endDate)->endOfDay();
 
-        // Daily breakdown
-        $dailyBreakdown = [];
-        $currentDate    = strtotime($startDate);
-        $endDateTime    = strtotime($endDate);
+        $payload = $this->buildReport($start, $end, false);
 
-        while ($currentDate <= $endDateTime) {
-            $date       = date('Y-m-d', $currentDate);
-            $dayTickets = $weeklyTickets->filter(function ($ticket) use ($date) {
-                return substr($ticket->created_at, 0, 10) === $date;
-            });
-
-            $dailyBreakdown[] = [
-                'date'          => $date,
-                'day_name'      => date('l', $currentDate),
-                'tickets_count' => $dayTickets->count(),
-                'total_fines'   => TicketViolation::whereIn('ticket_id', $dayTickets->pluck('ticket_id'))->sum('fine_amount'),
-            ];
-
-            $currentDate = strtotime('+1 day', $currentDate);
-        }
-
-        // Weekly statistics
-        $totalTickets     = $weeklyTickets->count();
-        $totalViolations  = TicketViolation::whereIn('ticket_id', $weeklyTickets->pluck('ticket_id'))->count();
-        $totalFines       = TicketViolation::whereIn('ticket_id', $weeklyTickets->pluck('ticket_id'))->sum('fine_amount');
-        $paidTickets      = $weeklyTickets->where('status', 'paid')->count();
-        $issuedTickets    = $weeklyTickets->where('status', 'issued')->count();
-        $contestedTickets = $weeklyTickets->where('status', 'contested')->count();
-        $dismissedTickets = $weeklyTickets->where('status', 'dismissed')->count();
-
-        $daysInRange         = max(1, \Carbon\Carbon::parse($startDate)->diffInDays(\Carbon\Carbon::parse($endDate)) + 1);
-        $averageDailyTickets = $totalTickets / $daysInRange;
-        $collectionRate      = $totalTickets > 0 ? round(($paidTickets / $totalTickets) * 100, 2) : 0;
-
-        // Top violators of the week
-        $topViolators = Violator::select('violators.firstname', 'violators.lastname', 'violators.license')
-            ->withCount(['tickets' => function ($query) use ($startDate, $endDate) {
-                $query->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-            }])
-            ->having('tickets_count', '>', 0)
-            ->orderBy('tickets_count', 'desc')
-            ->limit(5)
-            ->get();
-
-        // Top violations of the week
-        $topViolations = TicketViolation::select(
-            'violation_types.violation_name',
-            DB::raw('COUNT(*) as count'),
-            DB::raw('SUM(ticket_violations.fine_amount) as total_fine')
-        )
-            ->join('violation_types', 'ticket_violations.violation_id', '=', 'violation_types.violation_id')
-            ->whereIn('ticket_id', $weeklyTickets->pluck('ticket_id'))
-            ->groupBy('violation_types.violation_name')
-            ->orderBy('count', 'desc')
-            ->limit(5)
-            ->get();
-
-        // Payments collected in range
-        $paymentsSummary = $this->buildPaymentsSummary($startDate, $endDate);
-
-        return response()->json([
+        return response()->json(array_merge($payload, [
             'date_range' => [
-                'start' => $startDate,
-                'end'   => $endDate,
+                'start' => $start->toDateString(),
+                'end'   => $end->toDateString(),
             ],
-            'summary' => [
-                'total_tickets'         => $totalTickets,
-                'total_violations'      => $totalViolations,
-                'total_fines'           => $totalFines,
-                'paid_tickets'          => $paidTickets,
-                'issued_tickets'        => $issuedTickets,
-                'contested_tickets'     => $contestedTickets,
-                'dismissed_tickets'     => $dismissedTickets,
-                'average_daily_tickets' => round($averageDailyTickets, 2),
-                'collection_rate'       => $collectionRate,
-            ],
-            'daily_breakdown'  => $dailyBreakdown,
-            'top_violators'    => $topViolators,
-            'top_violations'   => $topViolations,
-            'recent_tickets'   => $weeklyTickets->take(10),
-            'payments_summary' => $paymentsSummary,
-        ]);
+        ]));
     }
 
     /* ==================================================================
@@ -190,12 +120,19 @@ class ReportController extends Controller
         $startDate = $request->get('start_date', now()->startOfWeek()->toDateString());
         $endDate   = $request->get('end_date', now()->endOfWeek()->toDateString());
 
-        $tickets = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
-            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-            ->get();
+        $includeArchived = $request->boolean('include_archived', false);
+
+        $query = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
+            ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+
+        if (!$includeArchived) {
+            $query->active();
+        }
+
+        $tickets = $query->get();
 
         $csvData   = [];
-        $csvData[] = ['Ticket #', 'Violator', 'License', 'Plate #', 'Violations', 'Total Fine', 'Location', 'Date', 'Status', 'Enforcer'];
+        $csvData[] = ['Ticket #', 'Violator', 'License', 'Plate #', 'Violations', 'Total Fine', 'Location', 'Date', 'Status', 'Enforcer', 'Archived'];
 
         foreach ($tickets as $ticket) {
             $violationsList = $ticket->violations->map(function ($v) {
@@ -213,10 +150,10 @@ class ReportController extends Controller
                 date('Y-m-d H:i', strtotime($ticket->violation_datetime)),
                 strtoupper($ticket->status),
                 $ticket->enforcer->firstname . ' ' . $ticket->enforcer->lastname,
+                $ticket->is_archived ? 'YES' : 'NO',
             ];
         }
 
-        // Convert to CSV string
         $csv = '';
         foreach ($csvData as $row) {
             $csv .= '"' . implode('","', array_map('addslashes', $row)) . '"' . "\n";
@@ -228,38 +165,284 @@ class ReportController extends Controller
     }
 
     /* ==================================================================
-     |  PAYMENTS SUMMARY HELPER
+     |  PERIOD RESOLUTION
      ================================================================== */
 
     /**
-     * Build a payments summary for the given date range.
-     * Used by both todayReport() and weeklyReport().
+     * @return array{0: Carbon, 1: Carbon, 2: string}  [start, end, human label]
      */
-    private function buildPaymentsSummary(string $startDate, string $endDate): array
+    private function resolvePeriod(Request $request): array
     {
-        $start = $startDate . ' 00:00:00';
-        $end   = $endDate   . ' 23:59:59';
+        $period = strtolower((string) $request->get('period', 'daily'));
 
-        // Base query — only completed payments count toward "collected".
-        $base = Payment::where('payment_status', 'completed')
+        switch ($period) {
+            case 'daily': {
+                    $date = $request->filled('date')
+                        ? Carbon::parse($request->date)
+                        : now();
+                    return [
+                        $date->copy()->startOfDay(),
+                        $date->copy()->endOfDay(),
+                        'Daily — ' . $date->format('M d, Y'),
+                    ];
+                }
+
+            case 'weekly': {
+                    // Accept either week=YYYY-Www or start_date/end_date.
+                    if ($request->filled('week')) {
+                        // "YYYY-Www" or "YYYY-Www"
+                        try {
+                            $week = Carbon::parse($request->week); // best effort
+                            $start = $week->copy()->startOfWeek();
+                        } catch (\Throwable $e) {
+                            throw new \InvalidArgumentException('Invalid week format. Use YYYY-Www.');
+                        }
+                    } elseif ($request->filled('start_date')) {
+                        $start = Carbon::parse($request->start_date)->startOfWeek();
+                    } else {
+                        $start = now()->startOfWeek();
+                    }
+
+                    return [
+                        $start->copy()->startOfDay(),
+                        $start->copy()->endOfWeek()->endOfDay(),
+                        'Weekly — ' . $start->format('M d') . ' to ' . $start->copy()->endOfWeek()->format('M d, Y'),
+                    ];
+                }
+
+            case 'monthly': {
+                    $month = $request->filled('month')
+                        ? Carbon::parse($request->month . '-01')
+                        : now();
+
+                    return [
+                        $month->copy()->startOfMonth()->startOfDay(),
+                        $month->copy()->endOfMonth()->endOfDay(),
+                        'Monthly — ' . $month->format('F Y'),
+                    ];
+                }
+
+            case 'yearly': {
+                    $year = $request->filled('year') ? (int) $request->year : now()->year;
+                    $start = Carbon::create($year, 1, 1)->startOfDay();
+                    return [
+                        $start,
+                        Carbon::create($year, 12, 31)->endOfDay(),
+                        'Yearly — ' . $year,
+                    ];
+                }
+
+            case 'custom':
+            default: {
+                    if (!$request->filled('start_date') || !$request->filled('end_date')) {
+                        throw new \InvalidArgumentException('start_date and end_date are required for custom range.');
+                    }
+                    $start = Carbon::parse($request->start_date)->startOfDay();
+                    $end   = Carbon::parse($request->end_date)->endOfDay();
+
+                    if ($start->gt($end)) {
+                        throw new \InvalidArgumentException('start_date must be before or equal to end_date.');
+                    }
+
+                    return [
+                        $start,
+                        $end,
+                        'Custom — ' . $start->format('M d, Y') . ' to ' . $end->format('M d, Y'),
+                    ];
+                }
+        }
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function previousPeriod(Carbon $start, Carbon $end): array
+    {
+        $days = $start->diffInDays($end) + 1;
+
+        return [
+            $start->copy()->subDays($days)->startOfDay(),
+            $end->copy()->subDays($days)->endOfDay(),
+        ];
+    }
+
+    /* ==================================================================
+     |  REPORT BUILDER
+     ================================================================== */
+
+    private function buildReport(Carbon $start, Carbon $end, bool $includeArchived): array
+    {
+        $startStr = $start->toDateTimeString();
+        $endStr   = $end->toDateTimeString();
+
+        $ticketQuery = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
+            ->whereBetween('created_at', [$startStr, $endStr]);
+
+        if (!$includeArchived) {
+            $ticketQuery->active();
+        }
+
+        $tickets = $ticketQuery->get();
+        $ticketIds = $tickets->pluck('ticket_id');
+
+        $totalTickets     = $tickets->count();
+        $totalViolations  = TicketViolation::whereIn('ticket_id', $ticketIds)->count();
+        $totalFines       = TicketViolation::whereIn('ticket_id', $ticketIds)->sum('fine_amount');
+        $paidTickets      = $tickets->where('status', 'paid')->count();
+        $issuedTickets    = $tickets->where('status', 'issued')->count();
+        $contestedTickets = $tickets->where('status', 'contested')->count();
+        $dismissedTickets = $tickets->where('status', 'dismissed')->count();
+        $partialTickets   = $tickets->where('status', 'partial_paid')->count();
+
+        $daysInRange = max(1, $start->diffInDays($end) + 1);
+        $averageDailyTickets = round($totalTickets / $daysInRange, 2);
+        $collectionRate = $totalTickets > 0 ? round(($paidTickets / $totalTickets) * 100, 2) : 0;
+
+        // ---- Daily breakdown (for chart) ----
+        $dailyBreakdown = [];
+        $cursor = $start->copy()->startOfDay();
+        while ($cursor->lte($end)) {
+            $date = $cursor->toDateString();
+
+            $dayTickets = $tickets->filter(function ($t) use ($date) {
+                return substr((string) $t->created_at, 0, 10) === $date;
+            });
+
+            $dayIds = $dayTickets->pluck('ticket_id');
+            $dayFines = TicketViolation::whereIn('ticket_id', $dayIds)->sum('fine_amount');
+
+            $dailyBreakdown[] = [
+                'date'          => $date,
+                'day_name'      => $cursor->format('D'),
+                'tickets_count' => $dayTickets->count(),
+                'total_fines'   => (float) $dayFines,
+            ];
+
+            $cursor->addDay();
+        }
+
+        // ---- Top violators ----
+        $topViolators = Violator::select('violators.firstname', 'violators.lastname', 'violators.license')
+            ->withCount(['tickets' => function ($q) use ($startStr, $endStr, $includeArchived) {
+                $q->whereBetween('created_at', [$startStr, $endStr]);
+                if (!$includeArchived) {
+                    $q->where('is_archived', false);
+                }
+            }])
+            ->having('tickets_count', '>', 0)
+            ->orderBy('tickets_count', 'desc')
+            ->limit(5)
+            ->get();
+
+        // ---- Top violations ----
+        $topViolations = TicketViolation::select(
+            'violation_types.violation_name',
+            DB::raw('COUNT(*) as count'),
+            DB::raw('SUM(ticket_violations.fine_amount) as total_fine')
+        )
+            ->join('violation_types', 'ticket_violations.violation_id', '=', 'violation_types.violation_id')
+            ->whereIn('ticket_id', $ticketIds)
+            ->groupBy('violation_types.violation_name')
+            ->orderBy('count', 'desc')
+            ->limit(5)
+            ->get();
+
+        // ---- Enforcer performance ----
+        $enforcerStats = User::where('role', 'enforcer')
+            ->withCount(['tickets' => function ($q) use ($startStr, $endStr, $includeArchived) {
+                $q->whereBetween('created_at', [$startStr, $endStr]);
+                if (!$includeArchived) {
+                    $q->where('is_archived', false);
+                }
+            }])
+            ->get()
+            ->map(function ($enforcer) {
+                return [
+                    'name'          => $enforcer->firstname . ' ' . $enforcer->lastname,
+                    'tickets_count' => $enforcer->tickets_count,
+                ];
+            })
+            ->filter(fn($e) => $e['tickets_count'] > 0)
+            ->sortByDesc('tickets_count')
+            ->values();
+
+        $paymentsSummary = $this->buildPaymentsSummary($start, $end, $includeArchived);
+
+        return [
+            'summary' => [
+                'total_tickets'         => $totalTickets,
+                'total_violations'      => $totalViolations,
+                'total_fines'           => (float) $totalFines,
+                'paid_tickets'          => $paidTickets,
+                'issued_tickets'        => $issuedTickets,
+                'contested_tickets'     => $contestedTickets,
+                'dismissed_tickets'     => $dismissedTickets,
+                'partial_tickets'       => $partialTickets,
+                'average_daily_tickets' => $averageDailyTickets,
+                'collection_rate'       => $collectionRate,
+            ],
+            'daily_breakdown'      => $dailyBreakdown,
+            'top_violators'        => $topViolators,
+            'top_violations'       => $topViolations,
+            'enforcer_performance' => $enforcerStats,
+            'recent_tickets'       => $tickets->take(10)->values(),
+            'payments_summary'     => $paymentsSummary,
+        ];
+    }
+
+    private function computeDeltas(array $current, array $previous): array
+    {
+        $keys = [
+            'total_tickets',
+            'total_violations',
+            'total_fines',
+            'paid_tickets',
+            'issued_tickets',
+            'contested_tickets',
+            'dismissed_tickets',
+            'average_daily_tickets',
+            'collection_rate',
+        ];
+
+        $deltas = [];
+        foreach ($keys as $k) {
+            $c = (float) ($current[$k] ?? 0);
+            $p = (float) ($previous[$k] ?? 0);
+
+            $pct = $p > 0 ? round((($c - $p) / $p) * 100, 2) : ($c > 0 ? 100.0 : 0.0);
+
+            $deltas[$k] = [
+                'current'   => $c,
+                'previous'  => $p,
+                'change'    => round($c - $p, 2),
+                'percent'   => $pct,
+                'direction' => $c > $p ? 'up' : ($c < $p ? 'down' : 'flat'),
+            ];
+        }
+        return $deltas;
+    }
+
+    private function buildPaymentsSummary(Carbon $start, Carbon $end, bool $includeArchived): array
+    {
+        $base = Payment::query()
+            ->where('payment_status', 'completed')
             ->whereBetween('payment_date', [$start, $end]);
+
+        if (!$includeArchived) {
+            $base->active();
+        }
 
         $totalCollected = (float) (clone $base)->sum('amount_paid');
         $paymentsCount  = (int)   (clone $base)->count();
         $uniqueTickets  = (int)   (clone $base)->distinct('ticket_id')->count('ticket_id');
         $averagePayment = $paymentsCount > 0 ? round($totalCollected / $paymentsCount, 2) : 0;
 
-        // Breakdown by payment_method
         $byMethod = (clone $base)
-            ->select(
-                'payment_method',
-                DB::raw('COUNT(*) as count'),
-                DB::raw('SUM(amount_paid) as total')
-            )
+            ->select('payment_method', DB::raw('COUNT(*) as count'), DB::raw('SUM(amount_paid) as total'))
             ->groupBy('payment_method')
             ->orderByDesc('total')
             ->get()
-            ->map(fn ($row) => [
+            ->map(fn($row) => [
                 'method' => $row->payment_method,
                 'label'  => ucwords(str_replace('_', ' ', $row->payment_method)),
                 'count'  => (int) $row->count,
@@ -268,12 +451,14 @@ class ReportController extends Controller
             ->values()
             ->toArray();
 
-        // Refunded / voided amounts in the same range (informational only).
-        $refundedTotal = (float) Payment::where('payment_status', 'refunded')
-            ->whereBetween('payment_date', [$start, $end])
-            ->sum('amount_paid');
+        $refundQuery = Payment::query()
+            ->where('payment_status', 'refunded')
+            ->whereBetween('payment_date', [$start, $end]);
+        if (!$includeArchived) {
+            $refundQuery->active();
+        }
+        $refundedTotal = (float) $refundQuery->sum('amount_paid');
 
-        // Recent payments in range (top 10).
         $recentPayments = (clone $base)
             ->with(['ticket.violator', 'ticket.vehicle'])
             ->orderByDesc('payment_date')
@@ -297,17 +482,12 @@ class ReportController extends Controller
             ->values()
             ->toArray();
 
-        // Daily payments series — used to overlay a "collected" line on the
-        // range chart in the front-end. Empty for a single-day range is fine.
         $daily = (clone $base)
-            ->select(
-                DB::raw('DATE(payment_date) as date'),
-                DB::raw('SUM(amount_paid) as total')
-            )
+            ->select(DB::raw('DATE(payment_date) as date'), DB::raw('SUM(amount_paid) as total'))
             ->groupBy(DB::raw('DATE(payment_date)'))
             ->orderBy('date')
             ->get()
-            ->map(fn ($row) => [
+            ->map(fn($row) => [
                 'date'  => $row->date,
                 'total' => (float) $row->total,
             ])
@@ -315,15 +495,15 @@ class ReportController extends Controller
             ->toArray();
 
         return [
-            'total_collected'  => $totalCollected,
-            'refunded_total'   => $refundedTotal,
-            'net_collected'    => max(0, $totalCollected - $refundedTotal),
-            'payments_count'   => $paymentsCount,
-            'unique_tickets'   => $uniqueTickets,
-            'average_payment'  => $averagePayment,
-            'by_method'        => $byMethod,
-            'recent_payments'  => $recentPayments,
-            'daily'            => $daily,
+            'total_collected' => $totalCollected,
+            'refunded_total'  => $refundedTotal,
+            'net_collected'   => max(0, $totalCollected - $refundedTotal),
+            'payments_count'  => $paymentsCount,
+            'unique_tickets'  => $uniqueTickets,
+            'average_payment' => $averagePayment,
+            'by_method'       => $byMethod,
+            'recent_payments' => $recentPayments,
+            'daily'           => $daily,
         ];
     }
 }

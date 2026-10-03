@@ -24,18 +24,24 @@ class Ticket extends Model
         'remarks',
         'status',
         'qr_code',
-        'pdf_path'
+        'pdf_path',
+        'is_archived',
+        'archived_at',
+        'archived_by',
     ];
 
     protected $casts = [
         'violation_datetime' => 'datetime',
-        'latitude' => 'decimal:8',
-        'longitude' => 'decimal:8',
+        'latitude'           => 'decimal:8',
+        'longitude'          => 'decimal:8',
+        'is_archived'        => 'boolean',
+        'archived_at'        => 'datetime',
     ];
 
     protected $appends = ['total_fine', 'qr_code_url'];
 
-    // Relationships
+    /* ---------------- Relations ---------------- */
+
     public function violator()
     {
         return $this->belongsTo(Violator::class, 'violator_id', 'violator_id');
@@ -66,24 +72,56 @@ class Ticket extends Model
         return $this->hasOne(Appeal::class, 'ticket_id', 'ticket_id');
     }
 
-    // Accessor for total fine
+    public function archivedBy()
+    {
+        return $this->belongsTo(User::class, 'archived_by', 'user_id');
+    }
+
+    /* ---------------- Accessors ---------------- */
+
     public function getTotalFineAttribute()
     {
         return $this->violations ? $this->violations->sum('fine_amount') : 0;
     }
 
-    // Accessor for total demerit points
     public function getTotalDemeritPointsAttribute()
     {
         return $this->violations ? $this->violations->sum('demerit_points') : 0;
     }
 
-    // ✅ Accessor for QR code URL
     public function getQrCodeUrlAttribute()
     {
         if ($this->qr_code) {
             return asset('storage/' . $this->qr_code);
         }
         return null;
+    }
+
+    /* ---------------- Archive ---------------- */
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_archived', false);
+    }
+
+    public function scopeArchived($query)
+    {
+        return $query->where('is_archived', true);
+    }
+
+    public function archive(?int $userId = null): void
+    {
+        $this->is_archived = true;
+        $this->archived_at = now();
+        $this->archived_by = $userId;
+        $this->save();
+    }
+
+    public function restoreArchive(): void
+    {
+        $this->is_archived = false;
+        $this->archived_at = null;
+        $this->archived_by = null;
+        $this->save();
     }
 }

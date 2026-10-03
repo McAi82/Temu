@@ -19,6 +19,10 @@ use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
+    /* ==================================================================
+     |  LIST
+     ================================================================== */
+
     public function index(Request $request)
     {
         $perPage = (int) $request->get('per_page', 20);
@@ -26,12 +30,17 @@ class UserController extends Controller
 
         $query = User::query();
 
-        // ---- Role filter (used by DutyMap / Schedule picker) ----
+        $visibility = $request->get('visibility', 'active');
+        if ($visibility === 'archived') {
+            $query->archived();
+        } elseif ($visibility !== 'all') {
+            $query->active();
+        }
+
         if ($request->filled('role')) {
             $query->where('role', $request->role);
         }
 
-        // ---- Search across name, email, role, contact ----
         if ($request->filled('search')) {
             $term = '%' . $request->search . '%';
             $query->where(function ($q) use ($term) {
@@ -44,17 +53,13 @@ class UserController extends Controller
             });
         }
 
-        // ---- Sort (whitelisted columns only) ----
         $sortable = ['lastname', 'firstname', 'email', 'role', 'created_at'];
         $sortBy  = in_array($request->get('sort_by'), $sortable, true)
             ? $request->get('sort_by')
             : 'lastname';
-        $sortDir = strtolower($request->get('sort_dir', 'asc')) === 'desc'
-            ? 'desc'
-            : 'asc';
+        $sortDir = strtolower($request->get('sort_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
 
-        $query->orderBy($sortBy, $sortDir)
-            ->orderBy('firstname', 'asc'); // tie-breaker
+        $query->orderBy($sortBy, $sortDir)->orderBy('firstname', 'asc');
 
         return response()->json(
             $query->paginate($perPage, ['*'], 'page', $page)
@@ -63,8 +68,12 @@ class UserController extends Controller
 
     public function show($id)
     {
-        return response()->json(User::findOrFail($id));
+        return response()->json(User::with('archivedBy')->findOrFail($id));
     }
+
+    /* ==================================================================
+     |  UPDATE
+     ================================================================== */
 
     public function update(Request $request, $id)
     {
@@ -110,21 +119,60 @@ class UserController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    /* ==================================================================
+     |  ARCHIVE (replaces destroy)
+     ================================================================== */
+
+    public function destroy(Request $request, $id)
     {
         $user = User::findOrFail($id);
-        if ($user->profile_image && Storage::disk('public')->exists($user->profile_image)) {
-            Storage::disk('public')->delete($user->profile_image);
+
+        if ($user->is_archived) {
+            return response()->json(['message' => 'User is already archived.'], 400);
         }
-        Face::where('user_id', $id)->delete();
-        $user->delete();
-        return response()->json(['message' => 'User deleted successfully']);
+
+        if ($user->user_id === $request->user()->user_id) {
+            return response()->json(['message' => 'You cannot archive your own account.'], 403);
+        }
+
+        try {
+            $user->archive($request->user()->user_id);
+
+            try {
+                $actor = $request->user();
+                $actorName = trim("{$actor->firstname} {$actor->lastname}");
+                $targetName = trim("{$user->firstname} {$user->lastname}");
+
+                NotificationService::notifyAdmins(
+                    'User Archived',
+                    "{$actorName} archived user {$targetName} ({$user->email})",
+                    Notification::TYPE_USER_ARCHIVED,
+                    'user',
+                    $user->user_id
+                );
+            } catch (\Throwable $ne) {
+                Log::warning('User archive notification failed: ' . $ne->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'User archived successfully',
+                'archived' => true,
+                'user' => $user->fresh(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('User archive failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to archive user'], 500);
+        }
     }
 
-    public function toggleStatus($id)
+    /* ==================================================================
+     |  TOGGLE STATUS (active/inactive, separate from archive)
+     ================================================================== */
+
+    public function toggleStatus(Request $request, $id)
     {
         $user = User::findOrFail($id);
-        if ($user->user_id === auth()->user()->user_id) {
+        if ($user->user_id === $request->user()->user_id) {
             return response()->json(['message' => 'Cannot deactivate your own account'], 403);
         }
 
@@ -155,6 +203,10 @@ class UserController extends Controller
             'user' => $user,
         ]);
     }
+
+    /* ==================================================================
+     |  STORE
+     ================================================================== */
 
     public function store(Request $request)
     {
@@ -196,7 +248,6 @@ class UserController extends Controller
 
         $user = User::create($userData);
 
-        // ---- Send the welcome email (best-effort, non-blocking) ----
         $emailSent = false;
         $emailError = null;
 
@@ -208,7 +259,6 @@ class UserController extends Controller
             Log::error('Failed to send welcome email to ' . $user->email . ': ' . $e->getMessage());
         }
 
-        // ---- In-app notifications (never block the response) ----
         try {
             $fullName = trim("{$user->firstname} {$user->lastname}");
             $roleLabel = ucfirst($user->role);
@@ -241,6 +291,10 @@ class UserController extends Controller
             'email_error' => $emailError,
         ], 201);
     }
+
+    /* ==================================================================
+     |  RESET PASSWORD
+     ================================================================== */
 
     public function resetPassword($id)
     {

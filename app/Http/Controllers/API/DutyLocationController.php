@@ -13,13 +13,27 @@ use Illuminate\Support\Facades\Log;
 
 class DutyLocationController extends Controller
 {
+    /* ==================================================================
+     |  LIST
+     ================================================================== */
+
     public function index(Request $request)
     {
-        $perPage = $request->get('per_page', 20);
+        $perPage = (int) $request->get('per_page', 20);
+
         $query = DutyLocation::with('enforcer');
 
+        $visibility = $request->get('visibility', 'active');
+        if ($visibility === 'archived') {
+            $query->archived();
+        } elseif ($visibility !== 'all') {
+            $query->where('is_archived', false);
+        }
+
         if ($request->filled('enforcer_id')) $query->where('enforcer_id', $request->enforcer_id);
-        if ($request->has('is_active')) $query->where('is_active', $request->is_active);
+        if ($request->has('is_active') && $visibility === 'active') {
+            $query->where('is_active', $request->is_active);
+        }
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -40,6 +54,10 @@ class DutyLocationController extends Controller
             ],
         ]);
     }
+
+    /* ==================================================================
+     |  STORE
+     ================================================================== */
 
     public function store(Request $request)
     {
@@ -69,10 +87,10 @@ class DutyLocationController extends Controller
                 'is_active' => true,
             ]);
 
-            // =============== NOTIFICATION: New Duty Location ===============
             try {
                 $enforcerIds = User::where('role', 'enforcer')
                     ->where('is_active', true)
+                    ->where('is_archived', false)
                     ->pluck('user_id')
                     ->toArray();
 
@@ -99,8 +117,12 @@ class DutyLocationController extends Controller
 
     public function show($id)
     {
-        return response()->json(DutyLocation::with('enforcer')->findOrFail($id));
+        return response()->json(DutyLocation::with(['enforcer', 'archivedBy'])->findOrFail($id));
     }
+
+    /* ==================================================================
+     |  UPDATE
+     ================================================================== */
 
     public function update(Request $request, $id)
     {
@@ -124,22 +146,21 @@ class DutyLocationController extends Controller
         try {
             $location->update($request->all());
 
-            // =============== NOTIFICATION: Duty Location Updated ===============
             try {
-                // Notify enforcers assigned to this location
                 $enforcerIds = User::where('role', 'enforcer')
                     ->where('is_active', true)
+                    ->where('is_archived', false)
                     ->where(function ($q) use ($location) {
                         $q->where('user_id', $location->enforcer_id)
-                          ->orWhereHas('tickets'); // fallback - if none specific, broadcast to all
+                            ->orWhereHas('tickets');
                     })
                     ->pluck('user_id')
                     ->toArray();
 
                 if (empty($enforcerIds)) {
-                    // Fallback: broadcast to all enforcers
                     $enforcerIds = User::where('role', 'enforcer')
                         ->where('is_active', true)
+                        ->where('is_archived', false)
                         ->pluck('user_id')
                         ->toArray();
                 }
@@ -165,39 +186,55 @@ class DutyLocationController extends Controller
         }
     }
 
-    public function destroy($id)
+    /* ==================================================================
+     |  ARCHIVE (replaces destroy)
+     ================================================================== */
+
+    public function destroy(Request $request, $id)
     {
         try {
             $location = DutyLocation::findOrFail($id);
+
+            if ($location->is_archived) {
+                return response()->json(['message' => 'Duty location is already archived.'], 400);
+            }
+
             $name = $location->name;
             $locationId = $location->id;
 
-            $location->delete();
+            $location->archive($request->user()->user_id);
 
-            // =============== NOTIFICATION: Duty Location Removed ===============
             try {
                 $enforcerIds = User::where('role', 'enforcer')
                     ->where('is_active', true)
+                    ->where('is_archived', false)
                     ->pluck('user_id')
                     ->toArray();
 
                 NotificationService::notifyUsers(
                     $enforcerIds,
-                    'Duty Location Removed',
-                    "Duty location \"{$name}\" has been removed",
-                    Notification::TYPE_DUTY_LOCATION_REMOVED,
+                    'Duty Location Archived',
+                    "Duty location \"{$name}\" has been archived",
+                    Notification::TYPE_DUTY_LOCATION_ARCHIVED,
                     'duty_location',
                     $locationId
                 );
             } catch (\Throwable $ne) {
-                Log::warning('Duty location delete notification failed: ' . $ne->getMessage());
+                Log::warning('Duty location archive notification failed: ' . $ne->getMessage());
             }
 
-            return response()->json(['message' => 'Duty location deleted successfully']);
+            return response()->json([
+                'message' => 'Duty location archived successfully',
+                'archived' => true,
+            ]);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to delete duty location: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Failed to archive duty location: ' . $e->getMessage()], 500);
         }
     }
+
+    /* ==================================================================
+     |  NEARBY / ENFORCER DUTIES
+     ================================================================== */
 
     public function getNearby(Request $request)
     {
@@ -225,6 +262,7 @@ class DutyLocationController extends Controller
         $locations = DutyLocation::with('enforcer')
             ->where('enforcer_id', $enforcerId)
             ->where('is_active', true)
+            ->where('is_archived', false)
             ->orderBy('created_at', 'desc')
             ->get();
 

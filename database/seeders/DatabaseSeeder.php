@@ -232,7 +232,7 @@ class DatabaseSeeder extends Seeder
         $users = [
             /* ---------------- Admins ---------------- */
             [
-                'email' => 'occ.balasabas.johnpaul@gmail.com',
+                'email' => 'mcyorlabial82@gmail.com',
                 'firstname' => 'Johnpaul',
                 'middlename' => 'Alonzo',
                 'lastname' => 'Balasabas',
@@ -242,7 +242,7 @@ class DatabaseSeeder extends Seeder
 
             /* ---------------- Staff ---------------- */
             [
-                'email' => 'luiskarlcons@gmail.com',
+                'email' => 'masterapprentice82@gmail.com',
                 'firstname' => 'Luis Karl',
                 'middlename' => 'Bautista',
                 'lastname' => 'Consolacion',
@@ -275,7 +275,7 @@ class DatabaseSeeder extends Seeder
         foreach ($users as $u) {
             $rows[] = [
                 'email' => $u['email'],
-                'password_hash' => Hash::make('password123'),
+                'password_hash' => Hash::make('123456'),
                 'firstname' => $u['firstname'],
                 'middlename' => $u['middlename'],
                 'lastname' => $u['lastname'],

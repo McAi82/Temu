@@ -21,7 +21,6 @@ if (rootEl) {
         <React.StrictMode>
             <QueryClientProvider client={queryClient}>
                 <App />
-                {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
             </QueryClientProvider>
         </React.StrictMode>
     );

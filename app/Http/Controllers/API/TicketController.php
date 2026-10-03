@@ -19,13 +19,110 @@ use Illuminate\Support\Facades\Storage;
 
 class TicketController extends Controller
 {
+    /* ==================================================================
+     |  LIST — with full filters
+     ================================================================== */
+
     public function index(Request $request)
     {
-        $perPage = $request->get('per_page', 20);
-        $page = $request->get('page', 1);
+        $perPage = (int) $request->get('per_page', 20);
+        $page    = (int) $request->get('page', 1);
 
-        $tickets = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
-            ->orderBy('created_at', 'desc')
+        $query = Ticket::with([
+            'violator',
+            'vehicle',
+            'enforcer',
+            'violations.violationType',
+        ]);
+
+        // ---- Archive visibility ----
+        $visibility = $request->get('visibility', 'active');
+        if ($visibility === 'archived') {
+            $query->archived();
+        } elseif ($visibility === 'all') {
+            // no filter
+        } else {
+            $query->active();
+        }
+
+        // ---- Status (comma-separated list or single) ----
+        if ($request->filled('status')) {
+            $statuses = is_array($request->status)
+                ? $request->status
+                : array_filter(array_map('trim', explode(',', (string) $request->status)));
+            if (!empty($statuses)) {
+                $query->whereIn('status', $statuses);
+            }
+        }
+
+        // ---- Date range ----
+        if ($request->filled('date_from')) {
+            $query->whereDate('violation_datetime', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('violation_datetime', '<=', $request->date_to);
+        }
+
+        // ---- Enforcer ----
+        if ($request->filled('enforcer_id')) {
+            $query->where('enforcer_id', $request->enforcer_id);
+        }
+
+        // ---- Violator ----
+        if ($request->filled('violator_id')) {
+            $query->where('violator_id', $request->violator_id);
+        }
+
+        // ---- Vehicle ----
+        if ($request->filled('vehicle_id')) {
+            $query->where('vehicle_id', $request->vehicle_id);
+        }
+
+        // ---- Violation type ----
+        if ($request->filled('violation_id')) {
+            $query->whereHas('violations', function ($q) use ($request) {
+                $q->where('violation_id', $request->violation_id);
+            });
+        }
+
+        // ---- Fine range ----
+        if ($request->filled('min_fine') || $request->filled('max_fine')) {
+            $query->whereHas('violations', function ($q) use ($request) {
+                if ($request->filled('min_fine')) {
+                    $q->havingRaw('SUM(fine_amount) >= ?', [(float) $request->min_fine]);
+                }
+                if ($request->filled('max_fine')) {
+                    $q->havingRaw('SUM(fine_amount) <= ?', [(float) $request->max_fine]);
+                }
+            });
+        }
+
+        // ---- Search ----
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('ticket_number', 'like', "%{$s}%")
+                    ->orWhere('location', 'like', "%{$s}%")
+                    ->orWhereHas('violator', function ($vq) use ($s) {
+                        $vq->where('firstname', 'like', "%{$s}%")
+                            ->orWhere('lastname', 'like', "%{$s}%")
+                            ->orWhere('license', 'like', "%{$s}%");
+                    })
+                    ->orWhereHas('vehicle', function ($vq) use ($s) {
+                        $vq->where('platenumber', 'like', "%{$s}%");
+                    });
+            });
+        }
+
+        // ---- Sort ----
+        $sortable = ['created_at', 'violation_datetime', 'ticket_number', 'status'];
+        $sortBy   = in_array($request->get('sort_by'), $sortable, true)
+            ? $request->get('sort_by')
+            : 'created_at';
+        $sortDir  = strtolower($request->get('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $tickets = $query->orderBy($sortBy, $sortDir)
+            ->orderBy('ticket_id', 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
 
         $tickets->getCollection()->each(function ($ticket) {
@@ -36,10 +133,19 @@ class TicketController extends Controller
         return response()->json($tickets);
     }
 
+    /* ==================================================================
+     |  SHOW
+     ================================================================== */
+
     public function show($id)
     {
-        $ticket = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
-            ->findOrFail($id);
+        $ticket = Ticket::with([
+            'violator',
+            'vehicle',
+            'enforcer',
+            'violations.violationType',
+            'archivedBy',
+        ])->findOrFail($id);
 
         $ticket->total_fine = $ticket->violations ? $ticket->violations->sum('fine_amount') : 0;
         $ticket->qr_code_url = $ticket->qr_code ? Storage::url($ticket->qr_code) : null;
@@ -51,6 +157,7 @@ class TicketController extends Controller
     {
         $ticket = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
             ->where('ticket_number', $ticketNumber)
+            ->where('is_archived', false)
             ->first();
 
         if (!$ticket) {
@@ -63,10 +170,10 @@ class TicketController extends Controller
         return response()->json($ticket);
     }
 
-    /**
-     * Generate the next ticket number for today.
-     * MUST be called inside a DB transaction with a lock on today's rows.
-     */
+    /* ==================================================================
+     |  HELPERS
+     ================================================================== */
+
     private function generateTicketNumber(): string
     {
         $date = now()->format('Ymd');
@@ -89,8 +196,6 @@ class TicketController extends Controller
     public function saveQRCode(Request $request, $id)
     {
         try {
-            Log::info('📝 QR Code save request for ticket: ' . $id);
-
             $ticket = Ticket::find($id);
             if (!$ticket) {
                 return response()->json(['message' => 'Ticket not found'], 404);
@@ -143,6 +248,10 @@ class TicketController extends Controller
         }
     }
 
+    /* ==================================================================
+     |  STORE
+     ================================================================== */
+
     public function store(Request $request)
     {
         if ($request->user()->role !== 'enforcer') {
@@ -166,9 +275,6 @@ class TicketController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // IDEMPOTENCY: if the client sends an idempotency key and we
-        // already have a ticket for it, return that ticket unchanged.
-        // This makes offline sync retries safe.
         if ($request->filled('idempotency_key')) {
             $existing = Ticket::where('idempotency_key', $request->idempotency_key)
                 ->with(['violator', 'vehicle', 'violations.violationType'])
@@ -263,8 +369,6 @@ class TicketController extends Controller
         } catch (\Illuminate\Database\QueryException $e) {
             DB::rollBack();
 
-            // Duplicate ticket_number (SQLSTATE 23000) → retry with a
-            // fresh sequence read.
             if ($attempts < $maxAttempts && $e->getCode() === '23000') {
                 usleep(50000 * $attempts);
                 goto beginning;
@@ -287,7 +391,7 @@ class TicketController extends Controller
             return;
         }
 
-        $tickets = Ticket::where('violator_id', $violatorId)->get();
+        $tickets = Ticket::where('violator_id', $violatorId)->active()->get();
         $totalViolations = $tickets->count();
 
         $ticketIds = $tickets->pluck('ticket_id');
@@ -329,6 +433,10 @@ class TicketController extends Controller
             }
         }
     }
+
+    /* ==================================================================
+     |  UPDATE STATUS
+     ================================================================== */
 
     public function updateStatus(Request $request, $id)
     {
@@ -413,42 +521,70 @@ class TicketController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    /* ==================================================================
+     |  ARCHIVE (replaces destroy)
+     ================================================================== */
+
+    public function destroy(Request $request, $id)
     {
         $ticket = Ticket::findOrFail($id);
 
-        if ($ticket->qr_code && Storage::disk('public')->exists($ticket->qr_code)) {
-            Storage::disk('public')->delete($ticket->qr_code);
+        if ($ticket->is_archived) {
+            return response()->json([
+                'message' => 'Ticket is already archived.',
+            ], 400);
         }
-
-        $ticketNumber = $ticket->ticket_number;
-        $enforcerId = $ticket->enforcer_id;
-        $ticketId = $ticket->ticket_id;
-
-        $ticket->delete();
 
         try {
-            NotificationService::notifyUser(
-                $enforcerId,
-                'Ticket Deleted',
-                "Ticket {$ticketNumber} was deleted by an administrator",
-                Notification::TYPE_TICKET_DELETED,
-                'ticket',
-                $ticketId
-            );
-        } catch (\Throwable $ne) {
-            Log::warning('Ticket delete notification failed: ' . $ne->getMessage());
-        }
+            $ticket->archive($request->user()->user_id);
 
-        return response()->json([
-            'message' => 'Ticket deleted successfully'
-        ]);
+            try {
+                $enforcerId = $ticket->enforcer_id;
+                $actor = $request->user();
+                $actorName = trim("{$actor->firstname} {$actor->lastname}");
+
+                if ($enforcerId) {
+                    NotificationService::notifyUser(
+                        $enforcerId,
+                        'Ticket Archived',
+                        "Ticket {$ticket->ticket_number} was archived by {$actorName}",
+                        Notification::TYPE_TICKET_ARCHIVED,
+                        'ticket',
+                        $ticket->ticket_id
+                    );
+                }
+
+                NotificationService::notifyAdmins(
+                    'Ticket Archived',
+                    "{$actorName} archived ticket {$ticket->ticket_number}",
+                    Notification::TYPE_TICKET_ARCHIVED,
+                    'ticket',
+                    $ticket->ticket_id
+                );
+            } catch (\Throwable $ne) {
+                Log::warning('Ticket archive notification failed: ' . $ne->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Ticket archived successfully',
+                'archived' => true,
+                'ticket' => $ticket->fresh(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Ticket archive failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to archive ticket'], 500);
+        }
     }
+
+    /* ==================================================================
+     |  MY TICKETS / SEARCH / STATS
+     ================================================================== */
 
     public function getMyTickets(Request $request)
     {
         $tickets = Ticket::with(['violator', 'vehicle', 'violations.violationType'])
             ->where('enforcer_id', $request->user()->user_id)
+            ->active()
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -464,7 +600,8 @@ class TicketController extends Controller
 
     public function search(Request $request)
     {
-        $query = Ticket::with(['violator', 'vehicle', 'violations.violationType']);
+        $query = Ticket::with(['violator', 'vehicle', 'violations.violationType'])
+            ->active();
 
         if ($request->has('ticket_number')) {
             $query->where('ticket_number', 'like', "%{$request->ticket_number}%");
@@ -506,17 +643,23 @@ class TicketController extends Controller
     public function statistics()
     {
         try {
-            $totalTickets = Ticket::count();
-            $paidTickets = Ticket::where('status', 'paid')->count();
-            $issuedTickets = Ticket::where('status', 'issued')->count();
-            $contestedTickets = Ticket::where('status', 'contested')->count();
-            $dismissedTickets = Ticket::where('status', 'dismissed')->count();
+            $base = Ticket::query()->active();
 
-            $totalFines = DB::table('ticket_violations')->sum('fine_amount');
+            $totalTickets = (clone $base)->count();
+            $paidTickets = (clone $base)->where('status', 'paid')->count();
+            $issuedTickets = (clone $base)->where('status', 'issued')->count();
+            $contestedTickets = (clone $base)->where('status', 'contested')->count();
+            $dismissedTickets = (clone $base)->where('status', 'dismissed')->count();
+
+            $totalFines = DB::table('ticket_violations')
+                ->join('tickets', 'ticket_violations.ticket_id', '=', 'tickets.ticket_id')
+                ->where('tickets.is_archived', false)
+                ->sum('ticket_violations.fine_amount');
 
             $collectedFines = DB::table('ticket_violations')
                 ->join('tickets', 'ticket_violations.ticket_id', '=', 'tickets.ticket_id')
                 ->where('tickets.status', 'paid')
+                ->where('tickets.is_archived', false)
                 ->sum('ticket_violations.fine_amount');
 
             $collectionRate = $totalFines > 0
@@ -524,11 +667,12 @@ class TicketController extends Controller
                 : 0;
 
             $monthlyData = DB::select("
-                SELECT 
+                SELECT
                     DATE_FORMAT(created_at, '%b %Y') as name,
                     COUNT(*) as tickets
                 FROM tickets
                 WHERE created_at IS NOT NULL
+                  AND is_archived = 0
                 GROUP BY DATE_FORMAT(created_at, '%b %Y')
                 ORDER BY MIN(created_at) DESC
                 LIMIT 6
@@ -549,12 +693,12 @@ class TicketController extends Controller
         } catch (\Exception $e) {
             Log::error('Statistics error: ' . $e->getMessage());
             return response()->json([
-                'total_tickets' => Ticket::count(),
-                'paid_tickets' => Ticket::where('status', 'paid')->count(),
-                'issued_tickets' => Ticket::where('status', 'issued')->count(),
-                'contested_tickets' => Ticket::where('status', 'contested')->count(),
-                'dismissed_tickets' => Ticket::where('status', 'dismissed')->count(),
-                'total_fines' => DB::table('ticket_violations')->sum('fine_amount'),
+                'total_tickets' => Ticket::active()->count(),
+                'paid_tickets' => Ticket::active()->where('status', 'paid')->count(),
+                'issued_tickets' => Ticket::active()->where('status', 'issued')->count(),
+                'contested_tickets' => Ticket::active()->where('status', 'contested')->count(),
+                'dismissed_tickets' => Ticket::active()->where('status', 'dismissed')->count(),
+                'total_fines' => 0,
                 'collected_fines' => 0,
                 'collection_rate' => 0,
                 'tickets_by_month' => [],
@@ -566,6 +710,7 @@ class TicketController extends Controller
     {
         $ticket = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
             ->where('ticket_number', $ticketNumber)
+            ->where('is_archived', false)
             ->first();
 
         if (!$ticket) {

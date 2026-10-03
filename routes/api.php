@@ -20,7 +20,7 @@ use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\PaymentController;
 use App\Http\Controllers\API\PasswordResetController;
 use App\Http\Controllers\API\DeviceSwitchController;
-use App\Http\Controllers\API\BiometricRequestController;
+use App\Http\Controllers\API\ArchiveController;
 
 /*
 |--------------------------------------------------------------------------
@@ -58,15 +58,13 @@ Route::post('/Mobilelogin', [AuthController::class, 'Mobilelogin']);
 Route::post('/Weblogin',    [AuthController::class, 'Weblogin']);
 
 Route::post('/Weblogin/otp/verify', [AuthController::class, 'WebloginVerifyOtp'])
-    ->middleware('throttle:10,1'); // 10 attempts per minute per IP
+    ->middleware('throttle:10,1');
 
-// Password reset via email OTP (public)
 Route::post('/PasswordReset/request', [PasswordResetController::class, 'request'])
     ->middleware('throttle:5,1');
 Route::post('/PasswordReset/verify', [PasswordResetController::class, 'verify'])
     ->middleware('throttle:10,1');
 
-// Device-switch OTP flow (public, rate-limited)
 Route::post('/DeviceSwitch/request', [DeviceSwitchController::class, 'request'])
     ->middleware('throttle:5,1');
 Route::post('/DeviceSwitch/verify', [DeviceSwitchController::class, 'verify'])
@@ -76,7 +74,7 @@ Route::get('/DeviceSwitch/status', [DeviceSwitchController::class, 'status'])
 
 /*
 |--------------------------------------------------------------------------
-| FACE SERVICE ROUTES (authenticated via X-API-Key header, NOT Sanctum)
+| FACE SERVICE ROUTES (X-API-Key, NOT Sanctum)
 |--------------------------------------------------------------------------
 */
 
@@ -161,6 +159,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}/status', [TicketController::class, 'updateStatus'])
             ->where('id', '[0-9]+');
 
+        // Archive (replaces destroy)
         Route::delete('/{id}',     [TicketController::class, 'destroy'])
             ->where('id', '[0-9]+')
             ->middleware('admin');
@@ -214,17 +213,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('users')->group(function () {
         Route::get('/',     [UserController::class, 'index']);
         Route::post('/',    [UserController::class, 'store']);
-        Route::get('/with-temp-passwords', [UserController::class, 'getUsersWithTempPasswords'])
-            ->middleware('admin');
         Route::get('/{id}',    [UserController::class, 'show'])->where('id', '[0-9]+');
         Route::put('/{id}',    [UserController::class, 'update'])->where('id', '[0-9]+');
         Route::delete('/{id}', [UserController::class, 'destroy'])->where('id', '[0-9]+');
         Route::put('/{id}/toggle-status',   [UserController::class, 'toggleStatus'])->where('id', '[0-9]+');
         Route::post('/{id}/reset-password', [UserController::class, 'resetPassword'])->where('id', '[0-9]+');
     });
-    Route::get('/users-with-temp-passwords', [UserController::class, 'getUsersWithTempPasswords'])
-        ->middleware('admin');
-    Route::post('/clear-temp-password', [UserController::class, 'clearTempPassword']);
 
     /*
     |----------------------- ATTENDANCE -----------------------
@@ -246,11 +240,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |----------------------- REPORTS -----------------------
+    | NOTE: /reports must come before /reports/{anything} is not a
+    | concern here, but declare the bare /reports AFTER the specific
+    | routes so Laravel routes them predictably.
     */
     Route::prefix('reports')->group(function () {
         Route::get('/today',  [ReportController::class, 'todayReport']);
         Route::get('/weekly', [ReportController::class, 'weeklyReport']);
         Route::get('/export', [ReportController::class, 'exportReport']);
+        Route::get('/',       [ReportController::class, 'report']);
     });
 
     /*
@@ -302,5 +300,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/update',    [LocationController::class, 'update']);
         Route::post('/heartbeat', [LocationController::class, 'heartbeat']);
         Route::post('/offline',   [LocationController::class, 'markOffline']);
+    });
+
+    /*
+    |----------------------- ARCHIVES -----------------------
+    | GET  /archives/{resource}             — list archived (staff+admin)
+    | PUT  /archives/{resource}/{id}/restore — restore (admin only)
+    */
+    Route::prefix('archives')->middleware('staff')->group(function () {
+        Route::get('/{resource}', [ArchiveController::class, 'index'])
+            ->where('resource', 'tickets|violators|vehicles|violations|users|schedules|duty-locations|payments');
+
+        Route::put('/{resource}/{id}/restore', [ArchiveController::class, 'restore'])
+            ->where('resource', 'tickets|violators|vehicles|violations|users|schedules|duty-locations|payments')
+            ->where('id', '[0-9]+')
+            ->middleware('admin');
     });
 });

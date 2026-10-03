@@ -3,27 +3,48 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Notification;
 use App\Models\ViolationType;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ViolationController extends Controller
 {
     public function index(Request $request)
     {
-        // Mobile requests ?all=1 to load the full violation set into its
-        // offline cache in a single call. Web dashboard gets paginated.
+        $visibility = $request->get('visibility', 'active');
+
+        $query = ViolationType::query();
+        if ($visibility === 'archived') {
+            $query->archived();
+        } elseif ($visibility !== 'all') {
+            $query->active();
+        }
+
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('violation_code', 'like', "%{$s}%")
+                    ->orWhere('violation_name', 'like', "%{$s}%")
+                    ->orWhere('category', 'like', "%{$s}%");
+            });
+        }
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
         if ($request->boolean('all')) {
             return response()->json(
-                ViolationType::where('is_active', true)
-                    ->orderBy('violation_name')
-                    ->get()
+                $query->orderBy('violation_name')->get()
             );
         }
 
-        $perPage = $request->get('per_page', 20);
-        $page = $request->get('page', 1);
+        $perPage = (int) $request->get('per_page', 20);
+        $page    = (int) $request->get('page', 1);
 
-        $violations = ViolationType::orderBy('violation_name')
+        $violations = $query->orderBy('violation_name')
             ->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json($violations);
@@ -31,8 +52,7 @@ class ViolationController extends Controller
 
     public function show($id)
     {
-        $violation = ViolationType::findOrFail($id);
-        return response()->json($violation);
+        return response()->json(ViolationType::with('archivedBy')->findOrFail($id));
     }
 
     public function store(Request $request)
@@ -67,13 +87,41 @@ class ViolationController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    /* ---------------- ARCHIVE ---------------- */
+
+    public function destroy(Request $request, $id)
     {
         $violation = ViolationType::findOrFail($id);
-        $violation->delete();
 
-        return response()->json([
-            'message' => 'Violation deleted successfully',
-        ]);
+        if ($violation->is_archived) {
+            return response()->json(['message' => 'Violation is already archived.'], 400);
+        }
+
+        try {
+            $violation->archive($request->user()->user_id);
+
+            try {
+                $actor = $request->user();
+                $actorName = trim("{$actor->firstname} {$actor->lastname}");
+                NotificationService::notifyAdmins(
+                    'Violation Archived',
+                    "{$actorName} archived violation {$violation->violation_name}",
+                    Notification::TYPE_VIOLATION_ARCHIVED,
+                    'violation',
+                    $violation->violation_id
+                );
+            } catch (\Throwable $ne) {
+                Log::warning('Violation archive notification failed: ' . $ne->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Violation archived successfully',
+                'archived' => true,
+                'violation' => $violation->fresh(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Violation archive failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to archive violation'], 500);
+        }
     }
 }

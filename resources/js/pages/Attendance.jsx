@@ -1,22 +1,8 @@
 // web/src/pages/Attendance.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../components/ui/card";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "../components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -28,16 +14,17 @@ import { byFields } from "../lib/sortBy";
 import api from "../services/api";
 import {
   Search,
-  Calendar,
-  Camera,
   RefreshCw,
   Filter,
   X,
   Loader2,
-  User,
   Clock,
   MapPin,
+  Camera,
   LocateFixed,
+  Calendar,
+  LayoutGrid,
+  List as ListIcon,
 } from "lucide-react";
 import {
   MapContainer,
@@ -75,15 +62,75 @@ const attendanceIcon = new L.Icon({
 const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 const ITEMS_PER_PAGE = 20;
 
+const STATUS_META = {
+  present: {
+    label: "Present",
+    color: "#1E8449",
+    chip: "bg-[#E5F2EA] text-[#1E8449]",
+  },
+  late: {
+    label: "Late",
+    color: "#92600A",
+    chip: "bg-[#FBF1DC] text-[#92600A]",
+  },
+  absent: {
+    label: "Absent",
+    color: "#C8202F",
+    chip: "bg-[#FBE7E9] text-[#C8202F]",
+  },
+  on_leave: {
+    label: "On Leave",
+    color: "#3B5170",
+    chip: "bg-[#EEF1F5] text-[#3B5170]",
+  },
+  half_day: {
+    label: "Half Day",
+    color: "#C2541F",
+    chip: "bg-[#FBEAE2] text-[#C2541F]",
+  },
+};
+
+const STATUS_OPTIONS = Object.keys(STATUS_META).map((k) => ({
+  value: k,
+  label: STATUS_META[k].label,
+}));
+
+const PRESETS = [
+  { label: "Today", days: 0 },
+  { label: "Last 7d", days: 6 },
+  { label: "Last 30d", days: 29 },
+  { label: "Last 90d", days: 89 },
+];
+
+const ROW_CLASS =
+  "flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 " +
+  "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,14rem)] md:gap-4";
+
+const toISODate = (d) => {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const daysAgoISO = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return toISODate(d);
+};
+
+function useDebouncedValue(value, delay = 350) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
 const getDataArray = (response) => {
   if (!response) return [];
   if (Array.isArray(response)) return response;
   if (response.data && Array.isArray(response.data)) return response.data;
-  if (
-    response.data &&
-    response.data.data &&
-    Array.isArray(response.data.data)
-  ) {
+  if (response.data?.data && Array.isArray(response.data.data)) {
     return response.data.data;
   }
   return [];
@@ -91,7 +138,6 @@ const getDataArray = (response) => {
 
 const getMeta = (response) => {
   if (!response) return { current_page: 1, last_page: 1, total: 0 };
-
   if (response.current_page !== undefined) {
     return {
       current_page: response.current_page,
@@ -100,7 +146,6 @@ const getMeta = (response) => {
       per_page: response.per_page,
     };
   }
-
   if (response.data && response.data.current_page !== undefined) {
     return {
       current_page: response.data.current_page,
@@ -109,40 +154,161 @@ const getMeta = (response) => {
       per_page: response.data.per_page,
     };
   }
-
-  if (response.meta) {
-    return response.meta;
-  }
-
+  if (response.meta) return response.meta;
   return { current_page: 1, last_page: 1, total: 0 };
+};
+
+const Chip = ({ label, onClear }) => (
+  <span className="inline-flex items-center gap-1 bg-[#E9ECF2] text-[#16233F] px-2.5 py-1 rounded-md text-xs">
+    {label}
+    <button onClick={onClear} className="hover:text-[#C8202F]">
+      <X className="w-3 h-3" />
+    </button>
+  </span>
+);
+
+const FieldLabel = ({ icon: I, children }) => (
+  <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+    {I && <I className="w-3.5 h-3.5 text-[#92600A]" />}
+    {children}
+  </label>
+);
+
+const Mini = ({ children }) => (
+  <i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">
+    {children}
+  </i>
+);
+
+const ViewToggle = ({ view, setView }) => (
+  <div
+    className="ml-auto flex bg-[#E9ECF2] rounded-full p-1 text-xs"
+    role="group"
+    aria-label="Choose layout"
+  >
+    {[["list", "List", ListIcon], ["cards", "Cards", LayoutGrid]].map(
+      ([v, label, I]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => setView(v)}
+          aria-pressed={view === v}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
+            ? "bg-[#16233F] text-white"
+            : "text-[#64748B] hover:text-[#16233F]"
+            }`}
+        >
+          <I className="w-3.5 h-3.5" />
+          {label}
+        </button>
+      ),
+    )}
+  </div>
+);
+
+const FilterShell = ({ title, onClose, onReset, children }) => (
+  <aside className="self-start rounded-xl bg-[#FBF1DC] border-t-4 border-[#F0B429] p-5 space-y-5 lg:sticky lg:top-4">
+    <div className="flex justify-between items-center">
+      <h3 className="text-base font-['Oswald'] font-medium text-[#16233F]">
+        {title}
+      </h3>
+      <button
+        onClick={onClose}
+        className="p-1 rounded hover:bg-[#F0B429]/25"
+      >
+        <X className="w-4 h-4 text-[#92600A]" />
+      </button>
+    </div>
+    {children}
+    <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
+      <Button onClick={onClose} className="bg-[#1E8449] hover:bg-[#186B3B]">
+        Apply Filters
+      </Button>
+      <Button
+        onClick={onReset}
+        variant="ghost"
+        className="text-[#64748B] hover:text-[#C8202F]"
+      >
+        <X className="w-4 h-4 mr-1" />
+        Reset
+      </Button>
+    </div>
+  </aside>
+);
+
+const formatLocationDisplay = (locationStr) => {
+  if (!locationStr || locationStr === "N/A") return "—";
+  if (locationStr.includes(",")) {
+    const [lat, lng] = locationStr.split(",").map(Number);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    }
+  }
+  return locationStr;
+};
+
+const parseCoordinates = (locationStr) => {
+  if (!locationStr || !locationStr.includes(",")) return null;
+  const [lat, lng] = locationStr.split(",").map(Number);
+  if (isNaN(lat) || isNaN(lng)) return null;
+  return { lat, lng };
+};
+
+const formatDateTime = (datetime) => {
+  if (!datetime) return "—";
+  return new Date(datetime).toLocaleString();
+};
+
+const formatTime = (datetime) => {
+  if (!datetime) return "—";
+  return new Date(datetime).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 const Attendance = () => {
   const notify = useAlert();
+  const [view, setView] = useState("list");
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedAttendance, setSelectedAttendance] = useState(null);
-  const [showPhotoModal, setShowPhotoModal] = useState(false);
-  const [photoType, setPhotoType] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [currentImageUrl, setCurrentImageUrl] = useState("");
-  const [imageLoading, setImageLoading] = useState(false);
+
   const [filters, setFilters] = useState({
     date_from: "",
     date_to: "",
-    enforcer_id: "",
-    status: "",
+    status: [],
+    only_with_location: false,
+    only_with_photo: false,
   });
-  const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
-  const [showMapModal, setShowMapModal] = useState(false);
-  const [mapLocation, setMapLocation] = useState(null);
-  const [mapAttendance, setMapAttendance] = useState(null);
-  const [mapType, setMapType] = useState(null);
+  const debouncedSearch = useDebouncedValue(searchTerm, 350);
+
+  // Photo dialog state
+  const [photoModal, setPhotoModal] = useState({
+    open: false,
+    attendance: null,
+    type: null,
+    url: "",
+    loading: false,
+  });
+
+  // Map dialog state
+  const [mapModal, setMapModal] = useState({
+    open: false,
+    location: null,
+    attendance: null,
+    type: null,
+  });
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, filters]);
 
   const {
     data: attendanceResponse,
     isLoading,
+    isFetching,
     refetch,
     error,
   } = useQuery({
@@ -151,8 +317,7 @@ const Attendance = () => {
       const params = {};
       if (filters.date_from) params.date_from = filters.date_from;
       if (filters.date_to) params.date_to = filters.date_to;
-      if (filters.enforcer_id) params.enforcer_id = filters.enforcer_id;
-      if (filters.status) params.status = filters.status;
+      if (filters.status.length === 1) params.status = filters.status[0];
       return api.get("/attendance", {
         params: { ...params, page, per_page: ITEMS_PER_PAGE },
       });
@@ -164,59 +329,31 @@ const Attendance = () => {
   const attendances = getDataArray(attendanceResponse);
   const meta = getMeta(attendanceResponse);
 
-  React.useEffect(() => {
-    let count = 0;
-    if (filters.date_from) count++;
-    if (filters.date_to) count++;
-    if (filters.enforcer_id) count++;
-    if (filters.status) count++;
-    setActiveFiltersCount(count);
-  }, [filters]);
-
-  const formatLocationDisplay = (locationStr) => {
-    if (!locationStr || locationStr === "N/A") return "—";
-    if (locationStr.includes(",")) {
-      const [lat, lng] = locationStr.split(",").map(Number);
-      return `📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    }
-    return `📍 ${locationStr}`;
-  };
-
-  const parseCoordinates = (locationStr) => {
-    if (!locationStr || !locationStr.includes(",")) return null;
-    const [lat, lng] = locationStr.split(",").map(Number);
-    if (isNaN(lat) || isNaN(lng)) return null;
-    return { lat, lng };
-  };
-
   const handleViewPhoto = (attendance, type) => {
-    setSelectedAttendance(attendance);
-    setPhotoType(type);
-    setImageLoading(true);
-
     const photoPath =
       type === "in" ? attendance.time_in_photo : attendance.time_out_photo;
 
-    if (photoPath) {
-      const fullUrl = `${API_BASE_URL}/api/attendance/photo/${photoPath}`;
-      setCurrentImageUrl(fullUrl);
-
-      const img = new Image();
-      img.onload = () => {
-        setImageLoading(false);
-        setShowPhotoModal(true);
-      };
-      img.onerror = () => {
-        console.error("Image failed to load:", fullUrl);
-        setImageLoading(false);
-        setCurrentImageUrl("");
-        notify.error("Photo not found on server.");
-      };
-      img.src = fullUrl;
-    } else {
+    if (!photoPath) {
       notify.warning("No photo available for this attendance record.");
-      setImageLoading(false);
+      return;
     }
+
+    const fullUrl = `${API_BASE_URL}/api/attendance/photo/${photoPath}`;
+    setPhotoModal({
+      open: true,
+      attendance,
+      type,
+      url: fullUrl,
+      loading: true,
+    });
+
+    const img = new Image();
+    img.onload = () => setPhotoModal((s) => ({ ...s, loading: false }));
+    img.onerror = () => {
+      setPhotoModal((s) => ({ ...s, loading: false, url: "" }));
+      notify.error("Photo not found on server.");
+    };
+    img.src = fullUrl;
   };
 
   const handleViewOnMap = (attendance, type) => {
@@ -231,71 +368,259 @@ const Attendance = () => {
       return;
     }
 
-    setMapLocation(coords);
-    setMapAttendance(attendance);
-    setMapType(type);
-    setShowMapModal(true);
-  };
-
-  const handleResetFilters = () => {
-    setFilters({
-      date_from: "",
-      date_to: "",
-      enforcer_id: "",
-      status: "",
+    setMapModal({
+      open: true,
+      location: coords,
+      attendance,
+      type,
     });
   };
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      present: "bg-[#E5F2EA] text-[#1E8449]",
-      late: "bg-[#FBF1DC] text-[#92600A]",
-      absent: "bg-[#FBE7E9] text-[#C8202F]",
-      on_leave: "bg-[#EEF1F5] text-[#3B5170]",
-      half_day: "bg-[#FBEAE2] text-[#C2541F]",
-    };
-    return styles[status] || "bg-gray-100 text-gray-700";
-  };
+  const clearFilters = () =>
+    setFilters({
+      date_from: "",
+      date_to: "",
+      status: [],
+      only_with_location: false,
+      only_with_photo: false,
+    });
 
-  const formatDateTime = (datetime) => {
-    if (!datetime) return "—";
-    return new Date(datetime).toLocaleString();
-  };
+  const toggleStatus = (value) =>
+    setFilters((f) => ({
+      ...f,
+      status: f.status.includes(value)
+        ? f.status.filter((s) => s !== value)
+        : [...f.status, value],
+    }));
 
-  const formatTime = (datetime) => {
-    if (!datetime) return "—";
-    return new Date(datetime).toLocaleTimeString();
-  };
+  const applyPreset = (days) =>
+    setFilters((f) => ({
+      ...f,
+      date_from: daysAgoISO(days),
+      date_to: daysAgoISO(0),
+    }));
 
-  // Filter by search term, then sort by date desc → enforcer lastname → firstname.
+  const activeFilterCount = useMemo(() => {
+    let c = 0;
+    if (searchTerm) c++;
+    if (filters.date_from || filters.date_to) c++;
+    if (filters.status.length) c++;
+    if (filters.only_with_location) c++;
+    if (filters.only_with_photo) c++;
+    return c;
+  }, [searchTerm, filters]);
+
   const filteredAttendances = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
+    const term = debouncedSearch.trim().toLowerCase();
+    let list = attendances;
+
+    if (filters.status.length > 1) {
+      list = list.filter((a) => filters.status.includes(a.status));
+    }
+    if (filters.only_with_location) {
+      list = list.filter((a) => a.time_in_location || a.time_out_location);
+    }
+    if (filters.only_with_photo) {
+      list = list.filter((a) => a.time_in_photo || a.time_out_photo);
+    }
 
     const matching = term
-      ? attendances.filter((att) => {
+      ? list.filter((a) => {
         const haystack = [
-          att.enforcer?.firstname,
-          att.enforcer?.lastname,
-          att.status,
+          a.enforcer?.firstname,
+          a.enforcer?.lastname,
+          a.status,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
         return haystack.includes(term);
       })
-      : attendances;
+      : list;
 
     return [...matching].sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
       if (dateA !== dateB) return dateB - dateA;
-
       return byFields("lastname", "firstname")(
         a.enforcer || {},
         b.enforcer || {},
       );
     });
-  }, [attendances, searchTerm]);
+  }, [attendances, debouncedSearch, filters]);
+
+  const statusBadge = (status) => {
+    const meta = STATUS_META[status] || STATUS_META.present;
+    return (
+      <span
+        className={`inline-block px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${meta.chip}`}
+      >
+        {meta.label.toUpperCase()}
+      </span>
+    );
+  };
+
+  const rowActions = (a) => (
+    <div className="flex flex-wrap gap-2">
+      {a.time_in_photo && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleViewPhoto(a, "in")}
+          className="border-[#16233F]/25 bg-white text-[#16233F] hover:bg-[#E9ECF2] text-xs gap-1.5"
+        >
+          <Camera className="w-3.5 h-3.5" />
+          In Photo
+        </Button>
+      )}
+      {a.time_out_photo && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleViewPhoto(a, "out")}
+          className="border-[#16233F]/25 bg-white text-[#16233F] hover:bg-[#E9ECF2] text-xs gap-1.5"
+        >
+          <Camera className="w-3.5 h-3.5" />
+          Out Photo
+        </Button>
+      )}
+      {a.time_in_location && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleViewOnMap(a, "in")}
+          className="border-[#1E8449]/30 bg-white text-[#1E8449] hover:bg-[#E5F2EA] text-xs gap-1.5"
+          title="View Time In location on map"
+        >
+          <LocateFixed className="w-3.5 h-3.5" />
+          Map
+        </Button>
+      )}
+      {!a.time_in_photo && !a.time_out_photo && !a.time_in_location && (
+        <span className="text-xs text-[#94A3B8]">No data</span>
+      )}
+    </div>
+  );
+
+  const panel = (
+    <FilterShell
+      title="Filter Attendance"
+      onClose={() => setShowFilters(false)}
+      onReset={clearFilters}
+    >
+      <div>
+        <FieldLabel icon={Calendar}>Date range</FieldLabel>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="date"
+            value={filters.date_from}
+            onChange={(e) =>
+              setFilters({ ...filters, date_from: e.target.value })
+            }
+            className="w-36 focus-visible:ring-[#F0B429]"
+          />
+          <span className="text-[#64748B] text-sm">to</span>
+          <Input
+            type="date"
+            value={filters.date_to}
+            onChange={(e) =>
+              setFilters({ ...filters, date_to: e.target.value })
+            }
+            className="w-36 focus-visible:ring-[#F0B429]"
+          />
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+          <span className="text-xs text-[#92600A]/70 mr-1">Quick:</span>
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => applyPreset(p.days)}
+              className="text-xs px-2.5 py-1 rounded-full bg-white text-[#16233F] hover:bg-[#16233F] hover:text-white transition-colors font-medium"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Status</FieldLabel>
+        <div className="flex flex-wrap gap-2">
+          {STATUS_OPTIONS.map((opt) => {
+            const active = filters.status.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => toggleStatus(opt.value)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${active
+                  ? "bg-[#16233F] text-white border-[#16233F]"
+                  : "bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]"
+                  }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel>Extra</FieldLabel>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm text-[#92600A] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filters.only_with_location}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  only_with_location: e.target.checked,
+                })
+              }
+              className="w-4 h-4 accent-[#92600A]"
+            />
+            Only with GPS location
+          </label>
+          <label className="flex items-center gap-2 text-sm text-[#92600A] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filters.only_with_photo}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  only_with_photo: e.target.checked,
+                })
+              }
+              className="w-4 h-4 accent-[#92600A]"
+            />
+            Only with photo
+          </label>
+        </div>
+      </div>
+    </FilterShell>
+  );
+
+  const chips = [
+    searchTerm && [`Search: ${searchTerm}`, () => setSearchTerm("")],
+    (filters.date_from || filters.date_to) && [
+      `Date: ${filters.date_from || "…"} → ${filters.date_to || "…"}`,
+      () => setFilters({ ...filters, date_from: "", date_to: "" }),
+    ],
+    filters.status.length > 0 && [
+      `Status: ${filters.status.join(", ")}`,
+      () => setFilters({ ...filters, status: [] }),
+    ],
+    filters.only_with_location && [
+      "Only with location",
+      () => setFilters({ ...filters, only_with_location: false }),
+    ],
+    filters.only_with_photo && [
+      "Only with photo",
+      () => setFilters({ ...filters, only_with_photo: false }),
+    ],
+  ].filter(Boolean);
 
   if (isLoading && !attendanceResponse) {
     return (
@@ -323,379 +648,323 @@ const Attendance = () => {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-['Oswald'] font-semibold text-[#16233F]">
+    <div className="space-y-6 font-['Inter']">
+      {/* Navy banner */}
+      <header className="relative overflow-hidden rounded-2xl bg-[#16233F] text-white px-6 py-7 flex flex-wrap items-center justify-between gap-4">
+        <div
+          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(115deg, transparent 0 40px, #F0B429 40px 42px)",
+          }}
+        />
+        <div className="relative">
+          <h1 className="text-4xl font-['Oswald'] font-semibold tracking-tight">
             Attendance Monitoring
           </h1>
-          <p className="text-[#64748B] font-['Inter'] text-sm mt-1">
+          <p className="text-[#C7CEDB] text-sm mt-1">
             Track and manage enforcer attendance records
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => setShowFilters(!showFilters)}
-            variant="outline"
-            className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
-          >
-            <Filter className="w-4 h-4 mr-2" />
-            Filters
-            {activeFiltersCount > 0 && (
-              <span className="ml-2 bg-[#16233F] text-white text-xs rounded-full px-2 py-0.5">
-                {activeFiltersCount}
-              </span>
-            )}
-          </Button>
-          <Button
-            onClick={() => refetch()}
-            variant="outline"
-            className="border-[#1E8449]/30 text-[#1E8449] hover:bg-[#E5F2EA]"
-          >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {/* Filters Panel */}
-      {showFilters && (
-        <Card className="mb-6 border-[#F0B429]/30 bg-[#FBF1DC]">
-          <CardHeader className="pb-2">
-            <div className="flex justify-between items-center">
-              <CardTitle className="text-lg font-['Oswald'] font-medium text-[#16233F]">
-                Filter Attendance Records
-              </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowFilters(false)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                  Date From
-                </label>
-                <Input
-                  type="date"
-                  value={filters.date_from}
-                  onChange={(e) =>
-                    setFilters({ ...filters, date_from: e.target.value })
-                  }
-                  className="focus-visible:ring-[#F0B429]"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                  Date To
-                </label>
-                <Input
-                  type="date"
-                  value={filters.date_to}
-                  onChange={(e) =>
-                    setFilters({ ...filters, date_to: e.target.value })
-                  }
-                  className="focus-visible:ring-[#F0B429]"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block text-[#1F2937]">
-                  Status
-                </label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                  value={filters.status}
-                  onChange={(e) =>
-                    setFilters({ ...filters, status: e.target.value })
-                  }
-                >
-                  <option value="">All Status</option>
-                  <option value="present">Present</option>
-                  <option value="late">Late</option>
-                  <option value="absent">Absent</option>
-                  <option value="on_leave">On Leave</option>
-                  <option value="half_day">Half Day</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <Button
-                onClick={() => {
-                  refetch();
-                  setShowFilters(false);
-                }}
-                className="bg-[#1E8449] hover:bg-[#186B3B]"
-              >
-                Apply Filters
-              </Button>
-              <Button
-                onClick={handleResetFilters}
-                variant="ghost"
-                className="text-[#64748B]"
-              >
-                Reset
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Active Filters Display */}
-      {activeFiltersCount > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {filters.date_from && (
-            <span className="bg-[#E9ECF2] text-[#16233F] px-2 py-1 rounded-md text-xs flex items-center gap-1">
-              From: {filters.date_from}
-              <button
-                onClick={() => setFilters({ ...filters, date_from: "" })}
-                className="hover:text-[#C8202F]"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-          {filters.date_to && (
-            <span className="bg-[#E9ECF2] text-[#16233F] px-2 py-1 rounded-md text-xs flex items-center gap-1">
-              To: {filters.date_to}
-              <button
-                onClick={() => setFilters({ ...filters, date_to: "" })}
-                className="hover:text-[#C8202F]"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-          {filters.status && (
-            <span className="bg-[#E9ECF2] text-[#16233F] px-2 py-1 rounded-md text-xs flex items-center gap-1">
-              Status: {filters.status}
-              <button
-                onClick={() => setFilters({ ...filters, status: "" })}
-                className="hover:text-[#C8202F]"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Search */}
-      <div className="mb-4">
-        <div className="relative w-80">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
-          <Input
-            placeholder="Search by enforcer name..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 focus-visible:ring-[#F0B429]"
+        <Button
+          onClick={() => refetch()}
+          variant="outline"
+          className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
+        >
+          <RefreshCw
+            className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
           />
-        </div>
-      </div>
+          Refresh
+        </Button>
+      </header>
 
-      {/* Attendance Table */}
-      <Card>
-        <CardContent className="p-0">
+      <div
+        className={`grid gap-6 ${showFilters ? "lg:grid-cols-[300px_minmax(0,1fr)]" : ""
+          }`}
+      >
+        {showFilters && panel}
+
+        <div className="space-y-4 min-w-0">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters((v) => !v)}
+              className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="ml-2 bg-[#16233F] text-white text-xs rounded-full px-2 py-0.5">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+              <Input
+                placeholder="Search by enforcer name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-10 rounded-full focus-visible:ring-[#F0B429]"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  title="Clear"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <ViewToggle view={view} setView={setView} />
+          </div>
+
+          {/* Chips */}
+          {chips.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {chips.map(([label, clear]) => (
+                <Chip key={label} label={label} onClear={clear} />
+              ))}
+            </div>
+          )}
+
+          {/* Section title */}
+          <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
+            <Clock className="w-5 h-5 text-[#F0B429]" />
+            Attendance Records
+            <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+              (most recent first)
+            </span>
+          </h2>
+
+          {/* Body */}
           {isLoading ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
             </div>
           ) : filteredAttendances.length === 0 ? (
-            <div className="text-center py-8 text-[#64748B]">
-              No attendance records found
+            <div className="text-center py-14 text-[#64748B]">
+              {activeFilterCount > 0
+                ? "No attendance records match the current filters."
+                : "No attendance records found."}
             </div>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-[#E9ECF2] hover:bg-[#E9ECF2]">
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Date
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Enforcer
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Time In
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Time Out
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Status
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Late
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Overtime
-                    </TableHead>
-                    <TableHead className="font-['Inter'] font-semibold text-[#16233F]">
-                      Actions
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAttendances.map((att) => (
-                    <TableRow
-                      key={att.attendance_id}
-                      className="hover:bg-[#F8F9FA]"
-                    >
-                      <TableCell className="font-medium text-[#1F2937]">
-                        {new Date(att.date).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-xs font-bold">
-                            {att.enforcer?.firstname?.[0]}
-                            {att.enforcer?.lastname?.[0]}
-                          </div>
-                          <span className="text-[#1F2937]">
-                            {att.enforcer?.firstname} {att.enforcer?.lastname}
+          ) : view === "cards" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredAttendances.map((a) => {
+                const statusMeta =
+                  STATUS_META[a.status] || STATUS_META.present;
+                return (
+                  <article
+                    key={a.attendance_id}
+                    className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                  >
+                    <div
+                      className="h-2"
+                      style={{ background: statusMeta.color }}
+                    />
+                    <div className="p-4">
+                      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                        <span className="font-mono text-sm font-semibold text-[#16233F]">
+                          {new Date(a.date).toLocaleDateString()}
+                        </span>
+                        {statusBadge(a.status)}
+                      </div>
+                      <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
+                        {a.enforcer?.firstname} {a.enforcer?.lastname}
+                      </p>
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3">
+                        <div className="min-w-0">
+                          <dt className="text-[10px] text-[#94A3B8]">
+                            Time in
+                          </dt>
+                          <dd className="text-sm text-[#1F2937]">
+                            {formatTime(a.time_in)}
+                          </dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] text-[#94A3B8]">
+                            Time out
+                          </dt>
+                          <dd className="text-sm text-[#1F2937]">
+                            {a.time_out ? formatTime(a.time_out) : "—"}
+                          </dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] text-[#94A3B8]">Late</dt>
+                          <dd className="text-sm text-[#1F2937]">
+                            {a.late_minutes > 0
+                              ? `${a.late_minutes} min`
+                              : "—"}
+                          </dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] text-[#94A3B8]">
+                            Overtime
+                          </dt>
+                          <dd className="text-sm text-[#1F2937]">
+                            {a.overtime_minutes > 0
+                              ? `${a.overtime_minutes} min`
+                              : "—"}
+                          </dd>
+                        </div>
+                      </dl>
+                      {(a.time_in_location || a.time_out_location) && (
+                        <div className="mt-3 text-xs text-[#64748B] flex items-start gap-1.5">
+                          <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                          <span className="truncate">
+                            {formatLocationDisplay(
+                              a.time_in_location || a.time_out_location,
+                            )}
                           </span>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-3 h-3 text-[#64748B]" />
-                            <span className="text-[#1F2937]">
-                              {formatTime(att.time_in)}
-                            </span>
-                          </div>
-                          {att.time_in_location && (
-                            <span className="text-xs text-[#64748B] flex items-center gap-1">
-                              <MapPin className="w-3 h-3" />
-                              {formatLocationDisplay(att.time_in_location)}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {att.time_out ? (
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              <Clock className="w-3 h-3 text-[#64748B]" />
-                              <span className="text-[#1F2937]">
-                                {formatTime(att.time_out)}
-                              </span>
-                            </div>
-                            {att.time_out_location && (
-                              <span className="text-xs text-[#64748B] flex items-center gap-1">
-                                <MapPin className="w-3 h-3" />
-                                {formatLocationDisplay(att.time_out_location)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(
-                            att.status,
-                          )}`}
-                        >
-                          {att.status?.toUpperCase()}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-[#1F2937]">
-                        {att.late_minutes > 0 ? `${att.late_minutes} min` : "—"}
-                      </TableCell>
-                      <TableCell className="text-[#1F2937]">
-                        {att.overtime_minutes > 0
-                          ? `${att.overtime_minutes} min`
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          {att.time_in_photo && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewPhoto(att, "in")}
-                              className="text-xs border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
-                            >
-                              <Camera className="w-3 h-3 mr-1" />
-                              Time In
-                            </Button>
-                          )}
-                          {att.time_out_photo && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewPhoto(att, "out")}
-                              className="text-xs border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
-                            >
-                              <Camera className="w-3 h-3 mr-1" />
-                              Time Out
-                            </Button>
-                          )}
-                          {att.time_in_location && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewOnMap(att, "in")}
-                              className="text-xs border-[#1E8449]/30 text-[#1E8449] hover:bg-[#E5F2EA]"
-                              title="View Time In Location on Map"
-                            >
-                              <LocateFixed className="w-3 h-3 mr-1" />
-                              Map
-                            </Button>
-                          )}
-                          {!att.time_in_photo &&
-                            !att.time_out_photo &&
-                            !att.time_in_location && (
-                              <span className="text-xs text-[#94A3B8]">
-                                No data
-                              </span>
-                            )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="px-4 py-2 border-t">
-                <Pagination
-                  currentPage={meta.current_page}
-                  totalPages={meta.last_page}
-                  onPageChange={setPage}
-                  totalItems={meta.total}
-                />
+                      )}
+                      <div className="mt-4 pt-4 border-t border-dashed border-[#CBD5E1]">
+                        {rowActions(a)}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
+              <div
+                className={`hidden ${ROW_CLASS} bg-[#16233F] text-white text-xs font-semibold`}
+              >
+                {[
+                  "Date",
+                  "Enforcer",
+                  "Time In",
+                  "Time Out",
+                  "Status",
+                  "Late",
+                  "Overtime",
+                  "Actions",
+                ].map((c) => (
+                  <span key={c}>{c}</span>
+                ))}
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+              <ul className="divide-y divide-[#EEF0F4]">
+                {filteredAttendances.map((a) => {
+                  const statusMeta =
+                    STATUS_META[a.status] || STATUS_META.present;
+                  return (
+                    <li
+                      key={a.attendance_id}
+                      className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
+                      style={{ borderLeftColor: statusMeta.color }}
+                    >
+                      <span className="text-sm font-medium text-[#16233F] whitespace-nowrap">
+                        <Mini>Date</Mini>
+                        {new Date(a.date).toLocaleDateString()}
+                      </span>
 
-      {/* Photo Modal */}
-      <Dialog open={showPhotoModal} onOpenChange={setShowPhotoModal}>
+                      <div className="min-w-0 flex items-center gap-2">
+                        <div className="w-9 h-9 shrink-0 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-xs font-bold">
+                          {a.enforcer?.firstname?.[0]}
+                          {a.enforcer?.lastname?.[0]}
+                        </div>
+                        <span className="text-sm text-[#1F2937] truncate">
+                          {a.enforcer?.firstname} {a.enforcer?.lastname}
+                        </span>
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="text-sm text-[#1F2937]">
+                          <Mini>In</Mini>
+                          {formatTime(a.time_in)}
+                        </div>
+                        {a.time_in_location && (
+                          <div className="text-[11px] text-[#64748B] flex items-center gap-1 truncate">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">
+                              {formatLocationDisplay(a.time_in_location)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="text-sm text-[#1F2937]">
+                          <Mini>Out</Mini>
+                          {a.time_out ? formatTime(a.time_out) : "—"}
+                        </div>
+                        {a.time_out_location && (
+                          <div className="text-[11px] text-[#64748B] flex items-center gap-1 truncate">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">
+                              {formatLocationDisplay(a.time_out_location)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <span className="justify-self-start">
+                        {statusBadge(a.status)}
+                      </span>
+
+                      <span className="text-sm text-[#1F2937] whitespace-nowrap">
+                        <Mini>Late</Mini>
+                        {a.late_minutes > 0 ? `${a.late_minutes} min` : "—"}
+                      </span>
+
+                      <span className="text-sm text-[#1F2937] whitespace-nowrap">
+                        <Mini>OT</Mini>
+                        {a.overtime_minutes > 0
+                          ? `${a.overtime_minutes} min`
+                          : "—"}
+                      </span>
+
+                      <div className="justify-self-end md:justify-self-start">
+                        {rowActions(a)}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {!isLoading && filteredAttendances.length > 0 && (
+            <Pagination
+              currentPage={meta.current_page}
+              totalPages={meta.last_page}
+              onPageChange={setPage}
+              totalItems={meta.total}
+              itemsPerPage={ITEMS_PER_PAGE}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ---------------- Photo Modal ---------------- */}
+      <Dialog
+        open={photoModal.open}
+        onOpenChange={(o) => setPhotoModal((s) => ({ ...s, open: o }))}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-['Oswald'] text-[#16233F]">
-              {photoType === "in" ? "Time In Photo" : "Time Out Photo"}
+              {photoModal.type === "in" ? "Time In Photo" : "Time Out Photo"}
             </DialogTitle>
           </DialogHeader>
-          {selectedAttendance && currentImageUrl && (
+          {photoModal.attendance && photoModal.url && (
             <div className="flex flex-col items-center">
-              {imageLoading ? (
+              {photoModal.loading ? (
                 <div className="flex justify-center items-center h-96">
                   <Loader2 className="w-12 h-12 animate-spin text-[#16233F]" />
                 </div>
               ) : (
                 <>
                   <img
-                    src={currentImageUrl}
-                    alt={`Time ${photoType} photo`}
+                    src={photoModal.url}
+                    alt={`Time ${photoModal.type} photo`}
                     className="w-full max-h-96 object-contain rounded-lg shadow-lg mb-4"
                     onError={(e) => {
-                      console.error("Failed to load image:", currentImageUrl);
                       e.target.style.display = "none";
                     }}
                   />
@@ -703,42 +972,22 @@ const Attendance = () => {
                     <p className="text-sm text-[#1F2937]">
                       <strong className="text-[#16233F]">Time:</strong>{" "}
                       {formatDateTime(
-                        photoType === "in"
-                          ? selectedAttendance.time_in
-                          : selectedAttendance.time_out,
+                        photoModal.type === "in"
+                          ? photoModal.attendance.time_in
+                          : photoModal.attendance.time_out,
                       )}
                     </p>
                     <p className="text-sm text-[#1F2937] mt-1">
                       <strong className="text-[#16233F]">Enforcer:</strong>{" "}
-                      {selectedAttendance.enforcer?.firstname}{" "}
-                      {selectedAttendance.enforcer?.lastname}
+                      {photoModal.attendance.enforcer?.firstname}{" "}
+                      {photoModal.attendance.enforcer?.lastname}
                     </p>
                     <p className="text-sm text-[#1F2937]">
                       <strong className="text-[#16233F]">Date:</strong>{" "}
-                      {new Date(selectedAttendance.date).toLocaleDateString()}
+                      {new Date(
+                        photoModal.attendance.date,
+                      ).toLocaleDateString()}
                     </p>
-                    {photoType === "in" &&
-                      selectedAttendance.time_in_location && (
-                        <p className="text-sm text-[#1F2937] mt-1">
-                          <strong className="text-[#16233F]">
-                            📍 Location:
-                          </strong>{" "}
-                          {formatLocationDisplay(
-                            selectedAttendance.time_in_location,
-                          )}
-                        </p>
-                      )}
-                    {photoType === "out" &&
-                      selectedAttendance.time_out_location && (
-                        <p className="text-sm text-[#1F2937] mt-1">
-                          <strong className="text-[#16233F]">
-                            📍 Location:
-                          </strong>{" "}
-                          {formatLocationDisplay(
-                            selectedAttendance.time_out_location,
-                          )}
-                        </p>
-                      )}
                   </div>
                 </>
               )}
@@ -747,41 +996,49 @@ const Attendance = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Map Modal */}
-      <Dialog open={showMapModal} onOpenChange={setShowMapModal}>
+      {/* ---------------- Map Modal ---------------- */}
+      <Dialog
+        open={mapModal.open}
+        onOpenChange={(o) => setMapModal((s) => ({ ...s, open: o }))}
+      >
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="font-['Oswald'] text-[#16233F]">
-              {mapType === "in" ? "Time In Location" : "Time Out Location"}
+              {mapModal.type === "in"
+                ? "Time In Location"
+                : "Time Out Location"}
             </DialogTitle>
           </DialogHeader>
-          {mapLocation && mapAttendance && (
+          {mapModal.location && mapModal.attendance && (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-[#F8F9FA] p-4 rounded-lg space-y-2">
                   <p className="text-sm">
                     <strong className="text-[#16233F]">Enforcer:</strong>{" "}
-                    {mapAttendance.enforcer?.firstname}{" "}
-                    {mapAttendance.enforcer?.lastname}
+                    {mapModal.attendance.enforcer?.firstname}{" "}
+                    {mapModal.attendance.enforcer?.lastname}
                   </p>
                   <p className="text-sm">
                     <strong className="text-[#16233F]">Date:</strong>{" "}
-                    {new Date(mapAttendance.date).toLocaleDateString()}
+                    {new Date(mapModal.attendance.date).toLocaleDateString()}
                   </p>
                   <p className="text-sm">
                     <strong className="text-[#16233F]">Time:</strong>{" "}
                     {formatDateTime(
-                      mapType === "in"
-                        ? mapAttendance.time_in
-                        : mapAttendance.time_out,
+                      mapModal.type === "in"
+                        ? mapModal.attendance.time_in
+                        : mapModal.attendance.time_out,
                     )}
                   </p>
                   <p className="text-sm">
-                    <strong className="text-[#16233F]">📍 Coordinates:</strong>{" "}
-                    {mapLocation.lat.toFixed(6)}, {mapLocation.lng.toFixed(6)}
+                    <strong className="text-[#16233F]">
+                      Coordinates:
+                    </strong>{" "}
+                    {mapModal.location.lat.toFixed(6)},{" "}
+                    {mapModal.location.lng.toFixed(6)}
                   </p>
                   <a
-                    href={`https://www.google.com/maps?q=${mapLocation.lat},${mapLocation.lng}`}
+                    href={`https://www.google.com/maps?q=${mapModal.location.lat},${mapModal.location.lng}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 text-sm text-[#16233F] hover:underline"
@@ -796,9 +1053,9 @@ const Attendance = () => {
                   </p>
                   <p className="text-sm text-[#64748B]">
                     {formatLocationDisplay(
-                      mapType === "in"
-                        ? mapAttendance.time_in_location
-                        : mapAttendance.time_out_location,
+                      mapModal.type === "in"
+                        ? mapModal.attendance.time_in_location
+                        : mapModal.attendance.time_out_location,
                     )}
                   </p>
                 </div>
@@ -806,8 +1063,8 @@ const Attendance = () => {
 
               <div className="h-[400px] w-full rounded-lg overflow-hidden border border-[#E9ECF2]">
                 <MapContainer
-                  key={`map-${mapLocation.lat}-${mapLocation.lng}`}
-                  center={[mapLocation.lat, mapLocation.lng]}
+                  key={`map-${mapModal.location.lat}-${mapModal.location.lng}`}
+                  center={[mapModal.location.lat, mapModal.location.lng]}
                   zoom={16}
                   style={{ height: "100%", width: "100%" }}
                   zoomControl={false}
@@ -819,25 +1076,27 @@ const Attendance = () => {
                     url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                   />
                   <ZoomControl position="topright" />
-
                   <Marker
-                    position={[mapLocation.lat, mapLocation.lng]}
+                    position={[
+                      mapModal.location.lat,
+                      mapModal.location.lng,
+                    ]}
                     icon={attendanceIcon}
                   >
                     <Popup>
                       <div className="p-2 min-w-[180px]">
                         <p className="font-bold text-[#16233F]">
-                          {mapType === "in" ? "Time In" : "Time Out"}
+                          {mapModal.type === "in" ? "Time In" : "Time Out"}
                         </p>
                         <p className="text-sm text-[#64748B]">
-                          {mapAttendance.enforcer?.firstname}{" "}
-                          {mapAttendance.enforcer?.lastname}
+                          {mapModal.attendance.enforcer?.firstname}{" "}
+                          {mapModal.attendance.enforcer?.lastname}
                         </p>
                         <p className="text-xs text-[#64748B]">
                           {new Date(
-                            mapType === "in"
-                              ? mapAttendance.time_in
-                              : mapAttendance.time_out,
+                            mapModal.type === "in"
+                              ? mapModal.attendance.time_in
+                              : mapModal.attendance.time_out,
                           ).toLocaleString()}
                         </p>
                       </div>

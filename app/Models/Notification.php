@@ -22,18 +22,20 @@ class Notification extends Model
     ];
 
     protected $casts = [
-        'is_read' => 'boolean',
+        'is_read'    => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
 
-    // ---------- Relations ----------
+    /* ---------------- Relations ---------------- */
+
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
-    // ---------- Scopes ----------
+    /* ---------------- Scopes ---------------- */
+
     public function scopeUnread($query)
     {
         return $query->where('is_read', false);
@@ -44,7 +46,8 @@ class Notification extends Model
         return $query->where('user_id', $userId);
     }
 
-    // ---------- Type constants ----------
+    /* ---------------- Type constants ---------------- */
+
     public const TYPE_TICKET_CREATED         = 'ticket_created';
     public const TYPE_TICKET_PAID            = 'ticket_paid';
     public const TYPE_TICKET_CONTESTED       = 'ticket_contested';
@@ -112,4 +115,30 @@ class Notification extends Model
     public const TYPE_SYSTEM_BACKUP          = 'system_backup';
     public const TYPE_SYSTEM_ALERT           = 'system_alert';
     public const TYPE_SECURITY_ALERT         = 'security_alert';
+
+    /* ---------------- Archive / restore ---------------- */
+
+    public const TYPE_TICKET_ARCHIVED          = 'ticket_archived';
+    public const TYPE_TICKET_RESTORED          = 'ticket_restored';
+
+    public const TYPE_VIOLATOR_ARCHIVED        = 'violator_archived';
+    public const TYPE_VIOLATOR_RESTORED        = 'violator_restored';
+
+    public const TYPE_VEHICLE_ARCHIVED         = 'vehicle_archived';
+    public const TYPE_VEHICLE_RESTORED         = 'vehicle_restored';
+
+    public const TYPE_VIOLATION_ARCHIVED       = 'violation_archived';
+    public const TYPE_VIOLATION_RESTORED       = 'violation_restored';
+
+    public const TYPE_USER_ARCHIVED            = 'user_archived';
+    public const TYPE_USER_RESTORED            = 'user_restored';
+
+    public const TYPE_SCHEDULE_ARCHIVED        = 'schedule_archived';
+    public const TYPE_SCHEDULE_RESTORED        = 'schedule_restored';
+
+    public const TYPE_DUTY_LOCATION_ARCHIVED   = 'duty_location_archived';
+    public const TYPE_DUTY_LOCATION_RESTORED   = 'duty_location_restored';
+
+    public const TYPE_PAYMENT_ARCHIVED         = 'payment_archived';
+    public const TYPE_PAYMENT_RESTORED         = 'payment_restored';
 }
