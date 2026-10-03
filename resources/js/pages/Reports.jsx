@@ -2986,7 +2986,7 @@ const Reports = () => {
                                     </div>
 
                                     {data.payments_summary && (
-                                        <section className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card print-avoid-break">
+                                        <section className="space-y-4 print-card print-avoid-break">
                                             <SectionHeader note="Detailed account of payments received in the primary range: total collected, refunds, net collected, and the number of payments and tickets covered."
                                                 icon={Receipt}
                                                 color={COLORS.green}
@@ -3003,7 +3003,7 @@ const Reports = () => {
                                     )}
 
                                     {compare?.payments_summary && (
-                                        <section className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card print-avoid-break">
+                                        <section className="space-y-4 print-card print-avoid-break">
                                             <SectionHeader note="The same payment figures for the compare range, provided for reference against the primary range."
                                                 icon={Scale}
                                                 color={COLORS.compare}
@@ -3013,7 +3013,7 @@ const Reports = () => {
                                                     (compare range)
                                                 </span>
                                             </SectionHeader>
-                                            <div className="mb-3 text-xs text-[#64748B]">
+                                            <div className="text-xs text-[#64748B]">
                                                 {formatShortDate(compareRange.start)} –{' '}
                                                 {formatShortDate(compareRange.end)}
                                             </div>
