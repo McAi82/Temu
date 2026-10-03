@@ -1656,8 +1656,8 @@ const GlobalViewToggle = ({ views, onChange }) => {
                         aria-pressed={current === v}
                         title={`Show every section as ${label.toLowerCase()}`}
                         className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all ${current === v
-                                ? 'bg-[#16233F] text-white'
-                                : 'text-[#64748B] hover:text-[#16233F]'
+                            ? 'bg-[#16233F] text-white'
+                            : 'text-[#64748B] hover:text-[#16233F]'
                             }`}
                     >
                         <I className="h-3.5 w-3.5" />
@@ -1709,6 +1709,30 @@ const Reports = () => {
         setEnforcersPage(1);
         setRecentTicketsPage(1);
     }, [data]);
+
+    const ChartTooltip = ({ active, payload, label }) => {
+        if (!active || !payload?.length) return null;
+        return (
+            <div className="rounded-lg border border-[#E9ECF2] bg-white px-3 py-2 shadow-lg">
+                <p className="mb-1 text-xs font-semibold text-[#16233F]">{label}</p>
+                {payload.map((entry) => (
+                    <p key={entry.dataKey} className="text-xs text-[#64748B]">
+                        <span
+                            className="inline-block h-2 w-2 rounded-full align-middle"
+                            style={{ backgroundColor: entry.color }}
+                        />
+                        <span className="ml-1.5">{entry.name}: </span>
+                        <span className="font-medium text-[#1F2937]">
+                            {entry.dataKey === 'total_fines' ||
+                                entry.dataKey === 'collected'
+                                ? formatCurrency(entry.value)
+                                : entry.value}
+                        </span>
+                    </p>
+                ))}
+            </div>
+        );
+    };
 
     const buildParams = useCallback(() => {
         const params = {

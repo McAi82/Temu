@@ -120,7 +120,7 @@
     "src": "node_modules/leaflet/dist/images/marker-icon.png"
   },
   "resources/css/app.css": {
-    "file": "assets/app-D7MzfOL_.css",
+    "file": "assets/app-CfUjvQki.css",
     "name": "app",
     "names": [
       "app.css"
@@ -138,7 +138,7 @@
     "src": "resources/js/assets/temu-logo.png"
   },
   "resources/js/main.jsx": {
-    "file": "assets/main-C5Q0E3HW.js",
+    "file": "assets/main-XrXRvaSQ.js",
     "name": "main",
     "src": "resources/js/main.jsx",
     "isEntry": true,
