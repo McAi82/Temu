@@ -112,3 +112,15 @@
     --radius-md: calc(var(--radius) - 2px);
     --radius-sm: calc(var(--radius) - 4px);
 }
+
+.sidebar-scroll {
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE / old Edge */
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari, Edge (Chromium) */
+}
