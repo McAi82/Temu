@@ -343,14 +343,13 @@ const MiniPager = ({
     total,
     perPage = ITEMS_PER_PAGE,
     label = 'items',
-    dark = false,
 }) => {
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     if (total <= perPage) {
         return (
-            <p className={`text-xs mt-3 ${dark ? 'text-[#8D98B3]' : 'text-[#94A3B8]'}`}>
+            <p className="text-xs text-[#94A3B8] mt-3">
                 Showing{' '}
-                <span className={`font-medium ${dark ? 'text-[#C7CEDB]' : 'text-[#64748B]'}`}>{total}</span>{' '}
+                <span className="font-medium text-[#64748B]">{total}</span>{' '}
                 {total === 1 ? label.replace(/s$/, '') : label}
             </p>
         );
@@ -359,18 +358,14 @@ const MiniPager = ({
     const from = (page - 1) * perPage + 1;
     const to = Math.min(page * perPage, total);
 
-    const btnBase = dark
-        ? 'h-7 w-7 p-0 rounded-full border-white/20 text-white hover:bg-[#F0B429] hover:text-[#16233F] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-white'
-        : 'h-7 w-7 p-0 rounded-full border-[#16233F]/20 text-[#16233F] hover:bg-[#16233F] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#16233F]';
-
     return (
-        <div className={`mt-4 flex items-center justify-between gap-3 border-t border-dashed pt-3 ${dark ? 'border-white/15' : 'border-[#CBD5E1]'}`}>
-            <p className={`text-xs tabular-nums ${dark ? 'text-[#8D98B3]' : 'text-[#94A3B8]'}`}>
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-dashed border-[#CBD5E1] pt-3">
+            <p className="text-xs text-[#94A3B8] tabular-nums">
                 Showing{' '}
-                <span className={`font-medium ${dark ? 'text-[#C7CEDB]' : 'text-[#64748B]'}`}>
+                <span className="font-medium text-[#64748B]">
                     {from}–{to}
                 </span>{' '}
-                of <span className={`font-medium ${dark ? 'text-[#C7CEDB]' : 'text-[#64748B]'}`}>{total}</span>{' '}
+                of <span className="font-medium text-[#64748B]">{total}</span>{' '}
                 {label}
             </p>
             <div className="flex items-center gap-1">
@@ -379,12 +374,12 @@ const MiniPager = ({
                     size="sm"
                     onClick={() => onPageChange(page - 1)}
                     disabled={page <= 1}
-                    className={btnBase}
+                    className="h-7 w-7 p-0 rounded-full border-[#16233F]/20 text-[#16233F] hover:bg-[#16233F] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#16233F]"
                     title="Previous"
                 >
                     <ChevronLeft className="w-3.5 h-3.5" />
                 </Button>
-                <span className={`text-xs font-medium tabular-nums px-1 ${dark ? 'text-white' : 'text-[#16233F]'}`}>
+                <span className="text-xs font-medium text-[#16233F] tabular-nums px-1">
                     {page} / {totalPages}
                 </span>
                 <Button
@@ -392,7 +387,7 @@ const MiniPager = ({
                     size="sm"
                     onClick={() => onPageChange(page + 1)}
                     disabled={page >= totalPages}
-                    className={btnBase}
+                    className="h-7 w-7 p-0 rounded-full border-[#16233F]/20 text-[#16233F] hover:bg-[#16233F] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#16233F]"
                     title="Next"
                 >
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -421,6 +416,66 @@ const FieldLabel = ({ icon: I, children }) => (
         {children}
     </label>
 );
+
+const ViewToggle = ({ view, setView }) => (
+    <div
+        className="no-print ml-auto flex bg-[#E9ECF2] rounded-full p-1 text-xs"
+        role="group"
+        aria-label="Choose layout"
+    >
+        {[['list', 'List', ListIcon], ['cards', 'Cards', LayoutGrid]].map(
+            ([v, label, I]) => (
+                <button
+                    key={v}
+                    type="button"
+                    onClick={() => setView(v)}
+                    aria-pressed={view === v}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
+                        ? 'bg-[#16233F] text-white'
+                        : 'text-[#64748B] hover:text-[#16233F]'
+                        }`}
+                >
+                    <I className="w-3.5 h-3.5" />
+                    {label}
+                </button>
+            ),
+        )}
+    </div>
+);
+
+/* One switch for every list/card section on the page */
+const GlobalViewToggle = ({ views, onChange }) => {
+    const current = views.every((v) => v === views[0]) ? views[0] : null; // null = mixed
+    return (
+        <div
+            className="no-print flex items-center gap-2"
+            role="group"
+            aria-label="Switch all sections between list and cards"
+        >
+            <span className="hidden text-[11px] font-medium uppercase tracking-[0.14em] text-[#64748B] sm:inline">
+                All sections
+            </span>
+            <div className="flex rounded-full bg-[#E9ECF2] p-1 text-xs">
+                {[['list', 'List', ListIcon], ['cards', 'Cards', LayoutGrid]].map(([v, label, I]) => (
+                    <button
+                        key={v}
+                        type="button"
+                        onClick={() => onChange(v)}
+                        aria-pressed={current === v}
+                        title={`Show every section as ${label.toLowerCase()}`}
+                        className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all ${current === v
+                            ? 'bg-[#16233F] text-white'
+                            : 'text-[#64748B] hover:text-[#16233F]'
+                            }`}
+                    >
+                        <I className="h-3.5 w-3.5" />
+                        {label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 const DeltaBadge = ({ delta }) => {
     if (!delta) return null;
@@ -505,6 +560,7 @@ const PrintStyles = ({ refNo = 'TEMU-R' }) => (
       .no-print, nav, aside, header[role="banner"], .print\\:hidden { display: none !important; }
       .print-only { display: block !important; }
 
+      /* Print the document, not the app shell: remove scroll containers & fixed heights */
       html, body, #root { height: auto !important; min-height: 0 !important; overflow: visible !important; }
       *:has(.print-report) {
         display: block !important; position: static !important;
@@ -522,9 +578,11 @@ const PrintStyles = ({ refNo = 'TEMU-R' }) => (
       .print-report, .print-report * { font-family: Arial, Helvetica, sans-serif !important; }
       .print-report table { min-width: 0 !important; }
 
+      /* Charts are rendered at a fixed size while printing (see ChartBox) */
       .print-report .recharts-wrapper { max-width: 100% !important; margin: 0 auto; }
       .print-report .recharts-tooltip-wrapper { display: none !important; }
 
+      /* Payment tiles: light, compact, readable */
       .print-report .navy-stat-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 6px !important; }
       .print-report .navy-stat {
         background: #ffffff !important; border: 1px solid #16233F !important;
@@ -534,32 +592,6 @@ const PrintStyles = ({ refNo = 'TEMU-R' }) => (
       .print-report .navy-stat p:first-child { font-size: 8px !important; letter-spacing: 0.8px !important; text-transform: uppercase !important; color: #475569 !important; }
       .print-report .navy-stat p:nth-child(2) { font-size: 16px !important; font-weight: 700 !important; color: #16233F !important; }
 
-      /* Navy print sections render as white boxed cards */
-      .print-report .bg-\\[\\#16233F\\] {
-        background: #ffffff !important;
-        border: 1px solid #16233F !important;
-        color: #111827 !important;
-      }
-      .print-report .bg-\\[\\#16233F\\] * {
-        color: #111827 !important;
-      }
-      .print-report .bg-\\[\\#16233F\\] .text-\\[\\#F0B429\\] {
-        color: #16233F !important;
-      }
-      .print-report .bg-\\[\\#16233F\\] .text-\\[\\#C7CEDB\\],
-      .print-report .bg-\\[\\#16233F\\] .text-\\[\\#8D98B3\\] {
-        color: #475569 !important;
-      }
-      .print-report .bg-white\\/5,
-      .print-report .bg-white\\/10 {
-        background: #F5F6F8 !important;
-        border-color: #CBD5E1 !important;
-      }
-      .print-report .border-white\\/10,
-      .print-report .border-white\\/15 {
-        border-color: #CBD5E1 !important;
-      }
-
       .print-report, .print-report * {
         box-shadow: none !important;
         text-shadow: none !important;
@@ -567,6 +599,7 @@ const PrintStyles = ({ refNo = 'TEMU-R' }) => (
         background-image: none !important;
       }
 
+      /* Each card is a boxed form part */
       .print-report .print-card {
         border: 1px solid #16233F !important;
         background: #ffffff !important;
@@ -700,6 +733,7 @@ const PrintHeader = ({
     return (
         <div className="print-only" style={{ marginBottom: '10px' }}>
             <div style={{ border: `1.5px solid ${FORM_INK}` }}>
+                {/* Title row */}
                 <FormRow>
                     <div style={{ width: '74px', borderRight: `1px solid ${FORM_INK}`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px' }}>
                         <img src={temuLogo} alt="TEMU" style={{ width: '58px', height: '58px', objectFit: 'contain' }} />
@@ -721,6 +755,7 @@ const PrintHeader = ({
                     </div>
                 </FormRow>
 
+                {/* Identification fields */}
                 <div className="form-dark" style={{ background: FORM_INK, color: '#fff', fontSize: '7.5px', letterSpacing: '2px', padding: '2px 8px', borderTop: `1px solid ${FORM_INK}` }}>
                     <span style={{ color: '#fff' }}>REPORT IDENTIFICATION</span>
                 </div>
@@ -745,6 +780,7 @@ const PrintHeader = ({
                     </div>
                 </FormRow>
 
+                {/* Key figures */}
                 <div className="form-dark" style={{ background: FORM_INK, color: '#fff', fontSize: '7.5px', letterSpacing: '2px', padding: '2px 8px', borderTop: `1px solid ${FORM_INK}` }}>
                     <span style={{ color: '#fff' }}>SUMMARY OF FIGURES</span>
                 </div>
@@ -771,6 +807,7 @@ const FormBar = ({ children }) => (
 const maxBy = (rows, key) =>
     rows.reduce((best, r) => (toNumber(r?.[key]) > toNumber(best?.[key]) ? r : best), rows[0]);
 
+/* Printed report only: overview paragraph + auto-written key findings */
 const PrintNarrative = ({
     periodLabel, dateRange, rangeDays, summary, chartStats, payments,
     violations, violators, enforcers, compare, includeArchived, generatedAt,
@@ -843,6 +880,7 @@ const PrintNarrative = ({
     );
 };
 
+/* Printed report only: definitions, basis of preparation, remarks box */
 const PrintNotes = ({ generatedAt, includeArchived }) => {
     const defs = [
         ['Issued', 'A ticket that has been recorded and is awaiting payment or action.'],
@@ -934,24 +972,18 @@ const PrintSignatures = () => (
     </div>
 );
 
+/* Footer + page numbers are drawn by the @page margin boxes in PrintStyles */
 const PrintFooter = () => null;
 
 /* ------------------------------------------------------------------ */
 /* Report-specific components                                          */
 /* ------------------------------------------------------------------ */
 
-const EmptyState = ({ message, hint, dark = false }) => (
+const EmptyState = ({ message, hint }) => (
     <div className="flex flex-col items-center justify-center py-10 text-center">
-        <Inbox
-            className={`mb-3 h-8 w-8 ${dark ? 'text-white/40' : 'text-[#CBD5E1]'}`}
-            aria-hidden="true"
-        />
-        <p className={`text-sm ${dark ? 'text-[#C7CEDB]' : 'text-[#64748B]'}`}>{message}</p>
-        {hint && (
-            <p className={`mt-1 text-xs ${dark ? 'text-[#8D98B3]' : 'text-[#94A3B8]'}`}>
-                {hint}
-            </p>
-        )}
+        <Inbox className="mb-3 h-8 w-8 text-[#CBD5E1]" aria-hidden="true" />
+        <p className="text-sm text-[#64748B]">{message}</p>
+        {hint && <p className="mt-1 text-xs text-[#94A3B8]">{hint}</p>}
     </div>
 );
 
@@ -965,7 +997,7 @@ const ErrorState = ({ message, onRetry }) => (
                 />
                 <div>
                     <p className="font-medium text-[#C8202F]">
-                        Report didn't load
+                        Report didn’t load
                     </p>
                     <p className="text-sm text-[#7F1D1D]/80">{message}</p>
                 </div>
@@ -1008,13 +1040,12 @@ const ReportSkeleton = () => (
     </div>
 );
 
-/* Section header — works on navy cards */
 const SectionHeader = ({ icon: Icon, color, children, action, note }) => (
     <>
-        <div className="form-bar flex items-center justify-between gap-3 mb-5 pb-2 border-b border-white/10">
+        <div className="form-bar flex items-center justify-between gap-3 mb-5 px-3 py-2 bg-[#16233F]">
             <h2 className="flex items-center gap-3 text-[13px] font-['Oswald'] font-medium uppercase tracking-[0.14em] text-white">
                 <span className="form-part hidden print:inline text-[11px] font-semibold tracking-[0.18em] text-[#F0B429]" />
-                {Icon && <Icon className="w-4 h-4 text-[#F0B429]" />}
+                {Icon && <Icon className="w-4 h-4 text-white/80" />}
                 {children}
             </h2>
             {action}
@@ -1022,6 +1053,178 @@ const SectionHeader = ({ icon: Icon, color, children, action, note }) => (
         {note && <p className="print-only print-note">{note}</p>}
     </>
 );
+
+const RankedRow = ({ rank, primary, secondary, value, share, color }) => (
+    <li className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+                {rank != null && (
+                    <span className="w-5 shrink-0 text-sm font-bold text-[#94A3B8]">
+                        {rank}
+                    </span>
+                )}
+                <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[#1F2937]">
+                        {primary}
+                    </p>
+                    {secondary && (
+                        <p className="truncate text-xs text-[#64748B]">
+                            {secondary}
+                        </p>
+                    )}
+                </div>
+            </div>
+            <span
+                className="shrink-0 text-sm font-semibold tabular-nums"
+                style={{ color }}
+            >
+                {value}
+            </span>
+        </div>
+        <div className="print-bar h-1.5 w-full overflow-hidden rounded-full bg-[#F1F5F9]">
+            <div
+                className="h-full rounded-full transition-[width] duration-500"
+                style={{ width: `${Math.max(share, 2)}%`, backgroundColor: color }}
+            />
+        </div>
+    </li>
+);
+
+const RankedCard = ({
+    rank,
+    primary,
+    secondary,
+    value,
+    share,
+    color,
+    label,
+}) => (
+    <article className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
+        <div className="h-2" style={{ background: color }} />
+        <div className="p-4">
+            <div className="flex items-center justify-between gap-2 mb-2">
+                {rank != null && (
+                    <span className="text-xs font-semibold text-[#94A3B8]">
+                        #{rank}
+                    </span>
+                )}
+                <span
+                    className="text-sm font-semibold tabular-nums"
+                    style={{ color }}
+                >
+                    {value}
+                </span>
+            </div>
+            <p className="font-['Oswald'] text-base leading-tight text-[#1F2937] truncate">
+                {primary}
+            </p>
+            {secondary && (
+                <p className="text-xs text-[#64748B] mt-1 truncate">
+                    {secondary}
+                </p>
+            )}
+            {label && <p className="text-[10px] text-[#94A3B8] mt-2">{label}</p>}
+            <div className="print-bar mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#F1F5F9]">
+                <div
+                    className="h-full rounded-full transition-[width] duration-500"
+                    style={{
+                        width: `${Math.max(share, 2)}%`,
+                        backgroundColor: color,
+                    }}
+                />
+            </div>
+        </div>
+    </article>
+);
+
+const PaymentMethodRow = ({ method, count, total, maxTotal }) => {
+    const meta = PAYMENT_METHOD_META[method] || {
+        label: method,
+        color: COLORS.slate,
+        bg: '#F1F5F9',
+        Icon: CreditCard,
+    };
+    const share = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+    const Icon = meta.Icon;
+
+    return (
+        <li className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                    <div
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                        style={{ backgroundColor: meta.bg }}
+                    >
+                        <Icon className="h-4 w-4" style={{ color: meta.color }} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-[#1F2937]">
+                            {meta.label}
+                        </p>
+                        <p className="truncate text-xs text-[#64748B]">
+                            {count} {count === 1 ? 'payment' : 'payments'}
+                        </p>
+                    </div>
+                </div>
+                <span
+                    className="shrink-0 text-sm font-semibold tabular-nums"
+                    style={{ color: meta.color }}
+                >
+                    {formatCurrency(total)}
+                </span>
+            </div>
+            <div className="print-bar h-1.5 w-full overflow-hidden rounded-full bg-[#F1F5F9]">
+                <div
+                    className="h-full rounded-full transition-[width] duration-500"
+                    style={{
+                        width: `${Math.max(share, 2)}%`,
+                        backgroundColor: meta.color,
+                    }}
+                />
+            </div>
+        </li>
+    );
+};
+
+/* ResponsiveContainer measures the screen layout and collapses in print preview,
+   so while printing we render the chart at a fixed A4-friendly size. */
+const ChartBox = ({ printing, height, printWidth = 680, printHeight, children }) =>
+    printing ? (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+            {React.cloneElement(children, {
+                width: printWidth,
+                height: printHeight || Math.min(height, 300),
+            })}
+        </div>
+    ) : (
+        <ResponsiveContainer width="100%" height={height}>
+            {children}
+        </ResponsiveContainer>
+    );
+
+const ChartTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+        <div className="rounded-lg border border-[#E9ECF2] bg-white px-3 py-2 shadow-lg">
+            <p className="mb-1 text-xs font-semibold text-[#16233F]">{label}</p>
+            {payload.map((entry) => (
+                <p key={entry.dataKey} className="text-xs text-[#64748B]">
+                    <span
+                        className="inline-block h-2 w-2 rounded-full align-middle"
+                        style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="ml-1.5">{entry.name}: </span>
+                    <span className="font-medium text-[#1F2937]">
+                        {entry.dataKey === 'total_fines' ||
+                            entry.dataKey === 'collected'
+                            ? formatCurrency(entry.value)
+                            : entry.value}
+                    </span>
+                </p>
+            ))}
+        </div>
+    );
+};
 
 const StatTile = ({
     title,
@@ -1193,7 +1396,7 @@ const CompareTable = ({ primary, compare, primaryRange, compareRange }) => {
 };
 
 const NavyStat = ({ label, value, prefix = '', suffix = '', accent, sub }) => (
-    <div className="navy-stat rounded-xl bg-white/5 border border-white/10 p-4">
+    <div className="navy-stat rounded-xl bg-[#16233F] text-white p-5 border-t-4 border-[#F0B429]">
         <p className="text-xs text-[#C7CEDB] mb-2">{label}</p>
         <p
             className="text-3xl font-['Oswald'] font-semibold tabular-nums leading-none"
@@ -1205,46 +1408,6 @@ const NavyStat = ({ label, value, prefix = '', suffix = '', accent, sub }) => (
     </div>
 );
 
-/* Ranked list row used by top violations / enforcers / violators */
-const RankedRow = ({ rank, primary, secondary, value, share, color, badge }) => (
-    <li className="space-y-1.5">
-        <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-                {badge ? (
-                    badge
-                ) : rank != null ? (
-                    <span className="w-6 h-6 shrink-0 rounded-full bg-[#F0B429] text-[#16233F] flex items-center justify-center text-xs font-bold tabular-nums">
-                        {rank}
-                    </span>
-                ) : null}
-                <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-white">{primary}</p>
-                    {secondary && (
-                        <p className="truncate text-xs text-[#C7CEDB]">{secondary}</p>
-                    )}
-                </div>
-            </div>
-            <span className="shrink-0 text-sm font-semibold text-[#F0B429] tabular-nums">
-                {value}
-            </span>
-        </div>
-        <div className="print-bar h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-                className="h-full rounded-full transition-[width] duration-500"
-                style={{ width: `${Math.max(share, 2)}%`, backgroundColor: color }}
-            />
-        </div>
-    </li>
-);
-
-/* Small card used by drill-down lists (payments, tickets) */
-const NavyListRow = ({ children }) => (
-    <li className="rounded-lg bg-white/5 border border-white/10 p-3 hover:bg-white/10 transition-colors">
-        {children}
-    </li>
-);
-
-/* PaymentsSection — now navy cards */
 const PaymentsSection = ({ paymentsSummary }) => {
     const [recentPage, setRecentPage] = useState(1);
 
@@ -1280,7 +1443,7 @@ const PaymentsSection = ({ paymentsSummary }) => {
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="navy-stat-grid grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <NavyStat
                     label="Net Collected"
                     value={net_collected}
@@ -1316,63 +1479,37 @@ const PaymentsSection = ({ paymentsSummary }) => {
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {/* Collections by payment method */}
-                <div className="bg-[#16233F] text-white rounded-xl p-6 shadow-sm print-card">
-                    <SectionHeader
-                        note={`Shows how payments received in the period were settled, by payment method. ${by_method.length} method(s) recorded, with net collections of ${formatCurrency(net_collected)} after refunds of ${formatCurrency(refunded_total)}.`}
-                        icon={Wallet}
-                        color={COLORS.amber}
-                    >
+                <div className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)]">
+                    <SectionHeader note={`Shows how payments received in the period were settled, by payment method. ${by_method.length} method(s) recorded, with net collections of ${formatCurrency(net_collected)} after refunds of ${formatCurrency(refunded_total)}.`} icon={Wallet} color={COLORS.navy}>
                         Collections by payment method
                     </SectionHeader>
                     {by_method.length > 0 ? (
                         <ul className="space-y-4">
-                            {by_method.map((m) => {
-                                const meta = PAYMENT_METHOD_META[m.method] || {
-                                    label: m.method,
-                                    color: COLORS.amber,
-                                    Icon: CreditCard,
-                                };
-                                const share =
-                                    maxMethodTotal > 0
-                                        ? (m.total / maxMethodTotal) * 100
-                                        : 0;
-                                const Icon = meta.Icon;
-                                return (
-                                    <RankedRow
-                                        key={m.method}
-                                        badge={
-                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
-                                                <Icon className="h-4 w-4 text-[#F0B429]" />
-                                            </div>
-                                        }
-                                        primary={meta.label}
-                                        secondary={`${m.count} ${m.count === 1 ? 'payment' : 'payments'}`}
-                                        value={formatCurrency(m.total)}
-                                        share={share}
-                                        color={COLORS.amber}
-                                    />
-                                );
-                            })}
+                            {by_method.map((m) => (
+                                <PaymentMethodRow
+                                    key={m.method}
+                                    method={m.method}
+                                    count={m.count}
+                                    total={m.total}
+                                    maxTotal={maxMethodTotal}
+                                />
+                            ))}
                         </ul>
                     ) : (
                         <EmptyState
                             message="No payments collected in this period."
                             hint="Recorded receipts will appear here as staff complete them."
-                            dark
                         />
                     )}
                 </div>
 
-                {/* Recent payments */}
-                <div className="bg-[#16233F] text-white rounded-xl p-6 shadow-sm print-card">
-                    <SectionHeader
-                        note="Lists the most recent payment transactions in the period, with the receipt and ticket reference, the violator, the payment method, the amount and the date and time of payment."
+                <div className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)]">
+                    <SectionHeader note="Lists the most recent payment transactions in the period, with the receipt and ticket reference, the violator, the payment method, the amount and the date and time of payment."
                         icon={Receipt}
-                        color={COLORS.amber}
+                        color={COLORS.navy}
                         action={
                             totalRecent > 0 ? (
-                                <span className="text-xs text-[#C7CEDB] tabular-nums">
+                                <span className="text-xs text-[#64748B]">
                                     {totalRecent} total
                                 </span>
                             ) : null
@@ -1382,59 +1519,90 @@ const PaymentsSection = ({ paymentsSummary }) => {
                     </SectionHeader>
                     {totalRecent > 0 ? (
                         <>
-                            <ul className="space-y-2">
-                                {recentPageItems.map((p) => {
-                                    const meta =
-                                        PAYMENT_METHOD_META[p.payment_method] || {};
-                                    return (
-                                        <NavyListRow key={p.payment_id}>
-                                            <div className="flex items-start justify-between gap-3 mb-2">
-                                                <div className="min-w-0">
-                                                    <p className="font-mono text-sm font-semibold text-white truncate">
+                            <div className="-mx-2 overflow-x-auto px-2">
+                                <table className="w-full min-w-[520px]">
+                                    <thead className="border-b border-[#E9ECF2]">
+                                        <tr>
+                                            {[
+                                                'Receipt #',
+                                                'Ticket #',
+                                                'Violator',
+                                                'Method',
+                                                'Amount',
+                                                'Date',
+                                            ].map((h) => (
+                                                <th
+                                                    key={h}
+                                                    scope="col"
+                                                    className={`py-3 font-['Inter'] text-xs font-semibold text-[#16233F] ${h === 'Amount'
+                                                        ? 'text-right'
+                                                        : 'text-left'
+                                                        }`}
+                                                >
+                                                    {h}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {recentPageItems.map((p) => {
+                                            const meta =
+                                                PAYMENT_METHOD_META[
+                                                p.payment_method
+                                                ] || {};
+                                            return (
+                                                <tr
+                                                    key={p.payment_id}
+                                                    className="border-b border-[#F3F4F6] transition-colors hover:bg-[#F8F9FA]"
+                                                >
+                                                    <td className="py-2.5 font-mono text-xs text-[#16233F]">
                                                         {p.receipt_number || '—'}
-                                                    </p>
-                                                    <p className="text-xs text-[#C7CEDB] truncate mt-0.5">
+                                                    </td>
+                                                    <td className="py-2.5 font-mono text-xs text-[#64748B]">
+                                                        {p.ticket_number || '—'}
+                                                    </td>
+                                                    <td className="py-2.5 text-sm text-[#1F2937]">
                                                         {p.violator_name || '—'}
-                                                    </p>
-                                                </div>
-                                                <p className="text-base font-['Oswald'] font-semibold text-[#F0B429] tabular-nums shrink-0">
-                                                    {formatCurrency(p.amount_paid)}
-                                                </p>
-                                            </div>
-                                            <div className="flex items-center gap-4 flex-wrap text-[11px] text-[#8D98B3]">
-                                                <span className="font-mono">
-                                                    {p.ticket_number || '—'}
-                                                </span>
-                                                <span className="capitalize">
-                                                    {meta.label || p.payment_method}
-                                                </span>
-                                                <span>
-                                                    {p.payment_date
-                                                        ? new Date(
-                                                            p.payment_date,
-                                                        ).toLocaleString('en-PH', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit',
-                                                        })
-                                                        : '—'}
-                                                </span>
-                                            </div>
-                                        </NavyListRow>
-                                    );
-                                })}
-                            </ul>
+                                                    </td>
+                                                    <td className="py-2.5 text-xs capitalize text-[#64748B]">
+                                                        {meta.label ||
+                                                            p.payment_method}
+                                                    </td>
+                                                    <td className="py-2.5 text-right text-sm font-semibold text-[#1E8449] tabular-nums">
+                                                        {formatCurrency(
+                                                            p.amount_paid,
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2.5 text-xs text-[#64748B]">
+                                                        {p.payment_date
+                                                            ? new Date(
+                                                                p.payment_date,
+                                                            ).toLocaleString(
+                                                                'en-PH',
+                                                                {
+                                                                    month: 'short',
+                                                                    day: 'numeric',
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit',
+                                                                },
+                                                            )
+                                                            : '—'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                             <MiniPager
                                 page={safePage}
                                 onPageChange={setRecentPage}
                                 total={totalRecent}
                                 label="payments"
-                                dark
                             />
                         </>
                     ) : (
-                        <EmptyState message="No recent payments to show." dark />
+                        <EmptyState message="No recent payments to show." />
                     )}
                 </div>
             </div>
@@ -1446,6 +1614,7 @@ const PaymentsSection = ({ paymentsSummary }) => {
 /* Period / compare pickers                                            */
 /* ------------------------------------------------------------------ */
 
+/* Tooltip for the daily chart: full date + all three measures */
 const DailyTooltip = ({ active, payload }) => {
     if (!active || !payload?.length) return null;
     const row = payload[0].payload || {};
@@ -1474,6 +1643,7 @@ const DailyTooltip = ({ active, payload }) => {
     );
 };
 
+/* Headline figures above the daily chart */
 const ChartStatsStrip = ({ stats }) => {
     const cells = [
         {
@@ -1515,6 +1685,7 @@ const ChartStatsStrip = ({ stats }) => {
     );
 };
 
+/* Printed report only: the numbers behind the chart */
 const DailyFiguresTable = ({ rows, stats }) => {
     if (!rows.length || rows.length > 31) return null;
     return (
@@ -1639,36 +1810,6 @@ const CompareRangePicker = ({ value, onChange, disabled }) => (
     </div>
 );
 
-const GlobalViewToggle = ({ views, onChange }) => {
-    const current = views.every((v) => v === views[0]) ? views[0] : null;
-    return (
-        <div
-            className="no-print hidden"
-            role="group"
-            aria-label="Switch all sections between list and cards"
-        >
-            <div className="flex rounded-full bg-[#E9ECF2] p-1 text-xs">
-                {[['list', 'List', ListIcon], ['cards', 'Cards', LayoutGrid]].map(([v, label, I]) => (
-                    <button
-                        key={v}
-                        type="button"
-                        onClick={() => onChange(v)}
-                        aria-pressed={current === v}
-                        title={`Show every section as ${label.toLowerCase()}`}
-                        className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all ${current === v
-                            ? 'bg-[#16233F] text-white'
-                            : 'text-[#64748B] hover:text-[#16233F]'
-                            }`}
-                    >
-                        <I className="h-3.5 w-3.5" />
-                        {label}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
-};
-
 /* ================================================================== */
 /* Page                                                                */
 /* ================================================================== */
@@ -1684,6 +1825,10 @@ const Reports = () => {
     const [showFilters, setShowFilters] = useState(false);
     const [focusTile, setFocusTile] = useState(null);
     const [printing, setPrinting] = useState(false);
+
+    const [violationsView, setViolationsView] = useState('list');
+    const [violatorsView, setViolatorsView] = useState('list');
+    const [enforcersView, setEnforcersView] = useState('list');
 
     const [violationsPage, setViolationsPage] = useState(1);
     const [violatorsPage, setViolatorsPage] = useState(1);
@@ -1709,30 +1854,6 @@ const Reports = () => {
         setEnforcersPage(1);
         setRecentTicketsPage(1);
     }, [data]);
-
-    const ChartTooltip = ({ active, payload, label }) => {
-        if (!active || !payload?.length) return null;
-        return (
-            <div className="rounded-lg border border-[#E9ECF2] bg-white px-3 py-2 shadow-lg">
-                <p className="mb-1 text-xs font-semibold text-[#16233F]">{label}</p>
-                {payload.map((entry) => (
-                    <p key={entry.dataKey} className="text-xs text-[#64748B]">
-                        <span
-                            className="inline-block h-2 w-2 rounded-full align-middle"
-                            style={{ backgroundColor: entry.color }}
-                        />
-                        <span className="ml-1.5">{entry.name}: </span>
-                        <span className="font-medium text-[#1F2937]">
-                            {entry.dataKey === 'total_fines' ||
-                                entry.dataKey === 'collected'
-                                ? formatCurrency(entry.value)
-                                : entry.value}
-                        </span>
-                    </p>
-                ))}
-            </div>
-        );
-    };
 
     const buildParams = useCallback(() => {
         const params = {
@@ -1782,12 +1903,31 @@ const Reports = () => {
     }, [period, includeArchived, compareEnabled]);
 
     useEffect(() => {
+        const style = document.createElement('style');
+        style.id = 'reports-print-counters';
+        style.textContent = `
+      @media print {
+        
+      }
+    `;
+        document.head.appendChild(style);
+        return () => {
+            const el = document.getElementById('reports-print-counters');
+            if (el) el.remove();
+        };
+    }, []);
+
+    /* While printing: show ALL rows (no pager) in list layout, then restore */
+    useEffect(() => {
         let saved = null;
         const before = () => {
-            saved = {};
+            saved = { violationsView, violatorsView, enforcersView };
             ITEMS_PER_PAGE = 100000;
             flushSync(() => {
                 setPrinting(true);
+                setViolationsView('list');
+                setViolatorsView('list');
+                setEnforcersView('list');
                 setViolationsPage(1);
                 setViolatorsPage(1);
                 setEnforcersPage(1);
@@ -1798,6 +1938,11 @@ const Reports = () => {
             ITEMS_PER_PAGE = SCREEN_PER_PAGE;
             flushSync(() => {
                 setPrinting(false);
+                if (saved) {
+                    setViolationsView(saved.violationsView);
+                    setViolatorsView(saved.violatorsView);
+                    setEnforcersView(saved.enforcersView);
+                }
             });
         };
         window.addEventListener('beforeprint', before);
@@ -1806,7 +1951,7 @@ const Reports = () => {
             window.removeEventListener('beforeprint', before);
             window.removeEventListener('afterprint', after);
         };
-    }, []);
+    }, [violationsView, violatorsView, enforcersView]);
 
     const handleExportCSV = async () => {
         let range;
@@ -1859,6 +2004,7 @@ const Reports = () => {
     const compare = data?.compare || null;
     const deltas = compare?.deltas || null;
 
+    // ⬇️ reportRange moved BEFORE rangeDays so useMemo below can safely close over it.
     const reportRange = data?.date_range || {
         start: picker.date || picker.start_date,
         end: picker.date || picker.end_date,
@@ -1866,6 +2012,7 @@ const Reports = () => {
 
     const compareRange = compare?.date_range || null;
 
+    /* rangeDays: how many calendar days the primary range spans */
     const rangeDays = useMemo(() => {
         const start = reportRange?.start;
         const end = reportRange?.end;
@@ -1954,6 +2101,16 @@ const Reports = () => {
         (sum, d) => sum + d.value,
         0,
     );
+
+    const busiestDay = useMemo(() => {
+        const days = data?.daily_breakdown || [];
+        if (!days.length) return null;
+        return days.reduce((best, d) =>
+            (Number(d.tickets_count) || 0) > (Number(best.tickets_count) || 0)
+                ? d
+                : best,
+        );
+    }, [data]);
 
     const dailyChartData = useMemo(() => {
         const base = data?.daily_breakdown || [];
@@ -2303,6 +2460,14 @@ const Reports = () => {
                                 setPicker((prev) => ({ ...prev, ...patch }))
                             }
                         />
+                        <GlobalViewToggle
+                            views={[violationsView, violatorsView, enforcersView]}
+                            onChange={(v) => {
+                                setViolationsView(v);
+                                setViolatorsView(v);
+                                setEnforcersView(v);
+                            }}
+                        />
                         <Button
                             variant="outline"
                             onClick={() => setShowFilters((v) => !v)}
@@ -2392,139 +2557,125 @@ const Reports = () => {
                                         ) : (
                                             <>
                                                 <ChartStatsStrip stats={chartStats} />
-                                                {printing ? (
-                                                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                                        <ComposedChart width={680} height={300} data={dailyChartData}>
-                                                            <CartesianGrid strokeDasharray="2 4" stroke="#DDE3EC" vertical={false} />
-                                                            <XAxis dataKey="date" tickFormatter={xAxisFormatter} tick={{ fontSize: 12, fill: COLORS.slate }} axisLine={{ stroke: '#B8C1D1' }} tickLine={false} interval="preserveStartEnd" minTickGap={16} tickMargin={8} />
-                                                            <YAxis yAxisId="left" allowDecimals={false} width={44} tick={{ fontSize: 12, fill: COLORS.slate }} axisLine={false} tickLine={false} />
-                                                            <YAxis yAxisId="right" orientation="right" width={58} tickFormatter={formatCompactCurrency} tick={{ fontSize: 12, fill: COLORS.slate }} axisLine={false} tickLine={false} />
-                                                            <Bar yAxisId="left" dataKey="tickets_count" name="Tickets" fill={COLORS.navy} radius={[4, 4, 0, 0]} maxBarSize={56} isAnimationActive={false} />
-                                                            <Area yAxisId="right" type="monotone" dataKey="total_fines" name="Fines issued" stroke={COLORS.amber} strokeWidth={2.5} fill="url(#gradFines)" dot={false} isAnimationActive={false} />
-                                                            <Line yAxisId="right" type="monotone" dataKey="collected" name="Collected" stroke={COLORS.green} strokeWidth={2.5} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} isAnimationActive={false} />
-                                                        </ComposedChart>
-                                                    </div>
-                                                ) : (
-                                                    <ResponsiveContainer width="100%" height={400}>
-                                                        <ComposedChart
-                                                            data={dailyChartData}
-                                                            margin={{ top: 22, right: 4, left: 0, bottom: 4 }}
-                                                            barCategoryGap="24%"
-                                                        >
-                                                            <defs>
-                                                                <linearGradient id="gradTickets" x1="0" y1="0" x2="0" y2="1">
-                                                                    <stop offset="0%" stopColor="#2F4778" />
-                                                                    <stop offset="100%" stopColor={COLORS.navy} />
-                                                                </linearGradient>
-                                                                <linearGradient id="gradFines" x1="0" y1="0" x2="0" y2="1">
-                                                                    <stop offset="0%" stopColor={COLORS.amber} stopOpacity={0.4} />
-                                                                    <stop offset="100%" stopColor={COLORS.amber} stopOpacity={0.02} />
-                                                                </linearGradient>
-                                                            </defs>
-                                                            <CartesianGrid strokeDasharray="2 4" stroke="#DDE3EC" vertical={false} />
-                                                            <XAxis
-                                                                dataKey="date"
-                                                                tickFormatter={xAxisFormatter}
-                                                                tick={{ fontSize: 12, fill: COLORS.slate }}
-                                                                axisLine={{ stroke: '#B8C1D1' }}
-                                                                tickLine={false}
-                                                                interval="preserveStartEnd"
-                                                                minTickGap={16}
-                                                                tickMargin={8}
-                                                            />
-                                                            <YAxis
+                                                <ChartBox printing={printing} height={400} printHeight={300}>
+                                                    <ComposedChart
+                                                        data={dailyChartData}
+                                                        margin={{ top: 22, right: 4, left: 0, bottom: 4 }}
+                                                        barCategoryGap="24%"
+                                                    >
+                                                        <defs>
+                                                            <linearGradient id="gradTickets" x1="0" y1="0" x2="0" y2="1">
+                                                                <stop offset="0%" stopColor="#2F4778" />
+                                                                <stop offset="100%" stopColor={COLORS.navy} />
+                                                            </linearGradient>
+                                                            <linearGradient id="gradFines" x1="0" y1="0" x2="0" y2="1">
+                                                                <stop offset="0%" stopColor={COLORS.amber} stopOpacity={0.4} />
+                                                                <stop offset="100%" stopColor={COLORS.amber} stopOpacity={0.02} />
+                                                            </linearGradient>
+                                                        </defs>
+                                                        <CartesianGrid strokeDasharray="2 4" stroke="#DDE3EC" vertical={false} />
+                                                        <XAxis
+                                                            dataKey="date"
+                                                            tickFormatter={xAxisFormatter}
+                                                            tick={{ fontSize: 12, fill: COLORS.slate }}
+                                                            axisLine={{ stroke: '#B8C1D1' }}
+                                                            tickLine={false}
+                                                            interval="preserveStartEnd"
+                                                            minTickGap={16}
+                                                            tickMargin={8}
+                                                        />
+                                                        <YAxis
+                                                            yAxisId="left"
+                                                            allowDecimals={false}
+                                                            width={44}
+                                                            tick={{ fontSize: 12, fill: COLORS.slate }}
+                                                            axisLine={false}
+                                                            tickLine={false}
+                                                            label={{ value: 'Tickets', angle: -90, position: 'insideLeft', offset: 10, style: { fontSize: 11, fill: COLORS.slate, letterSpacing: 1 } }}
+                                                        />
+                                                        <YAxis
+                                                            yAxisId="right"
+                                                            orientation="right"
+                                                            width={58}
+                                                            tickFormatter={formatCompactCurrency}
+                                                            tick={{ fontSize: 12, fill: COLORS.slate }}
+                                                            axisLine={false}
+                                                            tickLine={false}
+                                                            label={{ value: 'Amount (₱)', angle: 90, position: 'insideRight', offset: 4, style: { fontSize: 11, fill: COLORS.slate, letterSpacing: 1 } }}
+                                                        />
+                                                        <Tooltip
+                                                            content={<DailyTooltip />}
+                                                            cursor={{ fill: COLORS.navy, fillOpacity: 0.05 }}
+                                                        />
+                                                        <Legend
+                                                            verticalAlign="top"
+                                                            align="right"
+                                                            iconType="circle"
+                                                            iconSize={8}
+                                                            wrapperStyle={{ fontSize: 12, paddingBottom: 14 }}
+                                                        />
+                                                        {dailyChartData.length > 1 && chartStats.avg > 0 && (
+                                                            <ReferenceLine
                                                                 yAxisId="left"
-                                                                allowDecimals={false}
-                                                                width={44}
-                                                                tick={{ fontSize: 12, fill: COLORS.slate }}
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                label={{ value: 'Tickets', angle: -90, position: 'insideLeft', offset: 10, style: { fontSize: 11, fill: COLORS.slate, letterSpacing: 1 } }}
+                                                                y={chartStats.avg}
+                                                                stroke={COLORS.slate}
+                                                                strokeDasharray="5 4"
+                                                                label={{ value: `Avg ${chartStats.avg.toFixed(1)}/day`, position: 'insideTopLeft', fontSize: 10, fill: COLORS.slate }}
                                                             />
-                                                            <YAxis
-                                                                yAxisId="right"
-                                                                orientation="right"
-                                                                width={58}
-                                                                tickFormatter={formatCompactCurrency}
-                                                                tick={{ fontSize: 12, fill: COLORS.slate }}
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                label={{ value: 'Amount (₱)', angle: 90, position: 'insideRight', offset: 4, style: { fontSize: 11, fill: COLORS.slate, letterSpacing: 1 } }}
-                                                            />
-                                                            <Tooltip
-                                                                content={<DailyTooltip />}
-                                                                cursor={{ fill: COLORS.navy, fillOpacity: 0.05 }}
-                                                            />
-                                                            <Legend
-                                                                verticalAlign="top"
-                                                                align="right"
-                                                                iconType="circle"
-                                                                iconSize={8}
-                                                                wrapperStyle={{ fontSize: 12, paddingBottom: 14 }}
-                                                            />
-                                                            {dailyChartData.length > 1 && chartStats.avg > 0 && (
-                                                                <ReferenceLine
-                                                                    yAxisId="left"
-                                                                    y={chartStats.avg}
-                                                                    stroke={COLORS.slate}
-                                                                    strokeDasharray="5 4"
-                                                                    label={{ value: `Avg ${chartStats.avg.toFixed(1)}/day`, position: 'insideTopLeft', fontSize: 10, fill: COLORS.slate }}
+                                                        )}
+                                                        <Bar
+                                                            yAxisId="left"
+                                                            dataKey="tickets_count"
+                                                            name="Tickets"
+                                                            fill={COLORS.navy}
+                                                            radius={[4, 4, 0, 0]}
+                                                            maxBarSize={56}
+                                                            isAnimationActive={!printing}
+                                                        >
+                                                            {dailyChartData.map((row) => (
+                                                                <Cell
+                                                                    key={row.date}
+                                                                    fill={
+                                                                        chartStats.peakCount > 0 && row.date === chartStats.peakDate
+                                                                            ? COLORS.red
+                                                                            : 'url(#gradTickets)'
+                                                                    }
+                                                                />
+                                                            ))}
+                                                            {dailyChartData.length <= 14 && (
+                                                                <LabelList
+                                                                    dataKey="tickets_count"
+                                                                    position="top"
+                                                                    formatter={(v) => (v > 0 ? v : '')}
+                                                                    style={{ fontSize: 11, fontWeight: 600, fill: COLORS.navy }}
                                                                 />
                                                             )}
-                                                            <Bar
-                                                                yAxisId="left"
-                                                                dataKey="tickets_count"
-                                                                name="Tickets"
-                                                                fill={COLORS.navy}
-                                                                radius={[4, 4, 0, 0]}
-                                                                maxBarSize={56}
-                                                                isAnimationActive={!printing}
-                                                            >
-                                                                {dailyChartData.map((row) => (
-                                                                    <Cell
-                                                                        key={row.date}
-                                                                        fill={
-                                                                            chartStats.peakCount > 0 && row.date === chartStats.peakDate
-                                                                                ? COLORS.red
-                                                                                : 'url(#gradTickets)'
-                                                                        }
-                                                                    />
-                                                                ))}
-                                                                {dailyChartData.length <= 14 && (
-                                                                    <LabelList
-                                                                        dataKey="tickets_count"
-                                                                        position="top"
-                                                                        formatter={(v) => (v > 0 ? v : '')}
-                                                                        style={{ fontSize: 11, fontWeight: 600, fill: COLORS.navy }}
-                                                                    />
-                                                                )}
-                                                            </Bar>
-                                                            <Area
-                                                                yAxisId="right"
-                                                                type="monotone"
-                                                                dataKey="total_fines"
-                                                                name="Fines issued"
-                                                                stroke={COLORS.amber}
-                                                                strokeWidth={2.5}
-                                                                fill="url(#gradFines)"
-                                                                dot={false}
-                                                                activeDot={{ r: 5 }}
-                                                                isAnimationActive={!printing}
-                                                            />
-                                                            <Line
-                                                                yAxisId="right"
-                                                                type="monotone"
-                                                                dataKey="collected"
-                                                                name="Collected"
-                                                                stroke={COLORS.green}
-                                                                strokeWidth={2.5}
-                                                                dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
-                                                                activeDot={{ r: 5 }}
-                                                                isAnimationActive={!printing}
-                                                            />
-                                                        </ComposedChart>
-                                                    </ResponsiveContainer>
-                                                )}
+                                                        </Bar>
+                                                        <Area
+                                                            yAxisId="right"
+                                                            type="monotone"
+                                                            dataKey="total_fines"
+                                                            name="Fines issued"
+                                                            stroke={COLORS.amber}
+                                                            strokeWidth={2.5}
+                                                            fill="url(#gradFines)"
+                                                            dot={false}
+                                                            activeDot={{ r: 5 }}
+                                                            isAnimationActive={!printing}
+                                                        />
+                                                        <Line
+                                                            yAxisId="right"
+                                                            type="monotone"
+                                                            dataKey="collected"
+                                                            name="Collected"
+                                                            stroke={COLORS.green}
+                                                            strokeWidth={2.5}
+                                                            dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
+                                                            activeDot={{ r: 5 }}
+                                                            isAnimationActive={!printing}
+                                                        />
+                                                    </ComposedChart>
+                                                </ChartBox>
                                                 <p className="mt-2 text-[11px] text-[#64748B]">
                                                     <span className="mr-1 inline-block h-2 w-2 align-middle" style={{ background: COLORS.red }} />
                                                     Highlighted bar marks the peak day. Dashed line shows the average tickets per day.
@@ -2534,7 +2685,7 @@ const Reports = () => {
                                         )}
                                     </section>
 
-                                    {/* STATUS DONUT — light card with matching header */}
+                                    {/* FULL-WIDTH STATUS DONUT */}
                                     <section className="bg-[#F6F1E4] rounded-xl p-6 print-card">
                                         <SectionHeader note={`Breakdown of the ${weeklyStatusTotal} ticket(s) by current status: issued, paid, contested and dismissed. Percentages are computed on the total shown.`}
                                             icon={TrendingUp}
@@ -2547,81 +2698,139 @@ const Reports = () => {
                                         ) : (
                                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                                                 <div className="lg:col-span-5">
-                                                    {printing ? (
-                                                        <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                                            <RePieChart width={320} height={210}>
-                                                                <Pie
-                                                                    data={weeklyStatusData}
-                                                                    dataKey="value"
-                                                                    isAnimationActive={false}
-                                                                    nameKey="name"
-                                                                    innerRadius={55}
-                                                                    outerRadius={90}
-                                                                    paddingAngle={2}
-                                                                >
-                                                                    {weeklyStatusData.map((entry) => (
-                                                                        <Cell key={entry.key} fill={STATUS_META[entry.key].color} />
-                                                                    ))}
-                                                                </Pie>
-                                                            </RePieChart>
-                                                        </div>
-                                                    ) : (
-                                                        <ResponsiveContainer width="100%" height={260}>
-                                                            <RePieChart>
-                                                                <Pie
-                                                                    data={weeklyStatusData}
-                                                                    dataKey="value"
-                                                                    isAnimationActive={!printing}
-                                                                    nameKey="name"
-                                                                    innerRadius={55}
-                                                                    outerRadius={90}
-                                                                    paddingAngle={2}
-                                                                    onClick={(d) =>
-                                                                        setFocusTile(
-                                                                            focusTile === d.key ? null : d.key,
-                                                                        )
-                                                                    }
-                                                                    style={{ cursor: 'pointer' }}
-                                                                >
-                                                                    {weeklyStatusData.map((entry) => (
+                                                    <ChartBox printing={printing} height={260} printHeight={210}>
+                                                        <RePieChart>
+                                                            <Pie
+                                                                data={
+                                                                    weeklyStatusData
+                                                                }
+                                                                dataKey="value"
+                                                                isAnimationActive={!printing}
+                                                                nameKey="name"
+                                                                innerRadius={55}
+                                                                outerRadius={90}
+                                                                paddingAngle={2}
+                                                                onClick={(d) =>
+                                                                    setFocusTile(
+                                                                        focusTile ===
+                                                                            d.key
+                                                                            ? null
+                                                                            : d.key,
+                                                                    )
+                                                                }
+                                                                style={{
+                                                                    cursor: 'pointer',
+                                                                }}
+                                                            >
+                                                                {weeklyStatusData.map(
+                                                                    (entry) => (
                                                                         <Cell
-                                                                            key={entry.key}
-                                                                            fill={STATUS_META[entry.key].color}
-                                                                            fillOpacity={!focusTile || focusTile === entry.key ? 1 : 0.3}
-                                                                            stroke={focusTile === entry.key ? '#16233F' : 'none'}
-                                                                            strokeWidth={2}
+                                                                            key={
+                                                                                entry.key
+                                                                            }
+                                                                            fill={
+                                                                                STATUS_META[
+                                                                                    entry.key
+                                                                                ].color
+                                                                            }
+                                                                            fillOpacity={
+                                                                                !focusTile ||
+                                                                                    focusTile ===
+                                                                                    entry.key
+                                                                                    ? 1
+                                                                                    : 0.3
+                                                                            }
+                                                                            stroke={
+                                                                                focusTile ===
+                                                                                    entry.key
+                                                                                    ? '#16233F'
+                                                                                    : 'none'
+                                                                            }
+                                                                            strokeWidth={
+                                                                                2
+                                                                            }
                                                                         />
-                                                                    ))}
-                                                                </Pie>
-                                                                <Tooltip content={<ChartTooltip />} />
-                                                            </RePieChart>
-                                                        </ResponsiveContainer>
-                                                    )}
+                                                                    ),
+                                                                )}
+                                                            </Pie>
+                                                            <Tooltip
+                                                                content={
+                                                                    <ChartTooltip />
+                                                                }
+                                                            />
+                                                        </RePieChart>
+                                                    </ChartBox>
                                                 </div>
                                                 <div className="lg:col-span-7">
                                                     <ul className="space-y-3">
-                                                        {weeklyStatusData.map((entry) => {
-                                                            const meta = STATUS_META[entry.key];
-                                                            const share =
-                                                                weeklyStatusTotal > 0
-                                                                    ? Math.round((entry.value / weeklyStatusTotal) * 100)
-                                                                    : 0;
-                                                            return (
-                                                                <li key={entry.key} className="flex items-center gap-3">
-                                                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: meta.color }} />
-                                                                    <span className="text-sm text-[#1F2937] flex-1">{meta.label}</span>
-                                                                    <span className="text-sm font-semibold text-[#1F2937] tabular-nums">{entry.value}</span>
-                                                                    <span className="text-xs text-[#64748B] w-12 text-right tabular-nums">{share}%</span>
-                                                                </li>
-                                                            );
-                                                        })}
+                                                        {weeklyStatusData.map(
+                                                            (entry) => {
+                                                                const meta =
+                                                                    STATUS_META[
+                                                                    entry.key
+                                                                    ];
+                                                                const share =
+                                                                    weeklyStatusTotal >
+                                                                        0
+                                                                        ? Math.round(
+                                                                            (entry.value /
+                                                                                weeklyStatusTotal) *
+                                                                            100,
+                                                                        )
+                                                                        : 0;
+                                                                return (
+                                                                    <li
+                                                                        key={
+                                                                            entry.key
+                                                                        }
+                                                                        className="flex items-center gap-3"
+                                                                    >
+                                                                        <span
+                                                                            className="w-3 h-3 rounded-full flex-shrink-0"
+                                                                            style={{
+                                                                                background:
+                                                                                    meta.color,
+                                                                            }}
+                                                                        />
+                                                                        <span className="text-sm text-[#1F2937] flex-1">
+                                                                            {
+                                                                                meta.label
+                                                                            }
+                                                                        </span>
+                                                                        <span className="text-sm font-semibold text-[#1F2937] tabular-nums">
+                                                                            {
+                                                                                entry.value
+                                                                            }
+                                                                        </span>
+                                                                        <span className="text-xs text-[#64748B] w-12 text-right tabular-nums">
+                                                                            {
+                                                                                share
+                                                                            }
+                                                                            %
+                                                                        </span>
+                                                                    </li>
+                                                                );
+                                                            },
+                                                        )}
                                                     </ul>
                                                     <p className="text-xs text-[#64748B] mt-4 text-center">
                                                         Showing{' '}
-                                                        <span className="font-semibold text-[#16233F] tabular-nums">{weeklyStatusData.length}</span>{' '}
-                                                        {weeklyStatusData.length === 1 ? 'status' : 'statuses'} ·{' '}
                                                         <span className="font-semibold text-[#16233F] tabular-nums">
-                                                            <AnimatedValue value={weeklyStatusTotal} />
+                                                            {
+                                                                weeklyStatusData.length
+                                                            }
+                                                        </span>{' '}
+                                                        {weeklyStatusData.length ===
+                                                            1
+                                                            ? 'status'
+                                                            : 'statuses'}{' '}
+                                                        ·{' '}
+                                                        <span className="font-semibold text-[#16233F] tabular-nums">
+                                                            <AnimatedValue
+                                                                value={
+                                                                    weeklyStatusTotal
+                                                                }
+                                                            />
                                                         </span>{' '}
                                                         total tickets
                                                     </p>
@@ -2647,186 +2856,476 @@ const Reports = () => {
                                         </section>
                                     )}
 
-                                    {/* Top violations + Enforcer performance — navy cards */}
                                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                                        <section className="lg:col-span-6 bg-[#16233F] text-white rounded-xl p-6 print-card">
+                                        <section className="lg:col-span-6 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
                                             <SectionHeader note={`The most frequently recorded violations in the period, ranked by number of occurrences, with the total fines attached to each. ${allViolations.length} violation type(s) recorded.`}
                                                 icon={AlertTriangleIcon}
-                                                color={COLORS.amber}
+                                                color={COLORS.amberDark}
+                                                action={
+                                                    <ViewToggle
+                                                        view={violationsView}
+                                                        setView={
+                                                            setViolationsView
+                                                        }
+                                                    />
+                                                }
                                             >
                                                 Top violations
-                                                <span className="text-xs font-normal text-[#C7CEDB] font-['Inter'] ml-2">
+                                                <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
                                                     (primary range)
                                                 </span>
                                             </SectionHeader>
                                             {allViolations.length ? (
                                                 <>
-                                                    <ul className="space-y-4">
-                                                        {shownViolations.map((v, idx) => {
-                                                            const rank = (violationsSafePage - 1) * ITEMS_PER_PAGE + idx + 1;
-                                                            const share = ((Number(v.count) || 0) / maxTopViolation) * 100;
-                                                            return (
-                                                                <RankedRow
-                                                                    key={v.violation_id ?? v.violation_name ?? idx}
-                                                                    rank={rank}
-                                                                    primary={v.violation_name}
-                                                                    secondary={`${formatCurrency(v.total_fine)} in fines`}
-                                                                    value={`${v.count}×`}
-                                                                    share={share}
-                                                                    color={COLORS.amber}
-                                                                />
-                                                            );
-                                                        })}
-                                                    </ul>
+                                                    {violationsView === 'cards' ? (
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            {shownViolations.map(
+                                                                (v, idx) => (
+                                                                    <RankedCard
+                                                                        key={
+                                                                            v.violation_id ??
+                                                                            v.violation_name ??
+                                                                            idx
+                                                                        }
+                                                                        rank={
+                                                                            (violationsSafePage -
+                                                                                1) *
+                                                                            ITEMS_PER_PAGE +
+                                                                            idx +
+                                                                            1
+                                                                        }
+                                                                        primary={
+                                                                            v.violation_name
+                                                                        }
+                                                                        secondary={`${formatCurrency(
+                                                                            v.total_fine,
+                                                                        )} in fines`}
+                                                                        value={`${v.count}×`}
+                                                                        share={
+                                                                            ((Number(
+                                                                                v.count,
+                                                                            ) || 0) /
+                                                                                maxTopViolation) *
+                                                                            100
+                                                                        }
+                                                                        color={
+                                                                            COLORS.amberDark
+                                                                        }
+                                                                    />
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <ul className="space-y-4">
+                                                            {shownViolations.map(
+                                                                (v, idx) => (
+                                                                    <RankedRow
+                                                                        key={
+                                                                            v.violation_id ??
+                                                                            v.violation_name ??
+                                                                            idx
+                                                                        }
+                                                                        rank={
+                                                                            (violationsSafePage -
+                                                                                1) *
+                                                                            ITEMS_PER_PAGE +
+                                                                            idx +
+                                                                            1
+                                                                        }
+                                                                        primary={
+                                                                            v.violation_name
+                                                                        }
+                                                                        secondary={`${formatCurrency(
+                                                                            v.total_fine,
+                                                                        )} in fines`}
+                                                                        value={`${v.count}×`}
+                                                                        share={
+                                                                            ((Number(
+                                                                                v.count,
+                                                                            ) || 0) /
+                                                                                maxTopViolation) *
+                                                                            100
+                                                                        }
+                                                                        color={
+                                                                            COLORS.amberDark
+                                                                        }
+                                                                    />
+                                                                ),
+                                                            )}
+                                                        </ul>
+                                                    )}
                                                     <MiniPager
                                                         page={violationsSafePage}
-                                                        onPageChange={setViolationsPage}
-                                                        total={allViolations.length}
+                                                        onPageChange={
+                                                            setViolationsPage
+                                                        }
+                                                        total={
+                                                            allViolations.length
+                                                        }
                                                         label="violations"
-                                                        dark
                                                     />
                                                 </>
                                             ) : (
-                                                <EmptyState message="No violations in this range." dark />
+                                                <EmptyState message="No violations in this range." />
                                             )}
                                         </section>
 
-                                        <section className="lg:col-span-6 bg-[#16233F] text-white rounded-xl p-6 print-card">
+                                        <section className="lg:col-span-6 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
                                             <SectionHeader note={`Number of tickets issued by each enforcer in the period, ranked from highest to lowest. ${allEnforcers.length} enforcer(s) with recorded activity.`}
                                                 icon={Users}
-                                                color={COLORS.amber}
+                                                color={COLORS.navy}
+                                                action={
+                                                    <ViewToggle
+                                                        view={enforcersView}
+                                                        setView={
+                                                            setEnforcersView
+                                                        }
+                                                    />
+                                                }
                                             >
                                                 Enforcer performance
-                                                <span className="text-xs font-normal text-[#C7CEDB] font-['Inter'] ml-2">
+                                                <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
                                                     (primary range)
                                                 </span>
                                             </SectionHeader>
                                             {allEnforcers.length ? (
                                                 <>
-                                                    <ul className="space-y-4">
-                                                        {shownEnforcers.map((e, idx) => {
-                                                            const share = ((Number(e.tickets_count) || 0) / maxTopEnforcer) * 100;
-                                                            return (
-                                                                <RankedRow
-                                                                    key={e.user_id ?? e.name ?? idx}
-                                                                    badge={
-                                                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F0B429] text-[#16233F] text-xs font-bold">
-                                                                            {getInitials(e.name)}
+                                                    {enforcersView === 'cards' ? (
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            {shownEnforcers.map(
+                                                                (e, idx) => (
+                                                                    <article
+                                                                        key={
+                                                                            e.user_id ??
+                                                                            e.name ??
+                                                                            idx
+                                                                        }
+                                                                        className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                                                                    >
+                                                                        <div
+                                                                            className="h-2"
+                                                                            style={{
+                                                                                background:
+                                                                                    COLORS.amber,
+                                                                            }}
+                                                                        />
+                                                                        <div className="p-4">
+                                                                            <div className="flex items-center gap-3 mb-3">
+                                                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E9ECF2] text-sm font-bold text-[#16233F]">
+                                                                                    {getInitials(
+                                                                                        e.name,
+                                                                                    )}
+                                                                                </div>
+                                                                                <p className="font-['Oswald'] text-base leading-tight text-[#1F2937] truncate">
+                                                                                    {
+                                                                                        e.name
+                                                                                    }
+                                                                                </p>
+                                                                            </div>
+                                                                            <p className="text-2xl font-['Oswald'] font-semibold text-[#16233F] tabular-nums">
+                                                                                {
+                                                                                    e.tickets_count
+                                                                                }
+                                                                            </p>
+                                                                            <p className="text-xs text-[#64748B]">
+                                                                                tickets issued
+                                                                            </p>
+                                                                            <div className="print-bar mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#F1F5F9]">
+                                                                                <div
+                                                                                    className="h-full rounded-full bg-[#F0B429] transition-[width] duration-500"
+                                                                                    style={{
+                                                                                        width: `${Math.max(
+                                                                                            ((Number(
+                                                                                                e.tickets_count,
+                                                                                            ) ||
+                                                                                                0) /
+                                                                                                maxTopEnforcer) *
+                                                                                            100,
+                                                                                            2,
+                                                                                        )}%`,
+                                                                                    }}
+                                                                                />
+                                                                            </div>
                                                                         </div>
-                                                                    }
-                                                                    primary={e.name}
-                                                                    value={`${e.tickets_count} tickets`}
-                                                                    share={share}
-                                                                    color={COLORS.amber}
-                                                                />
-                                                            );
-                                                        })}
-                                                    </ul>
+                                                                    </article>
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <ul className="space-y-4">
+                                                            {shownEnforcers.map(
+                                                                (e, idx) => (
+                                                                    <li
+                                                                        key={
+                                                                            e.user_id ??
+                                                                            e.name ??
+                                                                            idx
+                                                                        }
+                                                                        className="space-y-1.5"
+                                                                    >
+                                                                        <div className="flex items-center justify-between gap-3">
+                                                                            <div className="flex min-w-0 items-center gap-3">
+                                                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E9ECF2] text-xs font-bold text-[#16233F]">
+                                                                                    {getInitials(
+                                                                                        e.name,
+                                                                                    )}
+                                                                                </div>
+                                                                                <span className="truncate text-sm text-[#1F2937]">
+                                                                                    {
+                                                                                        e.name
+                                                                                    }
+                                                                                </span>
+                                                                            </div>
+                                                                            <span className="shrink-0 text-sm font-semibold text-[#16233F] tabular-nums">
+                                                                                {
+                                                                                    e.tickets_count
+                                                                                }{' '}
+                                                                                tickets
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="print-bar ml-11 h-1.5 overflow-hidden rounded-full bg-[#F1F5F9]">
+                                                                            <div
+                                                                                className="h-full rounded-full bg-[#F0B429] transition-[width] duration-500"
+                                                                                style={{
+                                                                                    width: `${Math.max(
+                                                                                        ((Number(
+                                                                                            e.tickets_count,
+                                                                                        ) ||
+                                                                                            0) /
+                                                                                            maxTopEnforcer) *
+                                                                                        100,
+                                                                                        2,
+                                                                                    )}%`,
+                                                                                }}
+                                                                            />
+                                                                        </div>
+                                                                    </li>
+                                                                ),
+                                                            )}
+                                                        </ul>
+                                                    )}
                                                     <MiniPager
                                                         page={enforcersSafePage}
-                                                        onPageChange={setEnforcersPage}
-                                                        total={allEnforcers.length}
+                                                        onPageChange={
+                                                            setEnforcersPage
+                                                        }
+                                                        total={
+                                                            allEnforcers.length
+                                                        }
                                                         label="enforcers"
-                                                        dark
                                                     />
                                                 </>
                                             ) : (
-                                                <EmptyState message="No tickets issued in this range." dark />
+                                                <EmptyState message="No tickets issued in this range." />
                                             )}
                                         </section>
                                     </div>
 
-                                    {/* Repeat violators + Status breakdown */}
                                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                                        <section className="lg:col-span-7 bg-[#16233F] text-white rounded-xl p-6 print-card">
+                                        <section className="lg:col-span-7 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
                                             <SectionHeader note={`Violators with the highest number of tickets in the period, identified by name and license number. ${allViolators.length} violator(s) listed.`}
                                                 icon={Users}
-                                                color={COLORS.amber}
+                                                color={COLORS.red}
+                                                action={
+                                                    <ViewToggle
+                                                        view={violatorsView}
+                                                        setView={
+                                                            setViolatorsView
+                                                        }
+                                                    />
+                                                }
                                             >
                                                 Repeat violators
-                                                <span className="text-xs font-normal text-[#C7CEDB] font-['Inter'] ml-2">
+                                                <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
                                                     (primary range)
                                                 </span>
                                             </SectionHeader>
                                             {allViolators.length ? (
                                                 <>
-                                                    <ul className="space-y-4">
-                                                        {shownViolators.map((v, idx) => {
-                                                            const rank = (violatorsSafePage - 1) * ITEMS_PER_PAGE + idx + 1;
-                                                            const share = ((Number(v.tickets_count) || 0) / maxTopViolator) * 100;
-                                                            const name =
-                                                                [v.firstname, v.lastname].filter(Boolean).join(' ') ||
-                                                                'Unnamed violator';
-                                                            return (
-                                                                <RankedRow
-                                                                    key={v.violator_id ?? v.license ?? idx}
-                                                                    rank={rank}
-                                                                    primary={name}
-                                                                    secondary={v.license}
-                                                                    value={`${v.tickets_count} tickets`}
-                                                                    share={share}
-                                                                    color={COLORS.amber}
-                                                                />
-                                                            );
-                                                        })}
-                                                    </ul>
+                                                    {violatorsView === 'cards' ? (
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            {shownViolators.map(
+                                                                (v, idx) => (
+                                                                    <RankedCard
+                                                                        key={
+                                                                            v.violator_id ??
+                                                                            v.license ??
+                                                                            idx
+                                                                        }
+                                                                        rank={
+                                                                            (violatorsSafePage -
+                                                                                1) *
+                                                                            ITEMS_PER_PAGE +
+                                                                            idx +
+                                                                            1
+                                                                        }
+                                                                        primary={
+                                                                            [
+                                                                                v.firstname,
+                                                                                v.lastname,
+                                                                            ]
+                                                                                .filter(
+                                                                                    Boolean,
+                                                                                )
+                                                                                .join(
+                                                                                    ' ',
+                                                                                ) ||
+                                                                            'Unnamed violator'
+                                                                        }
+                                                                        secondary={
+                                                                            v.license
+                                                                        }
+                                                                        value={`${v.tickets_count} tickets`}
+                                                                        share={
+                                                                            ((Number(
+                                                                                v.tickets_count,
+                                                                            ) || 0) /
+                                                                                maxTopViolator) *
+                                                                            100
+                                                                        }
+                                                                        color={
+                                                                            COLORS.red
+                                                                        }
+                                                                        label="Total tickets"
+                                                                    />
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <ul className="space-y-4">
+                                                            {shownViolators.map(
+                                                                (v, idx) => (
+                                                                    <RankedRow
+                                                                        key={
+                                                                            v.violator_id ??
+                                                                            v.license ??
+                                                                            idx
+                                                                        }
+                                                                        rank={
+                                                                            (violatorsSafePage -
+                                                                                1) *
+                                                                            ITEMS_PER_PAGE +
+                                                                            idx +
+                                                                            1
+                                                                        }
+                                                                        primary={
+                                                                            [
+                                                                                v.firstname,
+                                                                                v.lastname,
+                                                                            ]
+                                                                                .filter(
+                                                                                    Boolean,
+                                                                                )
+                                                                                .join(
+                                                                                    ' ',
+                                                                                ) ||
+                                                                            'Unnamed violator'
+                                                                        }
+                                                                        secondary={
+                                                                            v.license
+                                                                        }
+                                                                        value={`${v.tickets_count} tickets`}
+                                                                        share={
+                                                                            ((Number(
+                                                                                v.tickets_count,
+                                                                            ) || 0) /
+                                                                                maxTopViolator) *
+                                                                            100
+                                                                        }
+                                                                        color={
+                                                                            COLORS.red
+                                                                        }
+                                                                    />
+                                                                ),
+                                                            )}
+                                                        </ul>
+                                                    )}
                                                     <MiniPager
                                                         page={violatorsSafePage}
-                                                        onPageChange={setViolatorsPage}
-                                                        total={allViolators.length}
+                                                        onPageChange={
+                                                            setViolatorsPage
+                                                        }
+                                                        total={
+                                                            allViolators.length
+                                                        }
                                                         label="violators"
-                                                        dark
                                                     />
                                                 </>
                                             ) : (
-                                                <EmptyState message="No repeat violators in this range." dark />
+                                                <EmptyState message="No repeat violators in this range." />
                                             )}
                                         </section>
 
-                                        <section className="lg:col-span-5 bg-[#16233F] text-white rounded-xl p-6 print-card">
+                                        <section className="lg:col-span-5 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
                                             <SectionHeader note="Count of tickets for each status in the primary range, showing how the issued tickets have progressed toward settlement."
                                                 icon={TrendingUp}
-                                                color={COLORS.amber}
+                                                color={COLORS.green}
                                             >
                                                 Status breakdown
-                                                <span className="text-xs font-normal text-[#C7CEDB] font-['Inter'] ml-2">
+                                                <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
                                                     (primary range)
                                                 </span>
                                             </SectionHeader>
                                             <div className="grid grid-cols-2 gap-3">
-                                                {Object.keys(STATUS_META).map((key) => {
-                                                    const meta = STATUS_META[key];
-                                                    const count = Number(summary[`${key}_tickets`]) || 0;
-                                                    const share =
-                                                        weeklyStatusTotal > 0
-                                                            ? Math.round((count / weeklyStatusTotal) * 100)
-                                                            : 0;
-                                                    const Icon = meta.Icon;
-                                                    return (
-                                                        <div
-                                                            key={key}
-                                                            className="p-4 rounded-lg bg-white/5 border border-white/10"
-                                                        >
-                                                            <div className="flex items-center gap-2 mb-2">
-                                                                <Icon className="w-4 h-4" style={{ color: meta.color }} />
-                                                                <span className="text-xs text-[#C7CEDB]">
-                                                                    {meta.label}
-                                                                </span>
+                                                {Object.keys(STATUS_META).map(
+                                                    (key) => {
+                                                        const meta =
+                                                            STATUS_META[key];
+                                                        const count =
+                                                            Number(
+                                                                summary[
+                                                                `${key}_tickets`
+                                                                ],
+                                                            ) || 0;
+                                                        const share =
+                                                            weeklyStatusTotal >
+                                                                0
+                                                                ? Math.round(
+                                                                    (count /
+                                                                        weeklyStatusTotal) *
+                                                                    100,
+                                                                )
+                                                                : 0;
+                                                        const Icon = meta.Icon;
+                                                        return (
+                                                            <div
+                                                                key={key}
+                                                                className="rounded-lg p-4 text-center border border-[#E3E7EE]"
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        meta.tint,
+                                                                }}
+                                                            >
+                                                                <Icon
+                                                                    className="w-6 h-6 mx-auto mb-2"
+                                                                    style={{
+                                                                        color: meta.color,
+                                                                    }}
+                                                                />
+                                                                <p
+                                                                    className="text-2xl font-['Oswald'] font-semibold tabular-nums"
+                                                                    style={{
+                                                                        color: meta.color,
+                                                                    }}
+                                                                >
+                                                                    <AnimatedValue
+                                                                        value={count}
+                                                                    />
+                                                                </p>
+                                                                <p className="text-[10px] text-[#64748B] mt-1">
+                                                                    {
+                                                                        meta.label
+                                                                    }{' '}
+                                                                    · {share}%
+                                                                </p>
                                                             </div>
-                                                            <p className="text-2xl font-['Oswald'] font-semibold text-white tabular-nums leading-none">
-                                                                <AnimatedValue value={count} />
-                                                            </p>
-                                                            <p className="text-[11px] text-[#8D98B3] mt-2 tabular-nums">
-                                                                {share}% of total
-                                                            </p>
-                                                        </div>
-                                                    );
-                                                })}
+                                                        );
+                                                    },
+                                                )}
                                             </div>
                                         </section>
                                     </div>
 
-                                    {/* Financial + Recent tickets */}
                                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                                         <section className="lg:col-span-5 bg-[#16233F] text-white rounded-xl p-6 print-card">
                                             <SectionHeader note="Summary of the financial figures for the period, expressed in Philippine Peso (₱)."
@@ -2841,7 +3340,9 @@ const Reports = () => {
                                                     Collection Rate
                                                 </span>
                                                 <span className="font-semibold text-[#F0B429] tabular-nums">
-                                                    {summary.collection_rate || 0}%
+                                                    {summary.collection_rate ||
+                                                        0}
+                                                    %
                                                 </span>
                                             </div>
                                             <div className="relative h-8 mb-6">
@@ -2850,7 +3351,9 @@ const Reports = () => {
                                                     className="absolute left-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-[#1E8449] transition-all duration-1000"
                                                     style={{
                                                         width: `${Math.min(
-                                                            toNumber(summary.collection_rate),
+                                                            toNumber(
+                                                                summary.collection_rate,
+                                                            ),
                                                             100,
                                                         )}%`,
                                                     }}
@@ -2859,7 +3362,9 @@ const Reports = () => {
                                                     className="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 bg-[#F0B429] text-[#16233F] rounded-full p-1.5"
                                                     style={{
                                                         left: `calc(${Math.min(
-                                                            toNumber(summary.collection_rate),
+                                                            toNumber(
+                                                                summary.collection_rate,
+                                                            ),
                                                             100,
                                                         )}% - 14px)`,
                                                     }}
@@ -2876,7 +3381,9 @@ const Reports = () => {
                                                     <p className="text-2xl font-['Oswald'] font-semibold text-[#5FD28C] tabular-nums">
                                                         <AnimatedValue
                                                             value={
-                                                                data?.payments_summary?.net_collected
+                                                                data
+                                                                    ?.payments_summary
+                                                                    ?.net_collected
                                                             }
                                                             prefix="₱"
                                                         />
@@ -2908,13 +3415,14 @@ const Reports = () => {
                                             </div>
                                         </section>
 
-                                        <section className="lg:col-span-7 bg-[#16233F] text-white rounded-xl p-6 print-card">
+                                        <section className="lg:col-span-7 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
                                             <SectionHeader note="The most recent tickets in the period with their reference, violator, status, date of violation and fine amount. All entries are listed in this printed copy."
                                                 icon={Ticket}
-                                                color={COLORS.amber}
+                                                color={COLORS.navy}
                                                 action={
-                                                    <span className="text-xs text-[#C7CEDB] tabular-nums">
-                                                        {allRecentTickets.length} total
+                                                    <span className="text-xs text-gray-400">
+                                                        {allRecentTickets.length}{' '}
+                                                        total
                                                     </span>
                                                 }
                                             >
@@ -2923,70 +3431,119 @@ const Reports = () => {
 
                                             {allRecentTickets.length ? (
                                                 <>
-                                                    <ul className="space-y-2">
-                                                        {shownRecentTickets.map((t) => {
-                                                            const s = STATUS_META[t.status];
-                                                            const Icon = s?.Icon;
-                                                            return (
-                                                                <NavyListRow key={t.ticket_id ?? t.ticket_number}>
-                                                                    <div className="flex items-start justify-between gap-3 mb-2">
-                                                                        <div className="min-w-0">
-                                                                            <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                                                <span className="font-mono text-sm font-semibold text-white">
-                                                                                    {t.ticket_number}
-                                                                                </span>
-                                                                                {s && (
-                                                                                    <span
-                                                                                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
-                                                                                        style={{ background: s.tint, color: s.color }}
-                                                                                    >
-                                                                                        <Icon className="w-3 h-3" />
-                                                                                        {t.status?.toUpperCase()}
+                                                    <ol className="relative ml-2 border-l-2 border-dashed border-[#CBD5E1] space-y-5">
+                                                        {shownRecentTickets.map(
+                                                            (t) => {
+                                                                const s =
+                                                                    STATUS_META[
+                                                                    t.status
+                                                                    ];
+                                                                const Icon =
+                                                                    s?.Icon;
+                                                                return (
+                                                                    <li
+                                                                        key={
+                                                                            t.ticket_id ??
+                                                                            t.ticket_number
+                                                                        }
+                                                                        className="relative pl-6 group"
+                                                                    >
+                                                                        <span
+                                                                            className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-[3px] border-white ring-2 transition-transform group-hover:scale-125"
+                                                                            style={{
+                                                                                background:
+                                                                                    s?.color ||
+                                                                                    '#CBD5E1',
+                                                                                '--tw-ring-color':
+                                                                                    s?.color ||
+                                                                                    '#CBD5E1',
+                                                                            }}
+                                                                        />
+                                                                        <div className="flex items-start justify-between gap-3 rounded-lg p-3 -my-1 group-hover:bg-[#F8F9FB] transition-colors">
+                                                                            <div className="min-w-0">
+                                                                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                                                    <span className="font-mono text-sm font-semibold text-gray-800">
+                                                                                        {
+                                                                                            t.ticket_number
+                                                                                        }
                                                                                     </span>
-                                                                                )}
+                                                                                    {s && (
+                                                                                        <span
+                                                                                            className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+                                                                                            style={{
+                                                                                                background:
+                                                                                                    s.tint,
+                                                                                                color: s.color,
+                                                                                            }}
+                                                                                        >
+                                                                                            <Icon className="w-3.5 h-3.5" />
+                                                                                            {t.status?.toUpperCase()}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <p className="text-sm text-gray-600">
+                                                                                    {
+                                                                                        t
+                                                                                            .violator
+                                                                                            ?.firstname
+                                                                                    }{' '}
+                                                                                    {
+                                                                                        t
+                                                                                            .violator
+                                                                                            ?.lastname
+                                                                                    }
+                                                                                </p>
+                                                                                <div className="flex items-center gap-4 mt-1 flex-wrap">
+                                                                                    <p className="text-xs text-gray-400">
+                                                                                        <Car className="w-3 h-3 inline mr-1" />
+                                                                                        {t
+                                                                                            .vehicle
+                                                                                            ?.platenumber ||
+                                                                                            '—'}
+                                                                                    </p>
+                                                                                    <p className="text-xs text-gray-400">
+                                                                                        <Calendar className="w-3 h-3 inline mr-1" />
+                                                                                        {t.violation_datetime
+                                                                                            ? new Date(
+                                                                                                t.violation_datetime,
+                                                                                            ).toLocaleDateString()
+                                                                                            : 'N/A'}
+                                                                                    </p>
+                                                                                </div>
                                                                             </div>
-                                                                            <p className="text-xs text-[#C7CEDB] truncate">
-                                                                                {t.violator?.firstname}{' '}
-                                                                                {t.violator?.lastname}
+                                                                            <p className="text-lg font-['Oswald'] font-semibold text-[#C8202F] tabular-nums shrink-0">
+                                                                                ₱
+                                                                                {getTotalFineFromTicket(
+                                                                                    t,
+                                                                                ).toLocaleString()}
                                                                             </p>
                                                                         </div>
-                                                                        <p className="text-base font-['Oswald'] font-semibold text-[#F0B429] tabular-nums shrink-0">
-                                                                            ₱
-                                                                            {getTotalFineFromTicket(t).toLocaleString()}
-                                                                        </p>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-4 flex-wrap text-[11px] text-[#8D98B3]">
-                                                                        <span className="inline-flex items-center gap-1">
-                                                                            <Car className="w-3 h-3" />
-                                                                            {t.vehicle?.platenumber || '—'}
-                                                                        </span>
-                                                                        <span className="inline-flex items-center gap-1">
-                                                                            <Calendar className="w-3 h-3" />
-                                                                            {t.violation_datetime
-                                                                                ? new Date(t.violation_datetime).toLocaleDateString()
-                                                                                : 'N/A'}
-                                                                        </span>
-                                                                    </div>
-                                                                </NavyListRow>
-                                                            );
-                                                        })}
-                                                    </ul>
+                                                                    </li>
+                                                                );
+                                                            },
+                                                        )}
+                                                    </ol>
                                                     <MiniPager
-                                                        page={recentTicketsSafePage}
-                                                        onPageChange={setRecentTicketsPage}
-                                                        total={allRecentTickets.length}
+                                                        page={
+                                                            recentTicketsSafePage
+                                                        }
+                                                        onPageChange={
+                                                            setRecentTicketsPage
+                                                        }
+                                                        total={
+                                                            allRecentTickets.length
+                                                        }
                                                         label="tickets"
-                                                        dark
                                                     />
                                                 </>
                                             ) : (
-                                                <EmptyState message="No tickets in this range." dark />
+                                                <EmptyState message="No tickets in this range." />
                                             )}
                                         </section>
                                     </div>
 
                                     {data.payments_summary && (
-                                        <section className="bg-[#16233F] space-y-4 print-card print-avoid-break">
+                                        <section className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card print-avoid-break">
                                             <SectionHeader note="Detailed account of payments received in the primary range: total collected, refunds, net collected, and the number of payments and tickets covered."
                                                 icon={Receipt}
                                                 color={COLORS.green}
@@ -2997,13 +3554,15 @@ const Reports = () => {
                                                 </span>
                                             </SectionHeader>
                                             <PaymentsSection
-                                                paymentsSummary={data.payments_summary}
+                                                paymentsSummary={
+                                                    data.payments_summary
+                                                }
                                             />
                                         </section>
                                     )}
 
                                     {compare?.payments_summary && (
-                                        <section className="bg-[#16233F] space-y-4 print-card print-avoid-break">
+                                        <section className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card print-avoid-break">
                                             <SectionHeader note="The same payment figures for the compare range, provided for reference against the primary range."
                                                 icon={Scale}
                                                 color={COLORS.compare}
@@ -3013,58 +3572,88 @@ const Reports = () => {
                                                     (compare range)
                                                 </span>
                                             </SectionHeader>
-                                            <div className="text-xs text-[#64748B]">
-                                                {formatShortDate(compareRange.start)} –{' '}
-                                                {formatShortDate(compareRange.end)}
+                                            <div className="mb-3 text-xs text-[#64748B]">
+                                                {formatShortDate(
+                                                    compareRange.start,
+                                                )}{' '}
+                                                –{' '}
+                                                {formatShortDate(
+                                                    compareRange.end,
+                                                )}
                                             </div>
                                             <PaymentsSection
-                                                paymentsSummary={compare.payments_summary}
+                                                paymentsSummary={
+                                                    compare.payments_summary
+                                                }
                                             />
                                         </section>
                                     )}
 
-                                    {/* Quick stats band — navy */}
-                                    <section className="bg-[#16233F] text-white rounded-xl grid grid-cols-2 md:grid-cols-4 md:divide-x divide-white/10 print-card">
+                                    <section className="bg-[#16233F] rounded-xl grid grid-cols-2 md:grid-cols-4 md:divide-x divide-white/10 text-white print-card">
                                         {[
                                             {
                                                 icon: Ticket,
-                                                fg: '#F0B429',
-                                                value: summary.total_tickets || 0,
+                                                bg: '#E9ECF2',
+                                                fg: '#16233F',
+                                                value:
+                                                    summary.total_tickets || 0,
                                                 label: 'Total Violations',
                                             },
                                             {
                                                 icon: CheckCircle,
-                                                fg: '#5FD28C',
-                                                value: summary.paid_tickets || 0,
+                                                bg: '#E5F2EA',
+                                                fg: '#1E8449',
+                                                value:
+                                                    summary.paid_tickets || 0,
                                                 label: 'Resolved Cases',
                                             },
                                             {
                                                 icon: Clock,
-                                                fg: '#F0B429',
-                                                value: summary.issued_tickets || 0,
+                                                bg: '#FBF1DC',
+                                                fg: '#92600A',
+                                                value:
+                                                    summary.issued_tickets || 0,
                                                 label: 'Active Cases',
                                             },
                                             {
                                                 icon: TrendingUp,
-                                                fg: '#C7CEDB',
-                                                value: summary.collection_rate || 0,
+                                                bg: '#EEF1F5',
+                                                fg: '#3B5170',
+                                                value:
+                                                    summary.collection_rate ||
+                                                    0,
                                                 suffix: '%',
                                                 label: 'Efficiency Rate',
                                             },
                                         ].map((q) => (
-                                            <div key={q.label} className="p-5 flex items-center gap-3">
-                                                <div className="p-2 rounded-lg bg-white/10">
-                                                    <q.icon className="w-5 h-5" style={{ color: q.fg }} />
+                                            <div
+                                                key={q.label}
+                                                className="p-5 flex items-center gap-3"
+                                            >
+                                                <div
+                                                    className="p-2 rounded-lg"
+                                                    style={{ background: q.bg }}
+                                                >
+                                                    <q.icon
+                                                        className="w-5 h-5"
+                                                        style={{ color: q.fg }}
+                                                    />
                                                 </div>
                                                 <div>
                                                     <p className="text-2xl font-['Oswald'] font-semibold tabular-nums">
                                                         <AnimatedValue
                                                             value={q.value}
-                                                            suffix={q.suffix || ''}
-                                                            integer={q.suffix !== '%'}
+                                                            suffix={
+                                                                q.suffix || ''
+                                                            }
+                                                            integer={
+                                                                q.suffix !== '%'
+                                                            }
                                                         />
                                                     </p>
-                                                    <p className="text-xs text-[#C7CEDB]">{q.label}</p>
+                                                    <p className="text-xs text-[#C7CEDB]">
+                                                        {q.label}
+                                                    </p>
                                                 </div>
                                             </div>
                                         ))}
