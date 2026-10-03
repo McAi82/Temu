@@ -37,8 +37,15 @@ import {
     Calendar,
     LayoutGrid,
     List as ListIcon,
-    Ticket as TicketIcon,   
-    FileText,  
+    Ticket as TicketIcon,
+    FileText,
+    User as UserIcon,
+    Car,
+    Banknote,
+    Hash,
+    Info,
+    Copy,
+    Check,
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
 
@@ -198,6 +205,30 @@ const formatDate = (value) => {
     }
 };
 
+const copyText = async (text) => {
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch {
+        /* fall through to legacy */
+    }
+    try {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.style.position = 'fixed';
+        el.style.left = '-9999px';
+        document.body.appendChild(el);
+        el.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(el);
+        return ok;
+    } catch {
+        return false;
+    }
+};
+
 const Chip = ({ label, onClear }) => (
     <span className="inline-flex items-center gap-1 bg-[#E9ECF2] text-[#16233F] px-2.5 py-1 rounded-md text-xs">
         {label}
@@ -220,6 +251,26 @@ const Mini = ({ children }) => (
     </i>
 );
 
+const PreviewRow = ({ icon: Icon, label, value, mono, danger, accent }) => (
+    <div className="flex items-start gap-2.5">
+        <div className="w-7 h-7 rounded-md bg-[#F5F6F8] flex items-center justify-center flex-shrink-0">
+            <Icon className="w-3.5 h-3.5 text-[#64748B]" />
+        </div>
+        <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">
+                {label}
+            </p>
+            <p
+                className={`text-sm truncate ${mono ? 'font-mono text-[#16233F]' : 'text-[#1F2937]'
+                    } ${danger ? 'text-[#C8202F] font-medium' : ''}`}
+                style={accent ? { color: accent } : undefined}
+            >
+                {value}
+            </p>
+        </div>
+    </div>
+);
+
 const ViewToggle = ({ view, setView }) => (
     <div
         className="ml-auto flex bg-[#E9ECF2] rounded-full p-1 text-xs"
@@ -234,8 +285,8 @@ const ViewToggle = ({ view, setView }) => (
                     onClick={() => setView(v)}
                     aria-pressed={view === v}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
-                        ? 'bg-[#16233F] text-white'
-                        : 'text-[#64748B] hover:text-[#16233F]'
+                            ? 'bg-[#16233F] text-white'
+                            : 'text-[#64748B] hover:text-[#16233F]'
                         }`}
                 >
                     <I className="w-3.5 h-3.5" />
@@ -358,6 +409,7 @@ const Payments = () => {
 
     const [historyTicketId, setHistoryTicketId] = useState(null);
     const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+    const [copiedField, setCopiedField] = useState(null);
 
     /* ---------- Queries ---------- */
     const {
@@ -647,6 +699,14 @@ const Payments = () => {
             max_amount: '',
         });
 
+    const handleCopy = async (label, value) => {
+        const ok = await copyText(value);
+        if (ok) {
+            setCopiedField(label);
+            setTimeout(() => setCopiedField(null), 2000);
+        }
+    };
+
     const totalPendingCount = pendingMeta.total || 0;
 
     const ticketHistory = ticketHistoryResponse?.data?.ticket;
@@ -729,8 +789,8 @@ const Payments = () => {
                                 type="button"
                                 onClick={() => toggleHistoryStatus(opt.value)}
                                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${active
-                                    ? 'bg-[#16233F] text-white border-[#16233F]'
-                                    : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                                        ? 'bg-[#16233F] text-white border-[#16233F]'
+                                        : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
                                     }`}
                             >
                                 {opt.label}
@@ -1651,7 +1711,7 @@ const Payments = () => {
                 </TabsContent>
             </Tabs>
 
-            {/* ---------------- Payment dialog ---------------- */}
+            {/* ---------------- Payment dialog (redesigned, 70% width) ---------------- */}
             <Dialog
                 open={isDialogOpen}
                 onOpenChange={(open) => {
@@ -1888,7 +1948,6 @@ const Payments = () => {
 
                                 {/* ============ RIGHT: SUMMARY ============ */}
                                 <div className="p-7 space-y-6 bg-[#F8F9FA]">
-                                    {/* Ticket summary */}
                                     {selectedTicket && (
                                         <section>
                                             <div className="flex items-center gap-2 mb-3">
@@ -1932,7 +1991,6 @@ const Payments = () => {
                                         </section>
                                     )}
 
-                                    {/* Financial breakdown */}
                                     {selectedTicket && (
                                         <section>
                                             <div className="flex items-center gap-2 mb-3">
@@ -1973,7 +2031,6 @@ const Payments = () => {
                                                     </>
                                                 )}
 
-                                                {/* Live preview of what happens after this payment */}
                                                 {parseFloat(formData.amount_paid) > 0 && (
                                                     <>
                                                         <div className="pt-3 border-t border-dashed border-[#CBD5E1]">
@@ -2009,7 +2066,6 @@ const Payments = () => {
                                                             </div>
                                                         </div>
 
-                                                        {/* Fully paid banner */}
                                                         {Math.max(
                                                             0,
                                                             (parseFloat(
@@ -2033,7 +2089,6 @@ const Payments = () => {
                                         </section>
                                     )}
 
-                                    {/* Tips */}
                                     <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
                                         <div className="flex items-start gap-2.5">
                                             <AlertCircle className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
@@ -2116,7 +2171,7 @@ const Payments = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* ---------------- History dialog ---------------- */}
+            {/* ---------------- History / View dialog (redesigned, 70% width) ---------------- */}
             <Dialog
                 open={isHistoryDialogOpen}
                 onOpenChange={(open) => {
@@ -2124,163 +2179,413 @@ const Payments = () => {
                     if (!open) setHistoryTicketId(null);
                 }}
             >
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="font-['Oswald'] text-[#16233F] flex items-center gap-2">
-                            <History className="w-5 h-5" />
-                            Payment History
+                <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
+                    {/* -------- Header -------- */}
+                    <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+                        <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-lg bg-[#E9ECF2] flex items-center justify-center flex-shrink-0">
+                                <History className="w-5 h-5 text-[#16233F]" />
+                            </span>
+                            <div>
+                                <div className="leading-tight">Payment History</div>
+                                <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                                    {ticketHistory
+                                        ? `Ticket ${ticketHistory.ticket_number} · ${ticketHistory.violator?.firstname || ''
+                                            } ${ticketHistory.violator?.lastname || ''}`.trim()
+                                        : 'Loading payment records…'}
+                                </div>
+                            </div>
                         </DialogTitle>
                     </DialogHeader>
 
                     {ticketHistoryLoading ? (
-                        <div className="flex justify-center py-8">
-                            <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
+                        <div className="flex flex-col items-center justify-center py-24 gap-3">
+                            <Loader2 className="w-8 h-8 animate-spin text-[#16233F]" />
+                            <p className="text-sm text-[#64748B]">Loading payment records…</p>
                         </div>
                     ) : !ticketHistory ? (
-                        <div className="text-center py-8 text-[#64748B]">
-                            No data available.
+                        <div className="flex flex-col items-center justify-center py-24 gap-3">
+                            <AlertCircle className="w-10 h-10 text-[#94A3B8]" />
+                            <p className="text-sm text-[#64748B]">No data available for this ticket.</p>
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            <div className="bg-[#F8F9FA] rounded-lg p-4 border border-[#E9ECF2]">
-                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                    <div>
-                                        <p className="text-[#64748B] text-xs">
-                                            Ticket #
-                                        </p>
-                                        <p className="font-mono font-semibold text-[#16233F]">
-                                            {ticketHistory.ticket_number}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[#64748B] text-xs">
-                                            Status
-                                        </p>
-                                        <div>
-                                            {ticketStatusBadge(
-                                                ticketHistory.status,
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-[#64748B] text-xs">
-                                            Violator
-                                        </p>
-                                        <p className="text-[#1F2937]">
-                                            {ticketHistory.violator?.firstname}{' '}
-                                            {ticketHistory.violator?.lastname}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[#64748B] text-xs">
-                                            Plate
-                                        </p>
-                                        <p className="font-mono text-[#1F2937]">
-                                            {
-                                                ticketHistory.vehicle
-                                                    ?.platenumber
-                                            }
-                                        </p>
-                                    </div>
-                                </div>
+                        <div className="flex flex-col max-h-[calc(90vh-100px)]">
+                            <div className="flex-1 overflow-y-auto">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                                    {/* ============ LEFT: TICKET + PAYMENT LIST ============ */}
+                                    <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
+                                        {/* ──── TICKET SUMMARY ──── */}
+                                        <section>
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <TicketIcon className="w-4 h-4 text-[#F0B429]" />
+                                                <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                    Ticket
+                                                </h3>
+                                                <span className="h-px flex-1 bg-[#E3E7EE]" />
+                                                {ticketStatusBadge(ticketHistory.status)}
+                                            </div>
 
-                                <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-[#E9ECF2] text-center">
-                                    <div>
-                                        <p className="text-xs text-[#64748B]">
-                                            Total Fine
-                                        </p>
-                                        <p className="text-lg font-bold text-[#C8202F]">
-                                            {formatPeso(
-                                                ticketHistorySummary?.total_fine,
+                                            <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
+                                                <div
+                                                    className="h-1.5"
+                                                    style={{
+                                                        background:
+                                                            TICKET_STATUS_META[ticketHistory.status]?.color ||
+                                                            '#16233F',
+                                                    }}
+                                                />
+                                                <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                    <div className="md:col-span-2 min-w-0">
+                                                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                                                            Ticket Number
+                                                        </p>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-mono text-base font-semibold text-[#16233F] truncate">
+                                                                {ticketHistory.ticket_number}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    handleCopy(
+                                                                        'ticket',
+                                                                        ticketHistory.ticket_number,
+                                                                    )
+                                                                }
+                                                                className="p-1 rounded text-[#94A3B8] hover:text-[#16233F] hover:bg-[#F1F5F9]"
+                                                                title="Copy ticket number"
+                                                            >
+                                                                {copiedField === 'ticket' ? (
+                                                                    <Check className="w-3.5 h-3.5 text-[#1E8449]" />
+                                                                ) : (
+                                                                    <Copy className="w-3.5 h-3.5" />
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                                                            Plate
+                                                        </p>
+                                                        <p className="font-mono text-sm font-semibold text-[#16233F] truncate">
+                                                            {ticketHistory.vehicle?.platenumber || '—'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                                                            Violation Date
+                                                        </p>
+                                                        <p className="text-sm text-[#1F2937] truncate">
+                                                            {ticketHistory.violation_datetime
+                                                                ? new Date(
+                                                                    ticketHistory.violation_datetime,
+                                                                ).toLocaleDateString()
+                                                                : '—'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="md:col-span-2 min-w-0">
+                                                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                                                            Violator
+                                                        </p>
+                                                        <p className="text-sm text-[#1F2937] truncate">
+                                                            {ticketHistory.violator?.firstname}{' '}
+                                                            {ticketHistory.violator?.lastname}
+                                                        </p>
+                                                    </div>
+                                                    <div className="md:col-span-2 min-w-0">
+                                                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                                                            License
+                                                        </p>
+                                                        <p className="font-mono text-sm text-[#1F2937] truncate">
+                                                            {ticketHistory.violator?.license || '—'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </section>
+
+                                        {/* ──── PAYMENT RECORDS ──── */}
+                                        <section>
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <Receipt className="w-4 h-4 text-[#F0B429]" />
+                                                <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                    Payments
+                                                </h3>
+                                                <span className="h-px flex-1 bg-[#E3E7EE]" />
+                                                <span className="text-xs text-[#64748B] tabular-nums">
+                                                    {ticketPayments.length}{' '}
+                                                    {ticketPayments.length === 1 ? 'record' : 'records'}
+                                                </span>
+                                            </div>
+
+                                            {ticketPayments.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center py-12 rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8F9FA]">
+                                                    <Receipt className="w-10 h-10 text-[#CBD5E1] mb-3" />
+                                                    <p className="text-sm text-[#64748B]">
+                                                        No payments recorded for this ticket yet.
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <ol className="relative ml-2 border-l-2 border-dashed border-[#CBD5E1] space-y-4">
+                                                    {ticketPayments.map((p) => {
+                                                        const meta =
+                                                            STATUS_META[p.payment_status] ||
+                                                            STATUS_META.pending;
+                                                        const Icon = meta.Icon;
+                                                        return (
+                                                            <li
+                                                                key={p.payment_id}
+                                                                className="relative pl-6 group"
+                                                            >
+                                                                <span
+                                                                    className="absolute -left-[9px] top-4 w-4 h-4 rounded-full border-[3px] border-white ring-2 transition-transform group-hover:scale-125"
+                                                                    style={{
+                                                                        background: meta.color,
+                                                                        '--tw-ring-color': meta.color,
+                                                                    }}
+                                                                />
+                                                                <div className="rounded-lg border border-[#E3E7EE] bg-white p-4 hover:shadow-md transition-shadow">
+                                                                    <div className="flex items-start justify-between gap-3 mb-3">
+                                                                        <div className="min-w-0">
+                                                                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                                                <span className="font-mono text-sm font-semibold text-[#16233F]">
+                                                                                    {p.receipt_number ||
+                                                                                        '—'}
+                                                                                </span>
+                                                                                {paymentStatusBadge(
+                                                                                    p.payment_status,
+                                                                                )}
+                                                                            </div>
+                                                                            <p className="text-[11px] text-[#64748B] font-mono truncate">
+                                                                                Ref: {p.payment_reference}
+                                                                            </p>
+                                                                        </div>
+                                                                        <p className="text-xl font-['Oswald'] font-semibold text-[#1E8449] tabular-nums shrink-0">
+                                                                            {formatPeso(p.amount_paid)}
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pt-3 border-t border-dashed border-[#CBD5E1]">
+                                                                        <PreviewRow
+                                                                            icon={Banknote}
+                                                                            label="Method"
+                                                                            value={
+                                                                                p.payment_method?.replace(
+                                                                                    '_',
+                                                                                    ' ',
+                                                                                ) || '—'
+                                                                            }
+                                                                        />
+                                                                        <PreviewRow
+                                                                            icon={Calendar}
+                                                                            label="Date"
+                                                                            value={formatDateTime(
+                                                                                p.payment_date,
+                                                                            )}
+                                                                        />
+                                                                        {p.paid_by && (
+                                                                            <PreviewRow
+                                                                                icon={UserIcon}
+                                                                                label="Paid By"
+                                                                                value={p.paid_by}
+                                                                            />
+                                                                        )}
+                                                                    </div>
+                                                                    {p.notes && (
+                                                                        <div className="mt-3 pt-3 border-t border-dashed border-[#CBD5E1]">
+                                                                            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                                                                                Notes
+                                                                            </p>
+                                                                            <p className="text-xs text-[#64748B] line-clamp-2">
+                                                                                {p.notes}
+                                                                            </p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ol>
                                             )}
-                                        </p>
+                                        </section>
                                     </div>
-                                    <div>
-                                        <p className="text-xs text-[#64748B]">
-                                            Total Paid
-                                        </p>
-                                        <p className="text-lg font-bold text-[#1E8449]">
-                                            {formatPeso(
-                                                ticketHistorySummary?.total_paid,
+
+                                    {/* ============ RIGHT: SUMMARY ============ */}
+                                    <div className="p-7 space-y-6 bg-[#F8F9FA]">
+                                        {/* Breakdown card */}
+                                        <section>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <PhilippinePeso className="w-4 h-4 text-[#1E8449]" />
+                                                <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                    Breakdown
+                                                </h3>
+                                            </div>
+                                            <div className="rounded-xl bg-white border border-[#E3E7EE] p-4 space-y-3">
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <span className="text-[#64748B]">Total Fine</span>
+                                                    <span className="font-semibold text-[#C8202F] tabular-nums">
+                                                        {formatPeso(ticketHistorySummary?.total_fine)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <span className="text-[#64748B]">Total Paid</span>
+                                                    <span className="font-semibold text-[#1E8449] tabular-nums">
+                                                        −{' '}
+                                                        {formatPeso(
+                                                            ticketHistorySummary?.total_paid,
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between pt-3 border-t border-dashed border-[#CBD5E1]">
+                                                    <span className="text-[#64748B] font-medium">
+                                                        Balance
+                                                    </span>
+                                                    <span
+                                                        className={`font-bold tabular-nums ${parseFloat(
+                                                            ticketHistorySummary?.balance,
+                                                        ) > 0
+                                                            ? 'text-[#C2541F]'
+                                                            : 'text-[#1E8449]'
+                                                            }`}
+                                                    >
+                                                        {formatPeso(ticketHistorySummary?.balance)}
+                                                    </span>
+                                                </div>
+                                                {(parseFloat(ticketHistorySummary?.balance) || 0) <=
+                                                    0 &&
+                                                    (parseFloat(
+                                                        ticketHistorySummary?.total_paid,
+                                                    ) || 0) > 0 && (
+                                                        <div className="pt-3 border-t border-dashed border-[#CBD5E1]">
+                                                            <div className="flex items-center gap-2 bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-2.5 text-xs text-[#1E8449]">
+                                                                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                                                                <span className="font-medium">
+                                                                    This ticket has been fully settled.
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                            </div>
+                                        </section>
+
+                                        {/* Payment progress */}
+                                        {ticketPayments.length > 0 &&
+                                            parseFloat(ticketHistorySummary?.total_fine) > 0 && (
+                                                <section>
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <Wallet className="w-4 h-4 text-[#1E8449]" />
+                                                        <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                                                            Progress
+                                                        </h3>
+                                                    </div>
+                                                    <div className="rounded-xl bg-white border border-[#E3E7EE] p-4">
+                                                        {(() => {
+                                                            const total = parseFloat(
+                                                                ticketHistorySummary?.total_fine,
+                                                            ) || 0;
+                                                            const paid = parseFloat(
+                                                                ticketHistorySummary?.total_paid,
+                                                            ) || 0;
+                                                            const pct = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
+                                                            return (
+                                                                <>
+                                                                    <div className="flex items-center justify-between text-xs mb-2">
+                                                                        <span className="text-[#64748B]">
+                                                                            Paid
+                                                                        </span>
+                                                                        <span className="font-semibold text-[#1E8449] tabular-nums">
+                                                                            {pct.toFixed(0)}%
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="h-2.5 rounded-full bg-[#E9ECF2] overflow-hidden">
+                                                                        <div
+                                                                            className="h-full rounded-full bg-[#1E8449] transition-all duration-700"
+                                                                            style={{ width: `${pct}%` }}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between text-[11px] text-[#94A3B8] mt-2 tabular-nums">
+                                                                        <span>{formatPeso(paid)}</span>
+                                                                        <span>{formatPeso(total)}</span>
+                                                                    </div>
+                                                                </>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                </section>
                                             )}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-[#64748B]">
-                                            Balance
-                                        </p>
-                                        <p className="text-lg font-bold text-[#C2541F]">
-                                            {formatPeso(
-                                                ticketHistorySummary?.balance,
-                                            )}
-                                        </p>
+
+                                        {/* Tips */}
+                                        <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
+                                            <div className="flex items-start gap-2.5">
+                                                <Info className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
+                                                <div className="text-xs text-[#92600A] leading-relaxed">
+                                                    <p className="font-semibold mb-1">Notes</p>
+                                                    <ul className="space-y-1 list-disc list-inside">
+                                                        <li>
+                                                            All payments shown are for this ticket
+                                                            only. Refunds and voided payments are
+                                                            marked above.
+                                                        </li>
+                                                        <li>
+                                                            To void a payment, go to the Payment
+                                                            History tab and use the refund action.
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </section>
                                     </div>
                                 </div>
                             </div>
 
-                            {ticketPayments.length === 0 ? (
-                                <div className="text-center py-6 text-[#64748B] text-sm">
-                                    No payments recorded for this ticket yet.
+                            {/* ============ STICKY FOOTER ============ */}
+                            <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+                                <div className="text-xs text-[#64748B] flex items-center gap-2">
+                                    <Info className="w-3.5 h-3.5 text-[#94A3B8]" />
+                                    <span>
+                                        Showing{' '}
+                                        <strong className="text-[#16233F] tabular-nums">
+                                            {ticketPayments.length}
+                                        </strong>{' '}
+                                        {ticketPayments.length === 1 ? 'payment' : 'payments'}{' '}
+                                        for{' '}
+                                        <strong className="text-[#16233F] font-mono">
+                                            {ticketHistory?.ticket_number}
+                                        </strong>
+                                        .
+                                    </span>
                                 </div>
-                            ) : (
-                                <div className="border border-[#E9ECF2] rounded-lg overflow-hidden">
-                                    <table className="w-full">
-                                        <thead className="bg-[#E9ECF2]">
-                                            <tr>
-                                                <th className="px-4 py-2 text-left font-semibold text-[#16233F] text-xs">
-                                                    Receipt #
-                                                </th>
-                                                <th className="px-4 py-2 text-left font-semibold text-[#16233F] text-xs">
-                                                    Amount
-                                                </th>
-                                                <th className="px-4 py-2 text-left font-semibold text-[#16233F] text-xs">
-                                                    Method
-                                                </th>
-                                                <th className="px-4 py-2 text-left font-semibold text-[#16233F] text-xs">
-                                                    Date
-                                                </th>
-                                                <th className="px-4 py-2 text-left font-semibold text-[#16233F] text-xs">
-                                                    Status
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {ticketPayments.map((p) => (
-                                                <tr
-                                                    key={p.payment_id}
-                                                    className="border-t border-[#F3F4F6] hover:bg-[#F8F9FA]"
-                                                >
-                                                    <td className="px-4 py-2 font-mono text-xs text-[#16233F]">
-                                                        {p.receipt_number ||
-                                                            '—'}
-                                                    </td>
-                                                    <td className="px-4 py-2 font-semibold text-[#1E8449]">
-                                                        {formatPeso(
-                                                            p.amount_paid,
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-2 text-xs capitalize text-[#1F2937]">
-                                                        {p.payment_method?.replace(
-                                                            '_',
-                                                            ' ',
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-2 text-xs text-[#1F2937]">
-                                                        {formatDate(
-                                                            p.payment_date,
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        {paymentStatusBadge(
-                                                            p.payment_status,
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() =>
+                                            handleCopy(
+                                                'summary',
+                                                `Ticket: ${ticketHistory?.ticket_number}\nViolator: ${ticketHistory?.violator?.firstname} ${ticketHistory?.violator?.lastname}\nTotal Fine: ${formatPeso(ticketHistorySummary?.total_fine)}\nTotal Paid: ${formatPeso(ticketHistorySummary?.total_paid)}\nBalance: ${formatPeso(ticketHistorySummary?.balance)}`,
+                                            )
+                                        }
+                                        className="min-w-[100px]"
+                                    >
+                                        {copiedField === 'summary' ? (
+                                            <>
+                                                <Check className="w-4 h-4 mr-2 text-[#1E8449]" />
+                                                Copied!
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy className="w-4 h-4 mr-2" />
+                                                Copy Summary
+                                            </>
+                                        )}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        onClick={() => setIsHistoryDialogOpen(false)}
+                                        className="bg-[#16233F] hover:bg-[#0F1A2E] min-w-[120px]"
+                                    >
+                                        Close
+                                    </Button>
                                 </div>
-                            )}
+                            </div>
                         </div>
                     )}
                 </DialogContent>
