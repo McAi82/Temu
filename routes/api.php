@@ -211,13 +211,18 @@ Route::middleware('auth:sanctum')->group(function () {
     |----------------------- USERS (Admin) -----------------------
     */
     Route::prefix('users')->group(function () {
+        // Read — admin + staff
         Route::get('/',     [UserController::class, 'index']);
-        Route::post('/',    [UserController::class, 'store']);
-        Route::get('/{id}',    [UserController::class, 'show'])->where('id', '[0-9]+');
-        Route::put('/{id}',    [UserController::class, 'update'])->where('id', '[0-9]+');
-        Route::delete('/{id}', [UserController::class, 'destroy'])->where('id', '[0-9]+');
-        Route::put('/{id}/toggle-status',   [UserController::class, 'toggleStatus'])->where('id', '[0-9]+');
-        Route::post('/{id}/reset-password', [UserController::class, 'resetPassword'])->where('id', '[0-9]+');
+        Route::get('/{id}', [UserController::class, 'show'])->where('id', '[0-9]+');
+
+        // Write — admin only
+        Route::middleware('admin')->group(function () {
+            Route::post('/',    [UserController::class, 'store']);
+            Route::put('/{id}', [UserController::class, 'update'])->where('id', '[0-9]+');
+            Route::delete('/{id}', [UserController::class, 'destroy'])->where('id', '[0-9]+');
+            Route::put('/{id}/toggle-status',   [UserController::class, 'toggleStatus'])->where('id', '[0-9]+');
+            Route::post('/{id}/reset-password', [UserController::class, 'resetPassword'])->where('id', '[0-9]+');
+        });
     });
 
     /*

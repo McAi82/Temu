@@ -68,13 +68,12 @@ const Layout = ({ children }) => {
     { path: '/reports', label: 'Reports', icon: FileText },
   ];
 
-  if (user?.role === 'staff') {
+  if (user?.role === 'staff' || user?.role === 'admin') {
     menuItems.push({ path: '/payments', label: 'Payments', icon: Wallet });
+    menuItems.push({ path: '/users', label: 'Users', icon: UserCog });
   }
 
   if (user?.role === 'admin') {
-    menuItems.push({ path: '/payments', label: 'Payments', icon: Wallet });
-    menuItems.push({ path: '/users', label: 'Users', icon: UserCog });
     menuItems.push({ path: '/archives', label: 'Archives', icon: Archive });
   }
 

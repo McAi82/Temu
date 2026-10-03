@@ -44,8 +44,10 @@ import {
   Users as UsersIcon,
   LayoutGrid,
   List as ListIcon,
+  ScanFace,
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
+import { useAuth } from '../contexts/AuthContext';
 
 const API_BASE_URL = 'https://ivory-gerbil-502781.hostingersite.com';
 const ITEMS_PER_PAGE = 20;
@@ -78,10 +80,9 @@ const ROLE_META = {
   },
 };
 
-/* Shared grid: flex-wrap on mobile, 7-column grid on md+ */
 const ROW_CLASS =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-  'md:grid md:grid-cols-[minmax(0,auto)_minmax(0,1.6fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,.8fr)_minmax(0,14rem)] md:gap-4';
+  'md:grid md:grid-cols-[minmax(0,auto)_minmax(0,1.6fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,14rem)] md:gap-4';
 
 function useDebouncedValue(value, delay = 350) {
   const [debounced, setDebounced] = useState(value);
@@ -183,8 +184,8 @@ const ViewToggle = ({ view, setView }) => (
           onClick={() => setView(v)}
           aria-pressed={view === v}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
-              ? 'bg-[#16233F] text-white'
-              : 'text-[#64748B] hover:text-[#16233F]'
+            ? 'bg-[#16233F] text-white'
+            : 'text-[#64748B] hover:text-[#16233F]'
             }`}
         >
           <I className="w-3.5 h-3.5" />
@@ -283,9 +284,8 @@ const CredentialsModal = ({
             <div>
               <p className="font-medium">Welcome email sent</p>
               <p className="text-xs mt-0.5">
-                The user should receive their login credentials
-                at <span className="font-mono">{email}</span>{' '}
-                shortly.
+                The user should receive their login credentials at{' '}
+                <span className="font-mono">{email}</span> shortly.
               </p>
             </div>
           </div>
@@ -293,9 +293,7 @@ const CredentialsModal = ({
           <div className="flex items-start gap-2 bg-[#FBF1DC] border border-[#F0B429]/40 rounded-lg p-3 text-sm text-[#92600A]">
             <MailX className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium">
-                Email could not be sent
-              </p>
+              <p className="font-medium">Email could not be sent</p>
               <p className="text-xs mt-0.5">
                 {emailError ||
                   'Hand the credentials below to the user securely.'}
@@ -347,11 +345,7 @@ const CredentialsModal = ({
                 variant="outline"
                 size="icon"
                 onClick={() => setRevealed((r) => !r)}
-                title={
-                  revealed
-                    ? 'Hide password'
-                    : 'Show password'
-                }
+                title={revealed ? 'Hide password' : 'Show password'}
               >
                 {revealed ? (
                   <EyeOff className="w-4 h-4" />
@@ -363,9 +357,7 @@ const CredentialsModal = ({
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() =>
-                  handleCopy('password', password)
-                }
+                onClick={() => handleCopy('password', password)}
                 title="Copy password"
               >
                 {copied === 'password' ? (
@@ -381,9 +373,9 @@ const CredentialsModal = ({
         <div className="flex items-start gap-2 bg-[#FBE7E9] border border-[#C8202F]/30 rounded-lg p-3 text-xs text-[#C8202F]">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <p>
-            This password is shown <strong>once</strong>. Save it
-            now. If you close this window, you'll need to reset the
-            password to get a new one.
+            This password is shown <strong>once</strong>. Save it now. If you
+            close this window, you'll need to reset the password to get a new
+            one.
           </p>
         </div>
 
@@ -393,10 +385,7 @@ const CredentialsModal = ({
             variant="outline"
             className="flex-1"
             onClick={() =>
-              handleCopy(
-                'both',
-                `Email: ${email}\nPassword: ${password}`,
-              )
+              handleCopy('both', `Email: ${email}\nPassword: ${password}`)
             }
           >
             {copied === 'both' ? (
@@ -424,6 +413,11 @@ const CredentialsModal = ({
 const Users = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
+  const { user: currentUser } = useAuth();
+
+  // Only admins can mutate; staff get a read-only view.
+  const canManage = currentUser?.role === 'admin';
+
   const [view, setView] = useState('list');
 
   const [page, setPage] = useState(1);
@@ -435,6 +429,8 @@ const Users = () => {
   const [filters, setFilters] = useState({
     role: '',
     active_only: true,
+    // 'all' | 'registered' | 'unregistered'
+    face_status: 'all',
   });
 
   const [freshCredentials, setFreshCredentials] = useState({});
@@ -533,9 +529,7 @@ const Users = () => {
       notify.success('User updated successfully');
     },
     onError: (error) => {
-      notify.error(
-        error.response?.data?.message || 'Error updating user',
-      );
+      notify.error(error.response?.data?.message || 'Error updating user');
     },
   });
 
@@ -547,9 +541,7 @@ const Users = () => {
       notify.success('User archived successfully');
     },
     onError: (error) => {
-      notify.error(
-        error.response?.data?.message || 'Error archiving user',
-      );
+      notify.error(error.response?.data?.message || 'Error archiving user');
     },
   });
 
@@ -609,6 +601,20 @@ const Users = () => {
     return allUsers.filter((u) => u.is_active !== false);
   }, [allUsers, filters.active_only]);
 
+  // Face-registration breakdown for the current page of results.
+  const faceStats = useMemo(() => {
+    const registered = users.filter((u) => u.has_face_registered === true);
+    const unregistered = users.filter((u) => u.has_face_registered !== true);
+    return { registered, unregistered, total: users.length };
+  }, [users]);
+
+  // Apply the face-status filter on top of everything else.
+  const visibleUsers = useMemo(() => {
+    if (filters.face_status === 'registered') return faceStats.registered;
+    if (filters.face_status === 'unregistered') return faceStats.unregistered;
+    return users;
+  }, [users, filters.face_status, faceStats]);
+
   const getImageUrl = (profileImage) => {
     if (!profileImage) return null;
     if (profileImage.startsWith('http')) return profileImage;
@@ -656,8 +662,7 @@ const Users = () => {
       `Are you sure you want to ${action} ${email}?`,
       {
         destructive: currentStatus,
-        confirmText:
-          action === 'deactivate' ? 'Deactivate' : 'Activate',
+        confirmText: action === 'deactivate' ? 'Deactivate' : 'Activate',
       },
     );
     if (ok) toggleStatusMutation.mutate(id);
@@ -726,13 +731,15 @@ const Users = () => {
     });
   };
 
-  const clearFilters = () => setFilters({ role: '', active_only: true });
+  const clearFilters = () =>
+    setFilters({ role: '', active_only: true, face_status: 'all' });
 
   const activeFilterCount = useMemo(() => {
     let c = 0;
     if (searchTerm) c++;
     if (filters.role) c++;
     if (!filters.active_only) c++;
+    if (filters.face_status !== 'all') c++;
     return c;
   }, [searchTerm, filters]);
 
@@ -747,53 +754,73 @@ const Users = () => {
     );
   };
 
-  const rowActions = (user) => (
-    <div className="flex flex-wrap gap-2">
-      <ActionButton
-        icon={Pencil}
-        variant="primary"
-        onClick={() => handleEdit(user)}
+  const faceBadge = (registered) =>
+    registered ? (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-[#E5F2EA] text-[#1E8449]"
+        title="Face registered on mobile device"
       >
-        Edit
-      </ActionButton>
-      <ActionButton
-        icon={user.is_active ? UserX : UserCheck}
-        variant={user.is_active ? 'warning' : 'primary'}
-        onClick={() =>
-          handleToggleStatus(
-            user.user_id,
-            user.is_active,
-            user.email,
-          )
-        }
+        <ScanFace className="w-3 h-3" />
+        Face ✓
+      </span>
+    ) : (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-[#F1F5F9] text-[#64748B]"
+        title="No face registered yet"
       >
-        {user.is_active ? 'Deactivate' : 'Activate'}
-      </ActionButton>
-      <ActionButton
-        icon={Key}
-        variant="warning"
-        onClick={() => handleResetPassword(user.user_id, user.email)}
-      >
-        Reset Password
-      </ActionButton>
-      {freshCredentials[user.user_id] && (
+        <ScanFace className="w-3 h-3" />
+        No face
+      </span>
+    );
+
+  const rowActions = (user) => {
+    // Staff get a read-only view — no action buttons at all.
+    if (!canManage) return null;
+
+    return (
+      <div className="flex flex-wrap gap-2">
         <ActionButton
-          icon={Eye}
-          variant="info"
-          onClick={() => handleViewFreshPassword(user)}
+          icon={Pencil}
+          variant="primary"
+          onClick={() => handleEdit(user)}
         >
-          Show Password
+          Edit
         </ActionButton>
-      )}
-      <ActionButton
-        icon={Archive}
-        variant="danger"
-        onClick={() => handleArchive(user.user_id, user.email)}
-      >
-        Archive
-      </ActionButton>
-    </div>
-  );
+        <ActionButton
+          icon={user.is_active ? UserX : UserCheck}
+          variant={user.is_active ? 'warning' : 'primary'}
+          onClick={() =>
+            handleToggleStatus(user.user_id, user.is_active, user.email)
+          }
+        >
+          {user.is_active ? 'Deactivate' : 'Activate'}
+        </ActionButton>
+        <ActionButton
+          icon={Key}
+          variant="warning"
+          onClick={() => handleResetPassword(user.user_id, user.email)}
+        >
+          Reset Password
+        </ActionButton>
+        {freshCredentials[user.user_id] && (
+          <ActionButton
+            icon={Eye}
+            variant="info"
+            onClick={() => handleViewFreshPassword(user)}
+          >
+            Show Password
+          </ActionButton>
+        )}
+        <ActionButton
+          icon={Archive}
+          variant="danger"
+          onClick={() => handleArchive(user.user_id, user.email)}
+        >
+          Archive
+        </ActionButton>
+      </div>
+    );
+  };
 
   /* ---------------- Filter panel ---------------- */
 
@@ -808,9 +835,7 @@ const Users = () => {
         <select
           className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-[#1F2937] focus-visible:ring-[#F0B429]"
           value={filters.role}
-          onChange={(e) =>
-            setFilters({ ...filters, role: e.target.value })
-          }
+          onChange={(e) => setFilters({ ...filters, role: e.target.value })}
         >
           {ROLE_OPTIONS.map((r) => (
             <option key={r.value} value={r.value}>
@@ -819,6 +844,58 @@ const Users = () => {
           ))}
         </select>
       </div>
+
+      {/* ------- Face registration filter ------- */}
+      <div>
+        <L icon={ScanFace}>Face registration</L>
+        <div className="flex flex-col gap-1.5">
+          {[
+            {
+              key: 'all',
+              label: 'All users',
+              count: faceStats.total,
+            },
+            {
+              key: 'registered',
+              label: 'Face registered',
+              count: faceStats.registered.length,
+            },
+            {
+              key: 'unregistered',
+              label: 'No face registered',
+              count: faceStats.unregistered.length,
+            },
+          ].map((opt) => {
+            const active = filters.face_status === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() =>
+                  setFilters({ ...filters, face_status: opt.key })
+                }
+                aria-pressed={active}
+                className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border font-medium transition-colors ${active
+                  ? 'bg-[#16233F] text-white border-[#16233F]'
+                  : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                  }`}
+              >
+                <span className="flex items-center gap-2">
+                  <ScanFace className="w-3.5 h-3.5" />
+                  {opt.label}
+                </span>
+                <span
+                  className={`tabular-nums ${active ? 'text-white/80' : 'text-[#94A3B8]'
+                    }`}
+                >
+                  {opt.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div>
         <label className="flex items-center gap-2 text-sm text-[#92600A] cursor-pointer">
           <input
@@ -843,6 +920,12 @@ const Users = () => {
     filters.role && [
       `Role: ${filters.role}`,
       () => setFilters({ ...filters, role: '' }),
+    ],
+    filters.face_status !== 'all' && [
+      filters.face_status === 'registered'
+        ? 'Face registered only'
+        : 'No face registered only',
+      () => setFilters({ ...filters, face_status: 'all' }),
     ],
     !filters.active_only && [
       'Showing inactive too',
@@ -893,7 +976,9 @@ const Users = () => {
             User Management
           </h1>
           <p className="text-[#C7CEDB] text-sm mt-1">
-            Manage system users and their access levels
+            {canManage
+              ? 'Manage system users and their access levels'
+              : 'View system users and their face registration status'}
           </p>
         </div>
         <div className="relative flex gap-2">
@@ -903,213 +988,192 @@ const Users = () => {
             className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
           >
             <RefreshCw
-              className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''
-                }`}
+              className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`}
             />
             Refresh
           </Button>
 
-          <Dialog
-            open={isDialogOpen}
-            onOpenChange={setIsDialogOpen}
-          >
-            <DialogTrigger asChild>
-              <Button
-                onClick={resetForm}
-                className="bg-[#1E8449] hover:bg-[#186B3B]"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add User
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle className="font-['Oswald'] text-[#16233F]">
-                  {editingUser
-                    ? 'Edit User'
-                    : 'Add New User'}
-                </DialogTitle>
-              </DialogHeader>
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-4"
-              >
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    placeholder="First Name *"
-                    value={formData.firstname}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        firstname: e.target.value,
-                      })
-                    }
-                    required
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                  <Input
-                    placeholder="Middle Name"
-                    value={formData.middlename}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        middlename: e.target.value,
-                      })
-                    }
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    placeholder="Last Name *"
-                    value={formData.lastname}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        lastname: e.target.value,
-                      })
-                    }
-                    required
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                  <Input
-                    placeholder="Contact Number"
-                    value={formData.contact_number}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        contact_number: e.target.value,
-                      })
-                    }
-                    className="focus-visible:ring-[#F0B429]"
-                  />
-                </div>
-                <Input
-                  type="email"
-                  placeholder="Email *"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      email: e.target.value,
-                    })
-                  }
-                  required
-                  disabled={!!editingUser}
-                  className="focus-visible:ring-[#F0B429]"
-                />
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                  value={formData.role}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      role: e.target.value,
-                    })
-                  }
-                  required
+          {canManage && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  onClick={resetForm}
+                  className="bg-[#1E8449] hover:bg-[#186B3B]"
                 >
-                  <option value="admin">
-                    Admin (Full Access)
-                  </option>
-                  <option value="staff">
-                    Staff (View Only)
-                  </option>
-                  <option value="enforcer">
-                    Enforcer (Mobile Only)
-                  </option>
-                </select>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add User
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="font-['Oswald'] text-[#16233F]">
+                    {editingUser ? 'Edit User' : 'Add New User'}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      placeholder="First Name *"
+                      value={formData.firstname}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          firstname: e.target.value,
+                        })
+                      }
+                      required
+                      className="focus-visible:ring-[#F0B429]"
+                    />
+                    <Input
+                      placeholder="Middle Name"
+                      value={formData.middlename}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          middlename: e.target.value,
+                        })
+                      }
+                      className="focus-visible:ring-[#F0B429]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      placeholder="Last Name *"
+                      value={formData.lastname}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          lastname: e.target.value,
+                        })
+                      }
+                      required
+                      className="focus-visible:ring-[#F0B429]"
+                    />
+                    <Input
+                      placeholder="Contact Number"
+                      value={formData.contact_number}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          contact_number: e.target.value,
+                        })
+                      }
+                      className="focus-visible:ring-[#F0B429]"
+                    />
+                  </div>
+                  <Input
+                    type="email"
+                    placeholder="Email *"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        email: e.target.value,
+                      })
+                    }
+                    required
+                    disabled={!!editingUser}
+                    className="focus-visible:ring-[#F0B429]"
+                  />
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
+                    value={formData.role}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        role: e.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="admin">Admin (Full Access)</option>
+                    <option value="staff">Staff (View Only)</option>
+                    <option value="enforcer">Enforcer (Mobile Only)</option>
+                  </select>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1 text-[#1F2937]">
-                    Profile Photo
-                  </label>
-                  <div className="flex items-center gap-4">
-                    {previewUrl && (
-                      <div className="relative">
-                        <img
-                          src={previewUrl}
-                          alt="Profile preview"
-                          className="w-16 h-16 rounded-full object-cover border border-[#E9ECF2]"
-                        />
-                        <button
-                          type="button"
-                          className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-0.5 hover:bg-[#A01622]"
-                          onClick={() => {
-                            setPreviewUrl('');
-                            setFormData({
-                              ...formData,
-                              profile_image: null,
-                            });
-                            const fileInput =
-                              document.getElementById(
-                                'profile_image_input',
-                              );
-                            if (fileInput)
-                              fileInput.value =
-                                '';
-                          }}
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-[#1F2937]">
+                      Profile Photo
+                    </label>
+                    <div className="flex items-center gap-4">
+                      {previewUrl && (
+                        <div className="relative">
+                          <img
+                            src={previewUrl}
+                            alt="Profile preview"
+                            className="w-16 h-16 rounded-full object-cover border border-[#E9ECF2]"
+                          />
+                          <button
+                            type="button"
+                            className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-0.5 hover:bg-[#A01622]"
+                            onClick={() => {
+                              setPreviewUrl('');
+                              setFormData({
+                                ...formData,
+                                profile_image: null,
+                              });
+                              const fileInput =
+                                document.getElementById(
+                                  'profile_image_input',
+                                );
+                              if (fileInput) fileInput.value = '';
+                            }}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <label
+                          htmlFor="profile_image_input"
+                          className="flex items-center justify-center w-full px-4 py-2 border border-[#E9ECF2] rounded-lg cursor-pointer hover:bg-[#F5F6F8] transition-colors"
                         >
-                          <X className="w-3 h-3" />
-                        </button>
+                          <Camera className="w-4 h-4 mr-2 text-[#64748B]" />
+                          <span className="text-sm text-[#64748B]">
+                            {previewUrl ? 'Change Photo' : 'Upload Photo'}
+                          </span>
+                          <Input
+                            id="profile_image_input"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileChange}
+                            className="hidden"
+                          />
+                        </label>
+                        <p className="text-xs text-[#94A3B8] mt-1">
+                          JPG, PNG, GIF up to 2MB
+                        </p>
                       </div>
-                    )}
-                    <div className="flex-1">
-                      <label
-                        htmlFor="profile_image_input"
-                        className="flex items-center justify-center w-full px-4 py-2 border border-[#E9ECF2] rounded-lg cursor-pointer hover:bg-[#F5F6F8] transition-colors"
-                      >
-                        <Camera className="w-4 h-4 mr-2 text-[#64748B]" />
-                        <span className="text-sm text-[#64748B]">
-                          {previewUrl
-                            ? 'Change Photo'
-                            : 'Upload Photo'}
-                        </span>
-                        <Input
-                          id="profile_image_input"
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileChange}
-                          className="hidden"
-                        />
-                      </label>
-                      <p className="text-xs text-[#94A3B8] mt-1">
-                        JPG, PNG, GIF up to 2MB
-                      </p>
                     </div>
                   </div>
-                </div>
 
-                {!editingUser && (
-                  <div className="bg-[#FBF1DC] p-3 rounded-md border border-[#F0B429]/30 flex items-start gap-2">
-                    <Mail className="w-4 h-4 mt-0.5 text-[#92600A] flex-shrink-0" />
-                    <p className="text-sm text-[#92600A]">
-                      A random password will be generated
-                      and emailed to the new user. You'll
-                      also see it on the next screen so
-                      you can share it manually if
-                      needed.
-                    </p>
-                  </div>
-                )}
-                <Button
-                  type="submit"
-                  className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
-                  disabled={
-                    createMutation.isPending ||
-                    updateMutation.isPending
-                  }
-                >
-                  {createMutation.isPending ||
-                    updateMutation.isPending
-                    ? 'Saving...'
-                    : editingUser
-                      ? 'Update User'
-                      : 'Create User'}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  {!editingUser && (
+                    <div className="bg-[#FBF1DC] p-3 rounded-md border border-[#F0B429]/30 flex items-start gap-2">
+                      <Mail className="w-4 h-4 mt-0.5 text-[#92600A] flex-shrink-0" />
+                      <p className="text-sm text-[#92600A]">
+                        A random password will be generated and emailed to the
+                        new user. You'll also see it on the next screen so you
+                        can share it manually if needed.
+                      </p>
+                    </div>
+                  )}
+                  <Button
+                    type="submit"
+                    className="w-full bg-[#1E8449] hover:bg-[#186B3B]"
+                    disabled={
+                      createMutation.isPending || updateMutation.isPending
+                    }
+                  >
+                    {createMutation.isPending || updateMutation.isPending
+                      ? 'Saving...'
+                      : editingUser
+                        ? 'Update User'
+                        : 'Create User'}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </header>
 
@@ -1165,11 +1229,7 @@ const Users = () => {
           {chips.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {chips.map(([label, clear]) => (
-                <Chip
-                  key={label}
-                  label={label}
-                  onClear={clear}
-                />
+                <Chip key={label} label={label} onClear={clear} />
               ))}
             </div>
           )}
@@ -1181,6 +1241,14 @@ const Users = () => {
             <span className="text-xs font-normal text-[#64748B] font-['Inter']">
               (alphabetical by last name)
             </span>
+            {filters.face_status !== 'all' && (
+              <span className="ml-auto text-xs font-normal text-[#16233F] font-['Inter'] flex items-center gap-1">
+                <ScanFace className="w-3.5 h-3.5 text-[#1E8449]" />
+                {filters.face_status === 'registered'
+                  ? `${faceStats.registered.length} registered`
+                  : `${faceStats.unregistered.length} not registered`}
+              </span>
+            )}
           </h2>
 
           {/* Body */}
@@ -1188,7 +1256,7 @@ const Users = () => {
             <div className="flex justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
             </div>
-          ) : users.length === 0 ? (
+          ) : visibleUsers.length === 0 ? (
             <div className="text-center py-14 text-[#64748B]">
               {activeFilterCount > 0
                 ? 'No users match the current filters.'
@@ -1196,10 +1264,8 @@ const Users = () => {
             </div>
           ) : view === 'cards' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {users.map((user) => {
-                const roleMeta =
-                  ROLE_META[user.role] ||
-                  ROLE_META.enforcer;
+              {visibleUsers.map((user) => {
+                const roleMeta = ROLE_META[user.role] || ROLE_META.enforcer;
                 return (
                   <article
                     key={user.user_id}
@@ -1207,22 +1273,17 @@ const Users = () => {
                   >
                     <div
                       className="h-2"
-                      style={{
-                        background: roleMeta.color,
-                      }}
+                      style={{ background: roleMeta.color }}
                     />
                     <div className="p-4 flex gap-4">
                       {user.profile_image ? (
                         <img
-                          src={getImageUrl(
-                            user.profile_image,
-                          )}
+                          src={getImageUrl(user.profile_image)}
                           alt={`${user.firstname} ${user.lastname}`}
                           className="w-16 h-20 shrink-0 rounded-md object-cover border border-[#E9ECF2]"
                           onError={(e) => {
                             e.target.src = '';
-                            e.target.alt =
-                              'No image';
+                            e.target.alt = 'No image';
                           }}
                         />
                       ) : (
@@ -1233,42 +1294,35 @@ const Users = () => {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
-                          {user.lastname},{' '}
-                          {user.firstname}
+                          {user.lastname}, {user.firstname}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           {roleBadge(user.role)}
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium ${user.is_active
-                                ? 'bg-[#E5F2EA] text-[#1E8449]'
-                                : 'bg-[#FBE7E9] text-[#C8202F]'
+                              ? 'bg-[#E5F2EA] text-[#1E8449]'
+                              : 'bg-[#FBE7E9] text-[#C8202F]'
                               }`}
                           >
-                            {user.is_active
-                              ? 'Active'
-                              : 'Inactive'}
+                            {user.is_active ? 'Active' : 'Inactive'}
                           </span>
+                          {faceBadge(user.has_face_registered)}
                         </div>
                         <dl className="grid grid-cols-1 gap-y-2 mt-3">
-                          <Spec
-                            label="Email"
-                            mono
-                          >
+                          <Spec label="Email" mono>
                             {user.email}
                           </Spec>
                           {user.contact_number && (
                             <Spec label="Contact">
-                              {
-                                user.contact_number
-                              }
+                              {user.contact_number}
                             </Spec>
                           )}
                         </dl>
                       </div>
                     </div>
-                    <div className="px-4 pb-4">
-                      {rowActions(user)}
-                    </div>
+                    {canManage && (
+                      <div className="px-4 pb-4">{rowActions(user)}</div>
+                    )}
                   </article>
                 );
               })}
@@ -1284,40 +1338,34 @@ const Users = () => {
                   'Email',
                   'Role',
                   'Contact',
-                  'Status',
-                  'Actions',
+                  'Status / Face',
+                  ...(canManage ? ['Actions'] : []),
                 ].map((c) => (
                   <span key={c}>{c}</span>
                 ))}
               </div>
               <ul className="divide-y divide-[#EEF0F4]">
-                {users.map((user) => {
-                  const roleMeta =
-                    ROLE_META[user.role] ||
-                    ROLE_META.enforcer;
+                {visibleUsers.map((user) => {
+                  const roleMeta = ROLE_META[user.role] || ROLE_META.enforcer;
                   return (
                     <li
                       key={user.user_id}
                       className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
                       style={{
-                        borderLeftColor:
-                          user.is_active
-                            ? roleMeta.color
-                            : '#94A3B8',
+                        borderLeftColor: user.is_active
+                          ? roleMeta.color
+                          : '#94A3B8',
                       }}
                     >
                       <span className="shrink-0">
                         {user.profile_image ? (
                           <img
-                            src={getImageUrl(
-                              user.profile_image,
-                            )}
+                            src={getImageUrl(user.profile_image)}
                             alt={`${user.firstname} ${user.lastname}`}
                             className="w-10 h-10 rounded-full object-cover border border-[#E9ECF2]"
                             onError={(e) => {
                               e.target.src = '';
-                              e.target.alt =
-                                'No image';
+                              e.target.alt = 'No image';
                             }}
                           />
                         ) : (
@@ -1329,11 +1377,8 @@ const Users = () => {
                       </span>
                       <div className="min-w-0">
                         <div className="font-medium text-[#1F2937] truncate">
-                          {user.lastname},{' '}
-                          {user.firstname}
-                          {user.middlename
-                            ? ` ${user.middlename[0]}.`
-                            : ''}
+                          {user.lastname}, {user.firstname}
+                          {user.middlename ? ` ${user.middlename[0]}.` : ''}
                         </div>
                         <div className="text-xs text-[#64748B]">
                           ID: {user.user_id}
@@ -1351,19 +1396,22 @@ const Users = () => {
                         <Mini>Contact</Mini>
                         {user.contact_number || '—'}
                       </span>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap justify-self-start ${user.is_active
+                      <div className="flex flex-wrap items-center gap-1.5 justify-self-start">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${user.is_active
                             ? 'bg-[#E5F2EA] text-[#1E8449]'
                             : 'bg-[#FBE7E9] text-[#C8202F]'
-                          }`}
-                      >
-                        {user.is_active
-                          ? 'Active'
-                          : 'Inactive'}
-                      </span>
-                      <div className="justify-self-end md:justify-self-start">
-                        {rowActions(user)}
+                            }`}
+                        >
+                          {user.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                        {faceBadge(user.has_face_registered)}
                       </div>
+                      {canManage && (
+                        <div className="justify-self-end md:justify-self-start">
+                          {rowActions(user)}
+                        </div>
+                      )}
                     </li>
                   );
                 })}
@@ -1371,7 +1419,7 @@ const Users = () => {
             </div>
           )}
 
-          {!isLoading && users.length > 0 && (
+          {!isLoading && visibleUsers.length > 0 && (
             <Pagination
               currentPage={meta.current_page}
               totalPages={meta.last_page}
