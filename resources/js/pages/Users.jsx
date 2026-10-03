@@ -428,7 +428,8 @@ const Users = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
     role: '',
-    active_only: true,
+    // 'all' | 'active' | 'deactivated'
+    account_status: 'active',
     // 'all' | 'registered' | 'unregistered'
     face_status: 'all',
   });
@@ -596,19 +597,34 @@ const Users = () => {
   const allUsers = getDataArray(usersResponse);
   const meta = getMeta(usersResponse);
 
-  const users = useMemo(() => {
-    if (!filters.active_only) return allUsers;
-    return allUsers.filter((u) => u.is_active !== false);
-  }, [allUsers, filters.active_only]);
+  // Account status counts are computed off the full server response so
+  // the numbers stay stable while the user switches between views.
+  const accountStats = useMemo(() => {
+    const active = allUsers.filter((u) => u.is_active !== false);
+    const deactivated = allUsers.filter((u) => u.is_active === false);
+    return { active, deactivated, total: allUsers.length };
+  }, [allUsers]);
 
-  // Face-registration breakdown for the current page of results.
+  // Apply the account-status filter first.
+  const users = useMemo(() => {
+    if (filters.account_status === 'active') {
+      return allUsers.filter((u) => u.is_active !== false);
+    }
+    if (filters.account_status === 'deactivated') {
+      return allUsers.filter((u) => u.is_active === false);
+    }
+    return allUsers;
+  }, [allUsers, filters.account_status]);
+
+  // Face registration counts are computed on the account-status-filtered
+  // list so the numbers reflect what the user is currently looking at.
   const faceStats = useMemo(() => {
     const registered = users.filter((u) => u.has_face_registered === true);
     const unregistered = users.filter((u) => u.has_face_registered !== true);
     return { registered, unregistered, total: users.length };
   }, [users]);
 
-  // Apply the face-status filter on top of everything else.
+  // Apply the face filter on top of the account-status filter.
   const visibleUsers = useMemo(() => {
     if (filters.face_status === 'registered') return faceStats.registered;
     if (filters.face_status === 'unregistered') return faceStats.unregistered;
@@ -732,13 +748,17 @@ const Users = () => {
   };
 
   const clearFilters = () =>
-    setFilters({ role: '', active_only: true, face_status: 'all' });
+    setFilters({
+      role: '',
+      account_status: 'active',
+      face_status: 'all',
+    });
 
   const activeFilterCount = useMemo(() => {
     let c = 0;
     if (searchTerm) c++;
     if (filters.role) c++;
-    if (!filters.active_only) c++;
+    if (filters.account_status !== 'active') c++;
     if (filters.face_status !== 'all') c++;
     return c;
   }, [searchTerm, filters]);
@@ -845,6 +865,61 @@ const Users = () => {
         </select>
       </div>
 
+      {/* ------- Account status filter ------- */}
+      <div>
+        <L icon={UserCheck}>Account status</L>
+        <div className="flex flex-col gap-1.5">
+          {[
+            {
+              key: 'active',
+              label: 'Active only',
+              count: accountStats.active.length,
+              Icon: UserCheck,
+            },
+            {
+              key: 'deactivated',
+              label: 'Deactivated only',
+              count: accountStats.deactivated.length,
+              Icon: UserX,
+            },
+            {
+              key: 'all',
+              label: 'All users',
+              count: accountStats.total,
+              Icon: UsersIcon,
+            },
+          ].map((opt) => {
+            const active = filters.account_status === opt.key;
+            const Icon = opt.Icon;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() =>
+                  setFilters({ ...filters, account_status: opt.key })
+                }
+                aria-pressed={active}
+                className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border font-medium transition-colors ${active
+                  ? 'bg-[#16233F] text-white border-[#16233F]'
+                  : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                  }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Icon className="w-3.5 h-3.5" />
+                  {opt.label}
+                </span>
+                <span
+                  className={`tabular-nums ${active ? 'text-white/80' : 'text-[#94A3B8]'
+                    }`}
+                >
+                  {opt.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ------- Face registration filter ------- */}
       <div>
         <L icon={ScanFace}>Face registration</L>
@@ -895,23 +970,6 @@ const Users = () => {
           })}
         </div>
       </div>
-
-      <div>
-        <label className="flex items-center gap-2 text-sm text-[#92600A] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={filters.active_only}
-            onChange={(e) =>
-              setFilters({
-                ...filters,
-                active_only: e.target.checked,
-              })
-            }
-            className="w-4 h-4 accent-[#92600A]"
-          />
-          Show active users only
-        </label>
-      </div>
     </FilterShell>
   );
 
@@ -921,15 +979,17 @@ const Users = () => {
       `Role: ${filters.role}`,
       () => setFilters({ ...filters, role: '' }),
     ],
+    filters.account_status !== 'active' && [
+      filters.account_status === 'deactivated'
+        ? 'Deactivated only'
+        : 'Showing all account statuses',
+      () => setFilters({ ...filters, account_status: 'active' }),
+    ],
     filters.face_status !== 'all' && [
       filters.face_status === 'registered'
         ? 'Face registered only'
         : 'No face registered only',
       () => setFilters({ ...filters, face_status: 'all' }),
-    ],
-    !filters.active_only && [
-      'Showing inactive too',
-      () => setFilters({ ...filters, active_only: true }),
     ],
   ].filter(Boolean);
 
@@ -1235,20 +1295,31 @@ const Users = () => {
           )}
 
           {/* Section title */}
-          <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
+          <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2 flex-wrap">
             <UsersIcon className="w-5 h-5 text-[#F0B429]" />
             Users List
             <span className="text-xs font-normal text-[#64748B] font-['Inter']">
               (alphabetical by last name)
             </span>
-            {filters.face_status !== 'all' && (
-              <span className="ml-auto text-xs font-normal text-[#16233F] font-['Inter'] flex items-center gap-1">
-                <ScanFace className="w-3.5 h-3.5 text-[#1E8449]" />
-                {filters.face_status === 'registered'
-                  ? `${faceStats.registered.length} registered`
-                  : `${faceStats.unregistered.length} not registered`}
-              </span>
-            )}
+
+            <span className="ml-auto flex flex-wrap items-center gap-3">
+              {filters.account_status !== 'active' && (
+                <span className="text-xs font-normal text-[#16233F] font-['Inter'] flex items-center gap-1">
+                  <UserX className="w-3.5 h-3.5 text-[#C8202F]" />
+                  {filters.account_status === 'deactivated'
+                    ? `${accountStats.deactivated.length} deactivated`
+                    : `${accountStats.total} total`}
+                </span>
+              )}
+              {filters.face_status !== 'all' && (
+                <span className="text-xs font-normal text-[#16233F] font-['Inter'] flex items-center gap-1">
+                  <ScanFace className="w-3.5 h-3.5 text-[#1E8449]" />
+                  {filters.face_status === 'registered'
+                    ? `${faceStats.registered.length} registered`
+                    : `${faceStats.unregistered.length} not registered`}
+                </span>
+              )}
+            </span>
           </h2>
 
           {/* Body */}
