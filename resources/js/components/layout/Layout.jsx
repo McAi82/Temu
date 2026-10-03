@@ -99,7 +99,10 @@ const Layout = ({ children }) => {
         </div>
 
         {/* Navigation with a lane marker that slides to the current page */}
-        <nav className="flex-1 mt-4 overflow-y-auto overflow-x-hidden" aria-label="Main">
+        <nav
+          className="flex-1 mt-4 overflow-y-auto overflow-x-hidden sidebar-scroll"
+          aria-label="Main"
+        >
           <div className="relative px-3">
             <span
               aria-hidden="true"
