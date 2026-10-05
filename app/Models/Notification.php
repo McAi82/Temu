@@ -141,4 +141,9 @@ class Notification extends Model
 
     public const TYPE_PAYMENT_ARCHIVED         = 'payment_archived';
     public const TYPE_PAYMENT_RESTORED         = 'payment_restored';
+
+    public const TYPE_FACE_TAKEOVER_REQUESTED = 'face_takeover_requested';
+    public const TYPE_FACE_TAKEOVER_APPROVED  = 'face_takeover_approved';
+    public const TYPE_FACE_TAKEOVER_REJECTED  = 'face_takeover_rejected';
+    public const TYPE_FACE_TRANSFERRED        = 'face_transferred';
 }

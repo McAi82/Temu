@@ -19,6 +19,7 @@ import {
   Menu,
   X,
   ChevronsLeft,
+  ScanFace,
   ChevronsRight,
 } from 'lucide-react';
 import temuLogo from '../../assets/temu-logo.png';
@@ -70,6 +71,7 @@ const Layout = ({ children }) => {
 
   if (user?.role === 'staff' || user?.role === 'admin') {
     menuItems.push({ path: '/payments', label: 'Payments', icon: Wallet });
+    menuItems.push({ path: '/face-registrations', label: 'Faces', icon: ScanFace });
     menuItems.push({ path: '/users', label: 'Users', icon: UserCog });
   }
 

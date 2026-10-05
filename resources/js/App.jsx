@@ -26,6 +26,7 @@ import PublicTicketView from './pages/PublicTicket';
 import NotificationToasts from './components/notifications/NotificationToasts';
 import Payments from './pages/Payments';
 import Archives from './pages/Archives';
+import FaceRegistrations from './pages/FaceRegistrations'; // 🆕
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -72,6 +73,16 @@ const AppRoutes = () => {
                 <Route path="/schedule" element={<ProtectedRoute><Layout><Schedule /></Layout></ProtectedRoute>} />
                 <Route path="/payments" element={<ProtectedRoute><Layout><Payments /></Layout></ProtectedRoute>} />
                 <Route path="/archives" element={<ProtectedRoute><Layout><Archives /></Layout></ProtectedRoute>} />
+                <Route
+                    path="/face-registrations"
+                    element={
+                        <ProtectedRoute>
+                            <Layout>
+                                <FaceRegistrations />
+                            </Layout>
+                        </ProtectedRoute>
+                    }
+                />
             </Routes>
 
             {user && <NotificationToasts />}

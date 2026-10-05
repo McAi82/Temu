@@ -18,6 +18,7 @@ use App\Http\Controllers\API\LocationController;
 use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\PaymentController;
+use App\Http\Controllers\API\FaceRegistrationController;
 use App\Http\Controllers\API\PasswordResetController;
 use App\Http\Controllers\API\DeviceSwitchController;
 use App\Http\Controllers\API\ArchiveController;
@@ -74,24 +75,74 @@ Route::get('/DeviceSwitch/status', [DeviceSwitchController::class, 'status'])
 
 /*
 |--------------------------------------------------------------------------
-| FACE SERVICE ROUTES (X-API-Key, NOT Sanctum)
-|--------------------------------------------------------------------------
-*/
-
-Route::prefix('faces')->group(function () {
-    Route::post('/register',   [FaceController::class, 'register']);
-    Route::get('/encodings',   [FaceController::class, 'getEncodings']);
-    Route::delete('/{userId}', [FaceController::class, 'delete'])
-        ->where('userId', '[0-9]+');
-});
-
-/*
-|--------------------------------------------------------------------------
 | PROTECTED ROUTES (Sanctum)
 |--------------------------------------------------------------------------
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+
+    /*
+    |----------------------- FACE REGISTRATION (mobile) -----------------------
+    */
+    Route::prefix('faces')->group(function () {
+        Route::post(
+            '/register',
+            [FaceRegistrationController::class, 'register']
+        );
+        Route::post(
+            '/takeover/request',
+            [FaceRegistrationController::class, 'requestTakeover']
+        );
+        Route::get(
+            '/my-registration',
+            [FaceRegistrationController::class, 'myRegistration']
+        );
+        Route::get(
+            '/device/{deviceId}/registrations',
+            [FaceRegistrationController::class, 'deviceRegistrations']
+        );
+    });
+
+    /*
+    |----------------------- FACE ADMIN (web) -----------------------
+    */
+    Route::middleware('staff')->group(function () {
+        Route::get('/faces', [FaceRegistrationController::class, 'index']);
+        Route::get(
+            '/faces/{id}',
+            [FaceRegistrationController::class, 'show']
+        )
+            ->where('id', '[0-9]+');
+
+        Route::get(
+            '/face-takeover-requests',
+            [FaceRegistrationController::class, 'listTakeovers']
+        );
+        Route::get(
+            '/face-takeover-requests/pending-count',
+            [FaceRegistrationController::class, 'pendingCount']
+        );
+
+        Route::middleware('admin')->group(function () {
+            Route::put(
+                '/face-takeover-requests/{id}/approve',
+                [FaceRegistrationController::class, 'approveTakeover']
+            )
+                ->where('id', '[0-9]+');
+
+            Route::put(
+                '/face-takeover-requests/{id}/reject',
+                [FaceRegistrationController::class, 'rejectTakeover']
+            )
+                ->where('id', '[0-9]+');
+
+            Route::put(
+                '/faces/{id}/transfer',
+                [FaceRegistrationController::class, 'transferOwnership']
+            )
+                ->where('id', '[0-9]+');
+        });
+    });
 
     Route::get('/available-enforcers', [ScheduleController::class, 'availableEnforcers']);
     Route::put('/{id}/replace-enforcer', [ScheduleController::class, 'replaceEnforcer'])

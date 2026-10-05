@@ -40,6 +40,33 @@ api.interceptors.response.use(
     },
 );
 
+// ==================== FACE REGISTRATIONS ====================
+export const getFaceRegistrations = (page = 1, perPage = 20, filters = {}) =>
+    api.get('/faces', { params: { page, per_page: perPage, ...filters } });
+
+export const getFaceRegistration = (id) => api.get(`/faces/${id}`);
+
+export const transferFaceRegistration = (id, payload) =>
+    api.put(`/faces/${id}/transfer`, payload);
+
+export const getFaceTakeoverRequests = (page = 1, perPage = 20, filters = {}) =>
+    api.get('/face-takeover-requests', {
+        params: { page, per_page: perPage, ...filters },
+    });
+
+export const getFaceTakeoverPendingCount = () =>
+    api.get('/face-takeover-requests/pending-count');
+
+export const approveFaceTakeover = (id, reviewNotes = '') =>
+    api.put(`/face-takeover-requests/${id}/approve`, {
+        review_notes: reviewNotes,
+    });
+
+export const rejectFaceTakeover = (id, reviewNotes) =>
+    api.put(`/face-takeover-requests/${id}/reject`, {
+        review_notes: reviewNotes,
+    });
+
 // ==================== AUTH ====================
 export const login = (email, password) => api.post('/Weblogin', { email, password });
 
