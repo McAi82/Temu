@@ -1,5 +1,5 @@
 // web/src/components/layout/Layout.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
@@ -19,30 +19,146 @@ import {
   Menu,
   X,
   ChevronsLeft,
-  ScanFace,
   ChevronsRight,
+  ScanFace,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import temuLogo from '../../assets/temu-logo.png';
 import NotificationBell from '../notifications/NotificationBell';
 
 const RAIL = 76;   // collapsed width (px)
 const FULL = 256;  // expanded width (px)
-const ROW = 48;    // nav row height + gap, used to slide the lane marker
+const ROW = 48;    // nav row height + gap for the active lane marker
+
+/* ------------------------------------------------------------------ */
+/* Nav structure — groups with their items                             */
+/* ------------------------------------------------------------------ */
+
+const NAV_GROUPS = [
+  {
+    key: 'overview',
+    label: 'Overview',
+    icon: LayoutDashboard,
+    // If a group has `alwaysOpen`, it can't be collapsed and its items
+    // render directly without a group header indentation.
+    alwaysOpen: true,
+    items: [
+      { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    ],
+  },
+  {
+    key: 'enforcement',
+    label: 'Enforcement',
+    icon: Ticket,
+    items: [
+      { path: '/tickets', label: 'Tickets', icon: Ticket },
+      { path: '/violations', label: 'Violations', icon: AlertTriangle },
+      { path: '/vehicles-violators', label: 'Violators', icon: Users },
+    ],
+  },
+  {
+    key: 'operations',
+    label: 'Operations',
+    icon: MapPin,
+    items: [
+      { path: '/attendance', label: 'Attendance', icon: Camera },
+      { path: '/schedule', label: 'Schedule', icon: Calendar },
+      { path: '/duty-map', label: 'Duty Map', icon: MapPin },
+    ],
+  },
+  {
+    key: 'reporting',
+    label: 'Reporting',
+    icon: FileText,
+    items: [
+      { path: '/reports', label: 'Reports', icon: FileText },
+    ],
+  },
+  {
+    key: 'finance',
+    label: 'Finance',
+    icon: Wallet,
+    // staff + admin only — handled per-group with `roles`
+    roles: ['admin', 'staff'],
+    items: [
+      { path: '/payments', label: 'Payments', icon: Wallet },
+    ],
+  },
+  {
+    key: 'accounts',
+    label: 'Accounts',
+    icon: UserCog,
+    roles: ['admin', 'staff'],
+    items: [
+      { path: '/users', label: 'Users', icon: UserCog },
+      { path: '/face-registrations', label: 'Faces', icon: ScanFace },
+    ],
+  },
+  {
+    key: 'system',
+    label: 'System',
+    icon: Archive,
+    roles: ['admin'],
+    items: [
+      { path: '/archives', label: 'Archives', icon: Archive },
+    ],
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* Group expansion persistence                                         */
+/* ------------------------------------------------------------------ */
+
+const EXPANDED_KEY = 'temu-sidebar-expanded-groups';
+
+const loadExpandedGroups = () => {
+  try {
+    const raw = localStorage.getItem(EXPANDED_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const saveExpandedGroups = (map) => {
+  try {
+    localStorage.setItem(EXPANDED_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+};
+
+/* ------------------------------------------------------------------ */
+/* Layout                                                              */
+/* ------------------------------------------------------------------ */
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // pinned = rail stays open; otherwise it opens while hovered or focused
+  // Rail pin state
   const [pinned, setPinned] = useState(() => {
-    try { return localStorage.getItem('temu-sidebar-pinned') === '1'; } catch { return false; }
+    try { return localStorage.getItem('temu-sidebar-pinned') === '1'; }
+    catch { return false; }
   });
   const [hovered, setHovered] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Expanded groups: true = open, false = collapsed.
+  // Undefined = use the default (open if the group contains the
+  // current route, closed otherwise).
+  const [expandedGroups, setExpandedGroups] = useState(
+    () => loadExpandedGroups() || {},
+  );
+
   useEffect(() => {
-    try { localStorage.setItem('temu-sidebar-pinned', pinned ? '1' : '0'); } catch { /* ignore */ }
+    try { localStorage.setItem('temu-sidebar-pinned', pinned ? '1' : '0'); }
+    catch { /* ignore */ }
   }, [pinned]);
 
   useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
@@ -53,77 +169,298 @@ const Layout = ({ children }) => {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  useEffect(() => {
+    saveExpandedGroups(expandedGroups);
+  }, [expandedGroups]);
+
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const menuItems = [
-    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/vehicles-violators', label: 'Violators', icon: Users },
-    { path: '/violations', label: 'Violations', icon: AlertTriangle },
-    { path: '/tickets', label: 'Tickets', icon: Ticket },
-    { path: '/attendance', label: 'Attendance', icon: Camera },
-    { path: '/schedule', label: 'Schedule', icon: Calendar },
-    { path: '/duty-map', label: 'Duty Map', icon: MapPin },
-    { path: '/reports', label: 'Reports', icon: FileText },
-  ];
+  /* ------------------------------------------------------------------ */
+  /* Filter groups by role                                               */
+  /* ------------------------------------------------------------------ */
 
-  if (user?.role === 'staff' || user?.role === 'admin') {
-    menuItems.push({ path: '/payments', label: 'Payments', icon: Wallet });
-    menuItems.push({ path: '/face-registrations', label: 'Faces', icon: ScanFace });
-    menuItems.push({ path: '/users', label: 'Users', icon: UserCog });
-  }
+  const visibleGroups = useMemo(() => {
+    const role = user?.role;
+    return NAV_GROUPS.filter((g) => {
+      if (!g.roles) return true;
+      if (!role) return false;
+      return g.roles.includes(role);
+    }).map((g) => ({
+      ...g,
+      items: g.items.filter((it) => {
+        if (!it.roles) return true;
+        if (!role) return false;
+        return it.roles.includes(role);
+      }),
+    })).filter((g) => g.items.length > 0);
+  }, [user?.role]);
 
-  if (user?.role === 'admin') {
-    menuItems.push({ path: '/archives', label: 'Archives', icon: Archive });
-  }
+  /* ------------------------------------------------------------------ */
+  /* Which group contains the active route?                              */
+  /* ------------------------------------------------------------------ */
 
-  const activeIndex = menuItems.findIndex((i) => i.path === location.pathname);
+  const activeGroupKey = useMemo(() => {
+    const match = visibleGroups.find((g) =>
+      g.items.some((it) => it.path === location.pathname),
+    );
+    return match?.key ?? null;
+  }, [visibleGroups, location.pathname]);
+
+  const activePath = location.pathname;
+
+  /* ------------------------------------------------------------------ */
+  /* Expanded state resolution — auto-open the active group              */
+  /* ------------------------------------------------------------------ */
+
+  const isGroupExpanded = useCallback(
+    (group) => {
+      if (group.alwaysOpen) return true;
+      // Prefer explicit user preference.
+      if (expandedGroups[group.key] !== undefined) {
+        // But if the user's stored preference is "closed" AND the
+        // active route is inside it, still auto-open.
+        if (expandedGroups[group.key] === false && group.key === activeGroupKey) {
+          return true;
+        }
+        return expandedGroups[group.key];
+      }
+      // No preference stored — default: open if it contains the route.
+      return group.key === activeGroupKey;
+    },
+    [expandedGroups, activeGroupKey],
+  );
+
+  const toggleGroup = (groupKey) => {
+    setExpandedGroups((prev) => {
+      const currently = prev[groupKey];
+      // First toggle: if no preference, invert the auto default.
+      const autoDefault =
+        visibleGroups.find((g) => g.key === groupKey)?.key === activeGroupKey;
+      const nextValue = currently === undefined ? !autoDefault : !currently;
+      return { ...prev, [groupKey]: nextValue };
+    });
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Flat list of all visible rows for the lane marker                    */
+  /* We render groups in the nav, so we only need the marker's Y offset   */
+  /* to reflect the currently visible active row.                        */
+  /* ------------------------------------------------------------------ */
+
+  // Recompute the offset whenever the group expansion changes.
+  const activeOffset = useMemo(() => {
+    let offset = 0;
+    const GROUP_HEADER_H = 40;   // header row height
+    const GROUP_GAP_H = 8;       // bottom gap between groups
+
+    for (const g of visibleGroups) {
+      if (g.alwaysOpen) {
+        for (const it of g.items) {
+          if (it.path === activePath) return offset;
+          offset += ROW;
+        }
+        offset += GROUP_GAP_H;
+        continue;
+      }
+
+      // header
+      if (g.key === activeGroupKey) {
+        // Will be found inside — compute header height and then check
+        // each child.
+        const headerOffset = offset;
+        offset += GROUP_HEADER_H;
+        if (isGroupExpanded(g)) {
+          for (const it of g.items) {
+            if (it.path === activePath) return offset;
+            offset += ROW;
+          }
+        } else {
+          // If collapsed, the marker would be on the header itself
+          // (or hidden). We hide it in that case.
+          if (g.items.some((it) => it.path === activePath)) {
+            return -1; // signal "hide marker"
+          }
+        }
+        void headerOffset;
+      } else {
+        offset += GROUP_HEADER_H;
+        if (isGroupExpanded(g)) {
+          offset += g.items.length * ROW;
+        }
+      }
+      offset += GROUP_GAP_H;
+    }
+    return -1;
+  }, [visibleGroups, activePath, activeGroupKey, isGroupExpanded]);
+
+  const showMarker = activeOffset >= 0;
+
+  /* ------------------------------------------------------------------ */
+  /* Rendering                                                           */
+  /* ------------------------------------------------------------------ */
+
   const initials = `${user?.firstname?.[0] || ''}${user?.lastname?.[0] || ''}`.toUpperCase();
 
-  /* The same sidebar body is used by the desktop rail and the mobile drawer */
   const renderSidebar = (open) => {
-    const fade = `transition-opacity duration-200 whitespace-nowrap ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`;
+    const fade = `transition-opacity duration-200 whitespace-nowrap ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`;
+
     return (
       <div className="flex flex-col h-full overflow-hidden">
-        {/* Brand + Notification Bell */}
-        <div className={`flex items-center border-b border-white/10 px-4 py-5 gap-3 ${open ? 'flex-row' : 'flex-col'}`}>
-          <img src={temuLogo} alt="City of El Salvador Seal" className="w-11 h-11 flex-shrink-0 drop-shadow" />
+        {/* Brand + bell */}
+        <div
+          className={`flex items-center border-b border-white/10 px-4 py-5 gap-3 ${open ? 'flex-row' : 'flex-col'
+            }`}
+        >
+          <img
+            src={temuLogo}
+            alt="City of El Salvador Seal"
+            className="w-11 h-11 flex-shrink-0 drop-shadow"
+          />
           {open && (
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-['Oswald'] font-semibold text-white leading-none tracking-wide">TEMU</h1>
-              <p className="text-[11px] text-[#8D98B3] font-['Inter'] mt-1 truncate">El Salvador City</p>
+              <h1 className="text-xl font-['Oswald'] font-semibold text-white leading-none tracking-wide">
+                TEMU
+              </h1>
+              <p className="text-[11px] text-[#8D98B3] font-['Inter'] mt-1 truncate">
+                El Salvador City
+              </p>
             </div>
           )}
           <NotificationBell variant="dark" />
         </div>
 
-        {/* Navigation with a lane marker that slides to the current page */}
+        {/* Nav with grouped sections */}
         <nav
-          className="flex-1 mt-4 overflow-y-auto overflow-x-hidden sidebar-scroll"
+          className="flex-1 mt-3 overflow-y-auto overflow-x-hidden sidebar-scroll"
           aria-label="Main"
         >
-          <div className="relative px-3">
+          <div className="relative px-3 pb-3">
+            {/* Sliding lane marker */}
             <span
               aria-hidden="true"
               className="absolute left-0 top-0 w-1 h-11 rounded-r bg-[#F0B429] transition-transform duration-300 ease-out"
-              style={{ transform: `translateY(${Math.max(activeIndex, 0) * ROW}px)`, opacity: activeIndex < 0 ? 0 : 1 }}
+              style={{
+                transform: `translateY(${Math.max(activeOffset, 0)}px)`,
+                opacity: showMarker ? 1 : 0,
+              }}
             />
-            {menuItems.map((item, i) => {
-              const isActive = i === activeIndex;
+
+            {visibleGroups.map((group) => {
+              const expanded = isGroupExpanded(group);
+              const GroupIcon = group.icon;
+              const hasActive = group.items.some(
+                (it) => it.path === activePath,
+              );
+
+              /* ---- Always-open group: just render items ---- */
+              if (group.alwaysOpen) {
+                return (
+                  <div key={group.key} className="mb-2">
+                    {group.items.map((item) => {
+                      const isActive = item.path === activePath;
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          title={open ? undefined : item.label}
+                          aria-current={isActive ? 'page' : undefined}
+                          className={`group flex items-center gap-4 h-11 px-3.5 rounded-lg text-sm font-normal transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F0B429] ${isActive
+                              ? 'bg-white/10 text-white'
+                              : 'text-[#B7C0D8] hover:bg-white/5 hover:text-white'
+                            }`}
+                        >
+                          <Icon
+                            className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-[#F0B429]' : ''
+                              }`}
+                          />
+                          <span className={fade}>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              /* ---- Collapsible group ---- */
               return (
-                <Link
-                  key={`${item.path}-${i}`}
-                  to={item.path}
-                  title={open ? undefined : item.label}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`group flex items-center gap-4 h-11 mb-1 px-3.5 rounded-lg text-sm font-normal transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F0B429] ${isActive ? 'bg-white/10 text-white' : 'text-[#B7C0D8] hover:bg-white/5 hover:text-white'
-                    }`}
-                >
-                  <item.icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-[#F0B429]' : ''}`} />
-                  <span className={fade}>{item.label}</span>
-                </Link>
+                <div key={group.key} className="mb-2">
+                  {/* Group header */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // When the rail is collapsed, expand the rail first
+                      // so the group is actually visible.
+                      if (!open) {
+                        setPinned(true);
+                        return;
+                      }
+                      toggleGroup(group.key);
+                    }}
+                    title={open ? undefined : group.label}
+                    aria-expanded={open ? expanded : undefined}
+                    aria-controls={`group-${group.key}`}
+                    className={`w-full flex items-center h-10 gap-3 px-3.5 rounded-lg text-[11px] uppercase tracking-[0.14em] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F0B429] ${hasActive
+                        ? 'text-[#F0B429]'
+                        : 'text-[#8D98B3] hover:text-white'
+                      }`}
+                  >
+                    <GroupIcon
+                      className="w-4 h-4 flex-shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className={`flex-1 text-left ${fade}`}>
+                      {group.label}
+                    </span>
+                    {open ? (
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${expanded ? '' : '-rotate-90'
+                          }`}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </button>
+
+                  {/* Group items */}
+                  <div
+                    id={`group-${group.key}`}
+                    className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-out ${expanded
+                        ? 'max-h-[400px] opacity-100'
+                        : 'max-h-0 opacity-0'
+                      }`}
+                  >
+                    <div className="pt-1">
+                      {group.items.map((item) => {
+                        const isActive = item.path === activePath;
+                        const Icon = item.icon;
+                        return (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            title={open ? undefined : item.label}
+                            aria-current={
+                              isActive ? 'page' : undefined
+                            }
+                            className={`group flex items-center gap-4 h-11 ml-2 pl-3.5 pr-3 rounded-lg text-sm font-normal transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F0B429] ${isActive
+                                ? 'bg-white/10 text-white'
+                                : 'text-[#B7C0D8] hover:bg-white/5 hover:text-white'
+                              }`}
+                          >
+                            <Icon
+                              className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-[#F0B429]' : ''
+                                }`}
+                            />
+                            <span className={fade}>{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -136,8 +473,12 @@ const Layout = ({ children }) => {
               {initials}
             </div>
             <div className={`min-w-0 ${fade}`}>
-              <p className="text-sm font-normal text-white truncate">{user?.firstname} {user?.lastname}</p>
-              <p className="text-xs text-[#8D98B3] capitalize font-normal">{user?.role}</p>
+              <p className="text-sm font-normal text-white truncate">
+                {user?.firstname} {user?.lastname}
+              </p>
+              <p className="text-xs text-[#8D98B3] capitalize font-normal">
+                {user?.role}
+              </p>
             </div>
           </div>
           <Button
@@ -158,7 +499,7 @@ const Layout = ({ children }) => {
 
   return (
     <div className="fixed inset-0 flex bg-[#F5F6F8] overflow-hidden">
-      {/* Desktop rail: reserves its pinned width, overlays content while hover-expanded */}
+      {/* Desktop rail */}
       <div
         className="hidden lg:block relative flex-shrink-0 transition-[width] duration-300"
         style={{ width: pinned ? FULL : RAIL }}
@@ -167,7 +508,9 @@ const Layout = ({ children }) => {
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           onFocus={() => setHovered(true)}
-          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setHovered(false); }}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setHovered(false);
+          }}
           className="absolute inset-y-0 left-0 z-30 bg-[#16233F] border-r border-dashed border-[#F0B429]/30 shadow-xl transition-[width] duration-300 ease-out"
           style={{ width: railOpen ? FULL : RAIL }}
         >
@@ -177,21 +520,32 @@ const Layout = ({ children }) => {
             onClick={() => setPinned((p) => !p)}
             aria-label={pinned ? 'Unpin sidebar' : 'Pin sidebar open'}
             title={pinned ? 'Unpin sidebar' : 'Pin sidebar open'}
-            className={`absolute top-6 -right-3 w-6 h-6 rounded-full bg-[#F0B429] text-[#16233F] shadow flex items-center justify-center transition-opacity duration-200 hover:scale-110 ${railOpen ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute top-6 -right-3 w-6 h-6 rounded-full bg-[#F0B429] text-[#16233F] shadow flex items-center justify-center transition-opacity duration-200 hover:scale-110 ${railOpen ? 'opacity-100' : 'opacity-0'
+              }`}
           >
-            {pinned ? <ChevronsLeft className="w-3.5 h-3.5" /> : <ChevronsRight className="w-3.5 h-3.5" />}
+            {pinned ? (
+              <ChevronsLeft className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronsRight className="w-3.5 h-3.5" />
+            )}
           </button>
         </aside>
       </div>
 
       {/* Mobile drawer */}
-      <div className={`lg:hidden fixed inset-0 z-40 ${drawerOpen ? '' : 'pointer-events-none'}`} aria-hidden={!drawerOpen}>
+      <div
+        className={`lg:hidden fixed inset-0 z-40 ${drawerOpen ? '' : 'pointer-events-none'
+          }`}
+        aria-hidden={!drawerOpen}
+      >
         <div
           onClick={() => setDrawerOpen(false)}
-          className={`absolute inset-0 bg-[#0C1427]/60 transition-opacity duration-300 ${drawerOpen ? 'opacity-100' : 'opacity-0'}`}
+          className={`absolute inset-0 bg-[#0C1427]/60 transition-opacity duration-300 ${drawerOpen ? 'opacity-100' : 'opacity-0'
+            }`}
         />
         <aside
-          className={`absolute inset-y-0 left-0 bg-[#16233F] shadow-2xl transition-transform duration-300 ease-out ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
+          className={`absolute inset-y-0 left-0 bg-[#16233F] shadow-2xl transition-transform duration-300 ease-out ${drawerOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
           style={{ width: FULL }}
         >
           {renderSidebar(true)}
@@ -206,7 +560,7 @@ const Layout = ({ children }) => {
         </aside>
       </div>
 
-      {/* Main Content */}
+      {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-[#16233F] text-white flex-shrink-0">
           <button
@@ -218,7 +572,9 @@ const Layout = ({ children }) => {
             <Menu className="w-6 h-6" />
           </button>
           <img src={temuLogo} alt="" className="w-8 h-8" />
-          <span className="font-['Oswald'] font-semibold tracking-wide">TEMU</span>
+          <span className="font-['Oswald'] font-semibold tracking-wide">
+            TEMU
+          </span>
         </div>
         <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           <div className="p-4 sm:p-8">{children}</div>
