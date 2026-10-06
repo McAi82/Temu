@@ -22,7 +22,6 @@ import {
   ChevronsRight,
   ScanFace,
   ChevronDown,
-  ChevronRight,
 } from 'lucide-react';
 import temuLogo from '../../assets/temu-logo.png';
 import NotificationBell from '../notifications/NotificationBell';
@@ -40,8 +39,8 @@ const NAV_GROUPS = [
     key: 'overview',
     label: 'Overview',
     icon: LayoutDashboard,
-    // If a group has `alwaysOpen`, it can't be collapsed and its items
-    // render directly without a group header indentation.
+    // alwaysOpen groups render their items directly without a
+    // collapsible header and are never part of the accordion.
     alwaysOpen: true,
     items: [
       { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -79,7 +78,6 @@ const NAV_GROUPS = [
     key: 'finance',
     label: 'Finance',
     icon: Wallet,
-    // staff + admin only — handled per-group with `roles`
     roles: ['admin', 'staff'],
     items: [
       { path: '/payments', label: 'Payments', icon: Wallet },
@@ -143,25 +141,31 @@ const Layout = ({ children }) => {
 
   // Rail pin state
   const [pinned, setPinned] = useState(() => {
-    try { return localStorage.getItem('temu-sidebar-pinned') === '1'; }
-    catch { return false; }
+    try {
+      return localStorage.getItem('temu-sidebar-pinned') === '1';
+    } catch {
+      return false;
+    }
   });
   const [hovered, setHovered] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Expanded groups: true = open, false = collapsed.
-  // Undefined = use the default (open if the group contains the
-  // current route, closed otherwise).
+  // Expanded groups map. true = open, false = collapsed.
   const [expandedGroups, setExpandedGroups] = useState(
     () => loadExpandedGroups() || {},
   );
 
   useEffect(() => {
-    try { localStorage.setItem('temu-sidebar-pinned', pinned ? '1' : '0'); }
-    catch { /* ignore */ }
+    try {
+      localStorage.setItem('temu-sidebar-pinned', pinned ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
   }, [pinned]);
 
-  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && setDrawerOpen(false);
@@ -184,18 +188,21 @@ const Layout = ({ children }) => {
 
   const visibleGroups = useMemo(() => {
     const role = user?.role;
-    return NAV_GROUPS.filter((g) => {
-      if (!g.roles) return true;
-      if (!role) return false;
-      return g.roles.includes(role);
-    }).map((g) => ({
-      ...g,
-      items: g.items.filter((it) => {
-        if (!it.roles) return true;
+    return NAV_GROUPS
+      .filter((g) => {
+        if (!g.roles) return true;
         if (!role) return false;
-        return it.roles.includes(role);
-      }),
-    })).filter((g) => g.items.length > 0);
+        return g.roles.includes(role);
+      })
+      .map((g) => ({
+        ...g,
+        items: g.items.filter((it) => {
+          if (!it.roles) return true;
+          if (!role) return false;
+          return it.roles.includes(role);
+        }),
+      }))
+      .filter((g) => g.items.length > 0);
   }, [user?.role]);
 
   /* ------------------------------------------------------------------ */
@@ -212,49 +219,95 @@ const Layout = ({ children }) => {
   const activePath = location.pathname;
 
   /* ------------------------------------------------------------------ */
-  /* Expanded state resolution — auto-open the active group              */
+  /* Expanded state resolution                                           */
   /* ------------------------------------------------------------------ */
 
+  /**
+   * Resolve whether a group is expanded.
+   *
+   * - alwaysOpen groups are always expanded.
+   * - The group that contains the active route is always expanded
+   *   (navigation can force-open it even if the user previously closed
+   *   it — so the active page is never hidden).
+   * - Otherwise, use the explicit pref, defaulting to closed.
+   */
   const isGroupExpanded = useCallback(
     (group) => {
       if (group.alwaysOpen) return true;
-      // Prefer explicit user preference.
+      if (group.key === activeGroupKey) return true;
       if (expandedGroups[group.key] !== undefined) {
-        // But if the user's stored preference is "closed" AND the
-        // active route is inside it, still auto-open.
-        if (expandedGroups[group.key] === false && group.key === activeGroupKey) {
-          return true;
-        }
         return expandedGroups[group.key];
       }
-      // No preference stored — default: open if it contains the route.
-      return group.key === activeGroupKey;
+      return false;
     },
     [expandedGroups, activeGroupKey],
   );
 
+  /**
+   * Accordion behavior: opening one group closes all others.
+   *
+   * - Toggling the currently-open group closes it.
+   * - Toggling a closed group opens it AND closes every other
+   *   collapsible group.
+   * - alwaysOpen groups are never forced closed.
+   */
   const toggleGroup = (groupKey) => {
-    setExpandedGroups((prev) => {
-      const currently = prev[groupKey];
-      // First toggle: if no preference, invert the auto default.
-      const autoDefault =
-        visibleGroups.find((g) => g.key === groupKey)?.key === activeGroupKey;
-      const nextValue = currently === undefined ? !autoDefault : !currently;
-      return { ...prev, [groupKey]: nextValue };
+    const targetGroup = visibleGroups.find((g) => g.key === groupKey);
+    if (!targetGroup || targetGroup.alwaysOpen) return;
+
+    setExpandedGroups(() => {
+      const currentlyExpanded = isGroupExpanded(targetGroup);
+      const nextOpen = !currentlyExpanded;
+
+      const collapsed = {};
+      for (const g of visibleGroups) {
+        if (g.alwaysOpen) continue;
+        collapsed[g.key] = false;
+      }
+
+      if (nextOpen) collapsed[groupKey] = true;
+
+      return collapsed;
     });
   };
 
+  /**
+   * When the active route changes, sync the expanded map so exactly one
+   * collapsible group is open — the one that contains the route.
+   */
+  useEffect(() => {
+    if (!activeGroupKey) return;
+
+    setExpandedGroups((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      if (next[activeGroupKey] !== true) {
+        next[activeGroupKey] = true;
+        changed = true;
+      }
+
+      for (const g of visibleGroups) {
+        if (g.alwaysOpen) continue;
+        if (g.key === activeGroupKey) continue;
+        if (next[g.key] !== false) {
+          next[g.key] = false;
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [activeGroupKey, visibleGroups]);
+
   /* ------------------------------------------------------------------ */
-  /* Flat list of all visible rows for the lane marker                    */
-  /* We render groups in the nav, so we only need the marker's Y offset   */
-  /* to reflect the currently visible active row.                        */
+  /* Sliding marker offset                                               */
   /* ------------------------------------------------------------------ */
 
-  // Recompute the offset whenever the group expansion changes.
   const activeOffset = useMemo(() => {
     let offset = 0;
-    const GROUP_HEADER_H = 40;   // header row height
-    const GROUP_GAP_H = 8;       // bottom gap between groups
+    const GROUP_HEADER_H = 40;
+    const GROUP_GAP_H = 8;
 
     for (const g of visibleGroups) {
       if (g.alwaysOpen) {
@@ -266,11 +319,7 @@ const Layout = ({ children }) => {
         continue;
       }
 
-      // header
       if (g.key === activeGroupKey) {
-        // Will be found inside — compute header height and then check
-        // each child.
-        const headerOffset = offset;
         offset += GROUP_HEADER_H;
         if (isGroupExpanded(g)) {
           for (const it of g.items) {
@@ -278,13 +327,10 @@ const Layout = ({ children }) => {
             offset += ROW;
           }
         } else {
-          // If collapsed, the marker would be on the header itself
-          // (or hidden). We hide it in that case.
           if (g.items.some((it) => it.path === activePath)) {
-            return -1; // signal "hide marker"
+            return -1;
           }
         }
-        void headerOffset;
       } else {
         offset += GROUP_HEADER_H;
         if (isGroupExpanded(g)) {
@@ -302,7 +348,8 @@ const Layout = ({ children }) => {
   /* Rendering                                                           */
   /* ------------------------------------------------------------------ */
 
-  const initials = `${user?.firstname?.[0] || ''}${user?.lastname?.[0] || ''}`.toUpperCase();
+  const initials = `${user?.firstname?.[0] || ''}${user?.lastname?.[0] || ''
+    }`.toUpperCase();
 
   const renderSidebar = (open) => {
     const fade = `transition-opacity duration-200 whitespace-nowrap ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -370,8 +417,8 @@ const Layout = ({ children }) => {
                           title={open ? undefined : item.label}
                           aria-current={isActive ? 'page' : undefined}
                           className={`group flex items-center gap-4 h-11 px-3.5 rounded-lg text-sm font-normal transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F0B429] ${isActive
-                              ? 'bg-white/10 text-white'
-                              : 'text-[#B7C0D8] hover:bg-white/5 hover:text-white'
+                            ? 'bg-white/10 text-white'
+                            : 'text-[#B7C0D8] hover:bg-white/5 hover:text-white'
                             }`}
                         >
                           <Icon
@@ -389,7 +436,6 @@ const Layout = ({ children }) => {
               /* ---- Collapsible group ---- */
               return (
                 <div key={group.key} className="mb-2">
-                  {/* Group header */}
                   <button
                     type="button"
                     onClick={() => {
@@ -405,8 +451,8 @@ const Layout = ({ children }) => {
                     aria-expanded={open ? expanded : undefined}
                     aria-controls={`group-${group.key}`}
                     className={`w-full flex items-center h-10 gap-3 px-3.5 rounded-lg text-[11px] uppercase tracking-[0.14em] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F0B429] ${hasActive
-                        ? 'text-[#F0B429]'
-                        : 'text-[#8D98B3] hover:text-white'
+                      ? 'text-[#F0B429]'
+                      : 'text-[#8D98B3] hover:text-white'
                       }`}
                   >
                     <GroupIcon
@@ -425,12 +471,11 @@ const Layout = ({ children }) => {
                     ) : null}
                   </button>
 
-                  {/* Group items */}
                   <div
                     id={`group-${group.key}`}
                     className={`overflow-hidden transition-[max-height,opacity] duration-200 ease-out ${expanded
-                        ? 'max-h-[400px] opacity-100'
-                        : 'max-h-0 opacity-0'
+                      ? 'max-h-[400px] opacity-100'
+                      : 'max-h-0 opacity-0'
                       }`}
                   >
                     <div className="pt-1">
@@ -442,12 +487,10 @@ const Layout = ({ children }) => {
                             key={item.path}
                             to={item.path}
                             title={open ? undefined : item.label}
-                            aria-current={
-                              isActive ? 'page' : undefined
-                            }
+                            aria-current={isActive ? 'page' : undefined}
                             className={`group flex items-center gap-4 h-11 ml-2 pl-3.5 pr-3 rounded-lg text-sm font-normal transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F0B429] ${isActive
-                                ? 'bg-white/10 text-white'
-                                : 'text-[#B7C0D8] hover:bg-white/5 hover:text-white'
+                              ? 'bg-white/10 text-white'
+                              : 'text-[#B7C0D8] hover:bg-white/5 hover:text-white'
                               }`}
                           >
                             <Icon
