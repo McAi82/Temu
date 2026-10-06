@@ -33,6 +33,7 @@ import {
     Eye,
     Info,
     AlertCircle,
+    Check,
 } from 'lucide-react';
 import {
     Dialog,
@@ -46,33 +47,20 @@ import { useAuth } from '../contexts/AuthContext';
 const ITEMS_PER_PAGE = 20;
 
 /* ------------------------------------------------------------------ */
-/* Image URL helper — mirrors the logic used in Users.jsx              */
+/* Image URL helper — mirrors Users.jsx                                */
 /* ------------------------------------------------------------------ */
 
 const API_BASE_URL =
+    import.meta.env.VITE_API_URL ||
     'https://ivory-gerbil-502781.hostingersite.com';
 
-/**
- * Turn a raw image path into a fully-qualified URL.
- *
- * Handles:
- *   - null / undefined / non-string → null
- *   - full URL already             → unchanged
- *   - "/storage/..."               → prepend API_BASE_URL
- *   - "storage/..."                → prepend API_BASE_URL + "/"
- *   - "faces/..."                  → prepend API_BASE_URL + "/storage/"
- */
 const getImageUrl = (path) => {
     if (!path) return null;
     if (typeof path !== 'string') return null;
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
 
     const cleaned = path.startsWith('/') ? path.slice(1) : path;
-
-    if (cleaned.startsWith('storage/')) {
-        return `${API_BASE_URL}/${cleaned}`;
-    }
-
+    if (cleaned.startsWith('storage/')) return `${API_BASE_URL}/${cleaned}`;
     return `${API_BASE_URL}/storage/${cleaned}`;
 };
 
@@ -134,12 +122,6 @@ const StatusBadge = ({ status }) => {
     );
 };
 
-/**
- * Reusable image renderer. Handles:
- *   - normalising the URL
- *   - hiding on error
- *   - fallback slot when the URL is missing
- */
 const FaceImage = ({
     rawUrl,
     alt = '',
@@ -161,7 +143,7 @@ const FaceImage = ({
 };
 
 /* ------------------------------------------------------------------ */
-/* Compare panel (used inside the takeover modal)                      */
+/* Compare panel (used inside the full modal)                          */
 /* ------------------------------------------------------------------ */
 
 const FaceComparePanel = ({
@@ -200,7 +182,7 @@ const FaceComparePanel = ({
 );
 
 /* ------------------------------------------------------------------ */
-/* Takeover compare modal                                              */
+/* Full compare modal (used by Reject and by the row's Compare button) */
 /* ------------------------------------------------------------------ */
 
 const TakeoverCompareModal = ({
@@ -210,8 +192,18 @@ const TakeoverCompareModal = ({
     onApprove,
     onReject,
     busy,
+    focusNotes = false,
 }) => {
     const [notes, setNotes] = useState('');
+    const notesRef = React.useRef(null);
+
+    React.useEffect(() => {
+        if (open && focusNotes) {
+            // Let the modal finish its enter animation before focusing.
+            setTimeout(() => notesRef.current?.focus(), 220);
+        }
+        if (!open) setNotes('');
+    }, [open, focusNotes]);
 
     if (!open || !request) return null;
 
@@ -236,7 +228,6 @@ const TakeoverCompareModal = ({
                 </DialogHeader>
 
                 <div className="max-h-[calc(90vh-100px)] overflow-y-auto">
-                    {/* Meta strip */}
                     <div className="px-7 py-4 bg-[#F8F9FA] border-b border-dashed border-[#CBD5E1] grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <p className="text-[10px] uppercase tracking-wider text-[#94A3B8]">
@@ -266,7 +257,6 @@ const TakeoverCompareModal = ({
                         </div>
                     </div>
 
-                    {/* Face comparison */}
                     <div className="p-7">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FaceComparePanel
@@ -293,7 +283,6 @@ const TakeoverCompareModal = ({
                             />
                         </div>
 
-                        {/* The other two poses for each side */}
                         <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div>
                                 <p className="text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
@@ -349,12 +338,12 @@ const TakeoverCompareModal = ({
                             </div>
                         </div>
 
-                        {/* Decision notes */}
                         <div className="mt-6">
                             <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
                                 Review notes (required for rejection)
                             </label>
                             <textarea
+                                ref={notesRef}
                                 className="flex min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
                                 placeholder="e.g., Photos match — same person, previous registration is stale."
                                 value={notes}
@@ -364,7 +353,6 @@ const TakeoverCompareModal = ({
                     </div>
                 </div>
 
-                {/* Sticky footer */}
                 <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
                     <div className="text-xs text-[#64748B] flex items-center gap-2">
                         <Info className="w-3.5 h-3.5 text-[#94A3B8]" />
@@ -412,6 +400,128 @@ const TakeoverCompareModal = ({
 };
 
 /* ------------------------------------------------------------------ */
+/* Quick-approve modal (used by the row's inline Approve button)       */
+/* ------------------------------------------------------------------ */
+
+const QuickApproveModal = ({
+    open,
+    onClose,
+    request,
+    onConfirm,
+    busy,
+}) => {
+    if (!open || !request) return null;
+
+    return (
+        <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="font-['Oswald'] text-[#16233F] flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-[#1E8449]" />
+                        Confirm Face Transfer
+                    </DialogTitle>
+                </DialogHeader>
+
+                <p className="text-sm text-[#64748B] -mt-1">
+                    Make sure the two faces below are the same person. If you
+                    approve, the face will be transferred to{' '}
+                    <strong className="text-[#16233F]">
+                        {request.requester?.firstname}{' '}
+                        {request.requester?.lastname}
+                    </strong>
+                    .
+                </p>
+
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div>
+                        <p className="text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                            Current owner
+                        </p>
+                        <div className="aspect-square rounded-lg bg-[#F5F6F8] overflow-hidden border border-[#E3E7EE]">
+                            <FaceImage
+                                rawUrl={request.existing_front_image_url}
+                                alt={
+                                    request.current_owner
+                                        ? `${request.current_owner.firstname} ${request.current_owner.lastname}`
+                                        : ''
+                                }
+                                className="w-full h-full object-cover"
+                                fallback={
+                                    <div className="w-full h-full flex items-center justify-center text-[#CBD5E1]">
+                                        <ScanFace className="w-10 h-10" />
+                                    </div>
+                                }
+                            />
+                        </div>
+                        <p className="text-xs font-medium text-[#1F2937] mt-2 truncate">
+                            {request.current_owner?.firstname}{' '}
+                            {request.current_owner?.lastname}
+                        </p>
+                    </div>
+                    <div>
+                        <p className="text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                            Requester
+                        </p>
+                        <div className="aspect-square rounded-lg bg-[#F5F6F8] overflow-hidden border border-[#E3E7EE]">
+                            <FaceImage
+                                rawUrl={request.requester_front_image_url}
+                                alt={
+                                    request.requester
+                                        ? `${request.requester.firstname} ${request.requester.lastname}`
+                                        : ''
+                                }
+                                className="w-full h-full object-cover"
+                                fallback={
+                                    <div className="w-full h-full flex items-center justify-center text-[#CBD5E1]">
+                                        <ScanFace className="w-10 h-10" />
+                                    </div>
+                                }
+                            />
+                        </div>
+                        <p className="text-xs font-medium text-[#1F2937] mt-2 truncate">
+                            {request.requester?.firstname}{' '}
+                            {request.requester?.lastname}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="rounded-lg bg-[#FBF1DC] border border-[#F0B429]/40 p-3 text-xs text-[#92600A] flex items-start gap-2 mt-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                        Match confidence: <strong>
+                            {(request.similarity * 100).toFixed(2)}%
+                        </strong>. If this is not the same person, use{' '}
+                        <strong>Reject</strong> and add a note instead.
+                    </span>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                    <Button
+                        variant="outline"
+                        onClick={onClose}
+                        disabled={busy}
+                        className="flex-1"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={onConfirm}
+                        disabled={busy}
+                        className="flex-1 bg-[#1E8449] hover:bg-[#186B3B]"
+                    >
+                        {busy ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            'Approve & Transfer'
+                        )}
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+/* ------------------------------------------------------------------ */
 /* Main page                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -429,7 +539,13 @@ const FaceRegistrations = () => {
     const [regStatus, setRegStatus] = useState('active');
     const [regSearch, setRegSearch] = useState('');
 
+    // Full compare modal — used by "Compare" AND by "Reject".
     const [compareRequest, setCompareRequest] = useState(null);
+    const [compareFocusNotes, setCompareFocusNotes] = useState(false);
+
+    // Quick-approve modal — used by the row's inline Approve button.
+    const [quickApproveRequest, setQuickApproveRequest] = useState(null);
+
     const [busy, setBusy] = useState(false);
 
     const [transferTarget, setTransferTarget] = useState(null);
@@ -505,6 +621,7 @@ const FaceRegistrations = () => {
                 'Takeover approved. The requester now owns the face.',
             );
             setCompareRequest(null);
+            setQuickApproveRequest(null);
         },
         onError: (err) => {
             notify.error(
@@ -555,7 +672,21 @@ const FaceRegistrations = () => {
 
     /* --- Handlers --- */
 
-    const handleApprove = async (notes) => {
+    const handleOpenCompare = (request) => {
+        setCompareFocusNotes(false);
+        setCompareRequest(request);
+    };
+
+    const handleOpenReject = (request) => {
+        setCompareFocusNotes(true);
+        setCompareRequest(request);
+    };
+
+    const handleOpenQuickApprove = (request) => {
+        setQuickApproveRequest(request);
+    };
+
+    const handleApproveFromCompare = async (notes) => {
         if (!compareRequest) return;
         setBusy(true);
         try {
@@ -568,13 +699,26 @@ const FaceRegistrations = () => {
         }
     };
 
-    const handleReject = async (notes) => {
+    const handleRejectFromCompare = async (notes) => {
         if (!compareRequest || !notes.trim()) return;
         setBusy(true);
         try {
             await rejectMutation.mutateAsync({
                 id: compareRequest.request_id,
                 notes,
+            });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleQuickApproveConfirm = async () => {
+        if (!quickApproveRequest) return;
+        setBusy(true);
+        try {
+            await approveMutation.mutateAsync({
+                id: quickApproveRequest.request_id,
+                notes: 'Quick-approved from list.',
             });
         } finally {
             setBusy(false);
@@ -697,84 +841,132 @@ const FaceRegistrations = () => {
                         <>
                             <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
                                 <ul className="divide-y divide-[#EEF0F4]">
-                                    {requests.map((r) => (
-                                        <li
-                                            key={r.request_id}
-                                            className="flex flex-wrap items-center gap-4 px-4 py-4 hover:bg-[#F8F9FB] transition-colors border-l-4"
-                                            style={{
-                                                borderLeftColor:
-                                                    r.status === 'pending'
-                                                        ? '#F0B429'
-                                                        : r.status ===
-                                                            'approved'
-                                                            ? '#1E8449'
-                                                            : '#C8202F',
-                                            }}
-                                        >
-                                            {/* Owner thumbnail */}
-                                            <div className="w-14 h-16 rounded-md overflow-hidden bg-[#F5F6F8] flex-shrink-0">
-                                                <FaceImage
-                                                    rawUrl={
-                                                        r.existing_front_image_url
-                                                    }
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="text-sm text-[#64748B]">
-                                                        Current owner
-                                                    </span>
-                                                    <span className="font-medium text-[#1F2937] truncate">
-                                                        {
-                                                            r.current_owner
-                                                                ?.firstname
-                                                        }{' '}
-                                                        {
-                                                            r.current_owner
-                                                                ?.lastname
-                                                        }
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-2 flex-wrap mt-1">
-                                                    <span className="text-[#94A3B8]">
-                                                        →
-                                                    </span>
-                                                    <span className="text-sm text-[#64748B]">
-                                                        Requested by
-                                                    </span>
-                                                    <span className="font-medium text-[#1F2937] truncate">
-                                                        {r.requester?.firstname}{' '}
-                                                        {r.requester?.lastname}
-                                                    </span>
-                                                </div>
-                                                <div className="text-[11px] text-[#94A3B8] font-mono mt-1 truncate">
-                                                    Device {r.device_id} ·
-                                                    Similarity{' '}
-                                                    {(
-                                                        r.similarity * 100
-                                                    ).toFixed(2)}
-                                                    % ·{' '}
-                                                    {new Date(
-                                                        r.created_at,
-                                                    ).toLocaleString()}
-                                                </div>
-                                            </div>
-
-                                            <StatusBadge status={r.status} />
-
-                                            <ActionButton
-                                                icon={Eye}
-                                                variant="info"
-                                                onClick={() =>
-                                                    setCompareRequest(r)
-                                                }
+                                    {requests.map((r) => {
+                                        const isPending =
+                                            r.status === 'pending';
+                                        return (
+                                            <li
+                                                key={r.request_id}
+                                                className="flex flex-wrap items-center gap-4 px-4 py-4 hover:bg-[#F8F9FB] transition-colors border-l-4"
+                                                style={{
+                                                    borderLeftColor:
+                                                        r.status ===
+                                                            'pending'
+                                                            ? '#F0B429'
+                                                            : r.status ===
+                                                                'approved'
+                                                                ? '#1E8449'
+                                                                : '#C8202F',
+                                                }}
                                             >
-                                                Compare
-                                            </ActionButton>
-                                        </li>
-                                    ))}
+                                                {/* Owner thumbnail */}
+                                                <div className="w-14 h-16 rounded-md overflow-hidden bg-[#F5F6F8] flex-shrink-0">
+                                                    <FaceImage
+                                                        rawUrl={
+                                                            r.existing_front_image_url
+                                                        }
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-sm text-[#64748B]">
+                                                            Current owner
+                                                        </span>
+                                                        <span className="font-medium text-[#1F2937] truncate">
+                                                            {
+                                                                r
+                                                                    .current_owner
+                                                                    ?.firstname
+                                                            }{' '}
+                                                            {
+                                                                r
+                                                                    .current_owner
+                                                                    ?.lastname
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 flex-wrap mt-1">
+                                                        <span className="text-[#94A3B8]">
+                                                            →
+                                                        </span>
+                                                        <span className="text-sm text-[#64748B]">
+                                                            Requested by
+                                                        </span>
+                                                        <span className="font-medium text-[#1F2937] truncate">
+                                                            {
+                                                                r.requester
+                                                                    ?.firstname
+                                                            }{' '}
+                                                            {
+                                                                r.requester
+                                                                    ?.lastname
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-[11px] text-[#94A3B8] font-mono mt-1 truncate">
+                                                        Device {r.device_id} ·
+                                                        Similarity{' '}
+                                                        {(
+                                                            r.similarity *
+                                                            100
+                                                        ).toFixed(2)}
+                                                        % ·{' '}
+                                                        {new Date(
+                                                            r.created_at,
+                                                        ).toLocaleString()}
+                                                    </div>
+                                                </div>
+
+                                                <StatusBadge
+                                                    status={r.status}
+                                                />
+
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {isPending ? (
+                                                        <>
+                                                            <ActionButton
+                                                                icon={
+                                                                    Check
+                                                                }
+                                                                variant="primary"
+                                                                onClick={() =>
+                                                                    handleOpenQuickApprove(
+                                                                        r,
+                                                                    )
+                                                                }
+                                                            >
+                                                                Approve
+                                                            </ActionButton>
+                                                            <ActionButton
+                                                                icon={X}
+                                                                variant="danger"
+                                                                onClick={() =>
+                                                                    handleOpenReject(
+                                                                        r,
+                                                                    )
+                                                                }
+                                                            >
+                                                                Reject
+                                                            </ActionButton>
+                                                        </>
+                                                    ) : null}
+                                                    <ActionButton
+                                                        icon={Eye}
+                                                        variant="info"
+                                                        onClick={() =>
+                                                            handleOpenCompare(
+                                                                r,
+                                                            )
+                                                        }
+                                                    >
+                                                        Compare
+                                                    </ActionButton>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
                                 </ul>
                             </div>
 
@@ -850,7 +1042,6 @@ const FaceRegistrations = () => {
                                     >
                                         <div className="h-1.5 bg-[#F0B429]" />
 
-                                        {/* Three-pose thumbnail grid */}
                                         <div className="grid grid-cols-3 gap-1 p-1 bg-[#F5F6F8]">
                                             {[
                                                 r.front_image_url,
@@ -935,13 +1126,26 @@ const FaceRegistrations = () => {
                 </TabsContent>
             </Tabs>
 
-            {/* Compare modal */}
+            {/* Full compare modal — used by Compare and Reject */}
             <TakeoverCompareModal
                 open={!!compareRequest}
-                onClose={() => setCompareRequest(null)}
+                onClose={() => {
+                    setCompareRequest(null);
+                    setCompareFocusNotes(false);
+                }}
                 request={compareRequest}
-                onApprove={handleApprove}
-                onReject={handleReject}
+                onApprove={handleApproveFromCompare}
+                onReject={handleRejectFromCompare}
+                busy={busy}
+                focusNotes={compareFocusNotes}
+            />
+
+            {/* Quick-approve modal — used by the row's Approve button */}
+            <QuickApproveModal
+                open={!!quickApproveRequest}
+                onClose={() => setQuickApproveRequest(null)}
+                request={quickApproveRequest}
+                onConfirm={handleQuickApproveConfirm}
                 busy={busy}
             />
 
