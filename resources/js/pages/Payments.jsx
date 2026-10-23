@@ -94,11 +94,6 @@ const TICKET_STATUS_META = {
         color: '#1E8449',
         chip: 'bg-[#E5F2EA] text-[#1E8449]',
     },
-    contested: {
-        label: 'Contested',
-        color: '#C2541F',
-        chip: 'bg-[#FBEAE2] text-[#C2541F]',
-    },
     dismissed: {
         label: 'Dismissed',
         color: '#C8202F',

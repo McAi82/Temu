@@ -16,8 +16,7 @@ use Illuminate\Support\Facades\Log;
 class ReportController extends Controller
 {
     /* ==================================================================
-     |  UNIFIED REPORT (daily / weekly / monthly / yearly / custom)
-     |  GET /reports?period=...&...
+     |  UNIFIED REPORT
      ================================================================== */
 
     public function report(Request $request)
@@ -38,9 +37,6 @@ class ReportController extends Controller
             'end'   => $end->toDateString(),
         ];
 
-        // -------- Explicit comparison range --------
-        // Frontend now sends compare_start / compare_end alongside compare=1.
-        // If either is missing, we skip the comparison block entirely.
         if (
             $request->boolean('compare')
             && $request->filled('compare_start')
@@ -75,7 +71,7 @@ class ReportController extends Controller
     }
 
     /* ==================================================================
-     |  TODAY (kept for backwards compatibility)
+     |  TODAY
      ================================================================== */
 
     public function todayReport(Request $request)
@@ -90,7 +86,7 @@ class ReportController extends Controller
     }
 
     /* ==================================================================
-     |  WEEKLY / RANGE (kept)
+     |  WEEKLY / RANGE
      ================================================================== */
 
     public function weeklyReport(Request $request)
@@ -168,9 +164,6 @@ class ReportController extends Controller
      |  PERIOD RESOLUTION
      ================================================================== */
 
-    /**
-     * @return array{0: Carbon, 1: Carbon, 2: string}  [start, end, human label]
-     */
     private function resolvePeriod(Request $request): array
     {
         $period = strtolower((string) $request->get('period', 'daily'));
@@ -188,11 +181,9 @@ class ReportController extends Controller
                 }
 
             case 'weekly': {
-                    // Accept either week=YYYY-Www or start_date/end_date.
                     if ($request->filled('week')) {
-                        // "YYYY-Www" or "YYYY-Www"
                         try {
-                            $week = Carbon::parse($request->week); // best effort
+                            $week = Carbon::parse($request->week);
                             $start = $week->copy()->startOfWeek();
                         } catch (\Throwable $e) {
                             throw new \InvalidArgumentException('Invalid week format. Use YYYY-Www.');
@@ -253,9 +244,6 @@ class ReportController extends Controller
         }
     }
 
-    /**
-     * @return array{0: Carbon, 1: Carbon}
-     */
     private function previousPeriod(Carbon $start, Carbon $end): array
     {
         $days = $start->diffInDays($end) + 1;
@@ -290,7 +278,6 @@ class ReportController extends Controller
         $totalFines       = TicketViolation::whereIn('ticket_id', $ticketIds)->sum('fine_amount');
         $paidTickets      = $tickets->where('status', 'paid')->count();
         $issuedTickets    = $tickets->where('status', 'issued')->count();
-        $contestedTickets = $tickets->where('status', 'contested')->count();
         $dismissedTickets = $tickets->where('status', 'dismissed')->count();
         $partialTickets   = $tickets->where('status', 'partial_paid')->count();
 
@@ -298,7 +285,6 @@ class ReportController extends Controller
         $averageDailyTickets = round($totalTickets / $daysInRange, 2);
         $collectionRate = $totalTickets > 0 ? round(($paidTickets / $totalTickets) * 100, 2) : 0;
 
-        // ---- Daily breakdown (for chart) ----
         $dailyBreakdown = [];
         $cursor = $start->copy()->startOfDay();
         while ($cursor->lte($end)) {
@@ -321,7 +307,6 @@ class ReportController extends Controller
             $cursor->addDay();
         }
 
-        // ---- Top violators ----
         $topViolators = Violator::select('violators.firstname', 'violators.lastname', 'violators.license')
             ->withCount(['tickets' => function ($q) use ($startStr, $endStr, $includeArchived) {
                 $q->whereBetween('created_at', [$startStr, $endStr]);
@@ -334,7 +319,6 @@ class ReportController extends Controller
             ->limit(5)
             ->get();
 
-        // ---- Top violations ----
         $topViolations = TicketViolation::select(
             'violation_types.violation_name',
             DB::raw('COUNT(*) as count'),
@@ -347,7 +331,6 @@ class ReportController extends Controller
             ->limit(5)
             ->get();
 
-        // ---- Enforcer performance ----
         $enforcerStats = User::where('role', 'enforcer')
             ->withCount(['tickets' => function ($q) use ($startStr, $endStr, $includeArchived) {
                 $q->whereBetween('created_at', [$startStr, $endStr]);
@@ -375,7 +358,6 @@ class ReportController extends Controller
                 'total_fines'           => (float) $totalFines,
                 'paid_tickets'          => $paidTickets,
                 'issued_tickets'        => $issuedTickets,
-                'contested_tickets'     => $contestedTickets,
                 'dismissed_tickets'     => $dismissedTickets,
                 'partial_tickets'       => $partialTickets,
                 'average_daily_tickets' => $averageDailyTickets,
@@ -398,7 +380,6 @@ class ReportController extends Controller
             'total_fines',
             'paid_tickets',
             'issued_tickets',
-            'contested_tickets',
             'dismissed_tickets',
             'average_daily_tickets',
             'collection_rate',

@@ -111,13 +111,6 @@ const STATUS_META = {
         chip: 'bg-[#E5F2EA] text-[#1E8449]',
         Icon: CheckCircle,
     },
-    contested: {
-        label: 'Contested',
-        color: COLORS.orange,
-        tint: '#FBEAE2',
-        chip: 'bg-[#FBEAE2] text-[#C2541F]',
-        Icon: AlertCircle,
-    },
     dismissed: {
         label: 'Dismissed',
         color: COLORS.red,
@@ -822,7 +815,7 @@ const PrintNarrative = ({
 
     const findings = [
         `A total of ${total} violation ticket(s) were issued during the period, an average of ${chartStats.avg.toFixed(1)} per day over ${rangeDays} day(s).`,
-        `${n(summary.paid_tickets)} ticket(s) (${pct(summary.paid_tickets)}%) have been paid, ${n(summary.issued_tickets)} remain issued and awaiting settlement, ${n(summary.contested_tickets)} are contested and ${n(summary.dismissed_tickets)} were dismissed.`,
+        `${n(summary.paid_tickets)} ticket(s) (${pct(summary.paid_tickets)}%) have been paid, ${n(summary.issued_tickets)} remain issued and awaiting settlement, and ${n(summary.dismissed_tickets)} were dismissed.`,
         `Fines issued amounted to ${formatCurrency(n(summary.total_fines))}. The collection rate reported by the system for the period is ${n(summary.collection_rate)}%.`,
     ];
     if (payments)
@@ -1288,7 +1281,6 @@ const CompareTable = ({ primary, compare, primaryRange, compareRange }) => {
         { key: 'paid_tickets', label: 'Paid tickets', format: (v) => String(v) },
         { key: 'issued_tickets', label: 'Issued (unpaid)', format: (v) => String(v) },
         { key: 'partial_tickets', label: 'Partial payments', format: (v) => String(v) },
-        { key: 'contested_tickets', label: 'Contested tickets', format: (v) => String(v) },
         { key: 'dismissed_tickets', label: 'Dismissed tickets', format: (v) => String(v) },
         { key: 'average_daily_tickets', label: 'Avg tickets / day', format: (v) => toNumber(v).toFixed(2) },
         { key: 'collection_rate', label: 'Collection rate', format: (v) => `${toNumber(v).toFixed(1)}%` },
@@ -2194,16 +2186,6 @@ const Reports = () => {
             animated: { integer: true },
         },
         {
-            key: 'contested_tickets',
-            title: 'Contested',
-            value: summary.contested_tickets || 0,
-            icon: AlertTriangleIcon,
-            color: '#C2541F',
-            tint: '#FBEAE2',
-            textColor: '#C2541F',
-            animated: { integer: true },
-        },
-        {
             key: 'dismissed_tickets',
             title: 'Dismissed',
             value: summary.dismissed_tickets || 0,
@@ -2513,7 +2495,7 @@ const Reports = () => {
                                 <ReportSkeleton />
                             ) : data ? (
                                 <>
-                                    <section className="bg-white rounded-xl border border-[#E3E7EE] grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 overflow-hidden print-card">
+                                    <section className="bg-white rounded-xl border border-[#E3E7EE] grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 overflow-hidden print-card">
                                         {statCards.map((s) => (
                                             <StatTile
                                                 key={s.key}

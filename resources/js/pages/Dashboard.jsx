@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { getTicketStatistics, getTickets } from "../services/api";
 import {
-  Ticket, CheckCircle, Clock, AlertTriangle, XCircle, TrendingUp, RefreshCw,
+  Ticket, CheckCircle, Clock, XCircle, TrendingUp, RefreshCw,
   Users, Car, Calendar, PhilippinePeso,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -13,11 +13,9 @@ import {
 const STATUS = {
   paid: { label: "Paid", color: "#1E8449", soft: "#E5F2EA", text: "#1E8449", icon: CheckCircle },
   issued: { label: "Issued", color: "#F0B429", soft: "#FBF1DC", text: "#92600A", icon: Clock },
-  contested: { label: "Contested", color: "#C2541F", soft: "#FBEAE2", text: "#C2541F", icon: AlertTriangle },
   dismissed: { label: "Dismissed", color: "#C8202F", soft: "#FBE7E9", text: "#C8202F", icon: XCircle },
 };
 
-/* numbers ease up to their value when data loads */
 const useCountUp = (target, ms = 900) => {
   const [v, setV] = useState(0);
   useEffect(() => {
@@ -41,24 +39,39 @@ const Count = ({ value, prefix = "", suffix = "" }) => {
 };
 
 const Dashboard = () => {
-  const [stats, setStats] = useState({ total_tickets: 0, paid_tickets: 0, issued_tickets: 0, contested_tickets: 0, dismissed_tickets: 0, total_fines: 0, collected_fines: 0, collection_rate: 0 });
+  const [stats, setStats] = useState({
+    total_tickets: 0,
+    paid_tickets: 0,
+    issued_tickets: 0,
+    dismissed_tickets: 0,
+    total_fines: 0,
+    collected_fines: 0,
+    collection_rate: 0
+  });
   const [recentTickets, setRecentTickets] = useState([]);
   const [ticketsByMonth, setTicketsByMonth] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState(null); // click a status card to focus it
-  const [range, setRange] = useState(0);      // trend window in months, 0 = all
+  const [filter, setFilter] = useState(null);
+  const [range, setRange] = useState(0);
 
-  const fetchData = async () => {
-    setLoading(true); setError(null);
+  const fetchData = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
     try {
       const statsRes = await getTicketStatistics();
       if (statsRes && statsRes.data) {
         const d = statsRes.data;
         setStats({
-          total_tickets: d.total_tickets || 0, paid_tickets: d.paid_tickets || 0, issued_tickets: d.issued_tickets || 0,
-          contested_tickets: d.contested_tickets || 0, dismissed_tickets: d.dismissed_tickets || 0,
-          total_fines: d.total_fines || 0, collected_fines: d.collected_fines || 0, collection_rate: d.collection_rate || 0,
+          total_tickets: d.total_tickets || 0,
+          paid_tickets: d.paid_tickets || 0,
+          issued_tickets: d.issued_tickets || 0,
+          dismissed_tickets: d.dismissed_tickets || 0,
+          total_fines: d.total_fines || 0,
+          collected_fines: d.collected_fines || 0,
+          collection_rate: d.collection_rate || 0,
         });
         setTicketsByMonth(d.tickets_by_month || []);
       }
@@ -69,7 +82,11 @@ const Dashboard = () => {
       setRecentTickets(Array.isArray(list) ? list.slice(0, 5) : []);
     } catch (e) {
       setError("Failed to load dashboard data. Please make sure the API is running.");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+      // Hold refresh spinner for a visible minimum.
+      setTimeout(() => setRefreshing(false), 600);
+    }
   };
   useEffect(() => { fetchData(); }, []);
 
@@ -80,7 +97,11 @@ const Dashboard = () => {
     return t.total_fine ? parseFloat(t.total_fine) || 0 : 0;
   };
 
-  const counts = { paid: stats.paid_tickets, issued: stats.issued_tickets, contested: stats.contested_tickets, dismissed: stats.dismissed_tickets };
+  const counts = {
+    paid: stats.paid_tickets,
+    issued: stats.issued_tickets,
+    dismissed: stats.dismissed_tickets,
+  };
   const pieData = Object.entries(STATUS).map(([k, s]) => ({ key: k, name: s.label, value: counts[k], color: s.color })).filter((d) => d.value > 0);
   const chartData = useMemo(() => (range ? ticketsByMonth.slice(-range) : ticketsByMonth), [ticketsByMonth, range]);
   const shownTickets = filter ? recentTickets.filter((t) => t.status === filter) : recentTickets;
@@ -90,7 +111,6 @@ const Dashboard = () => {
     { key: null, title: "Total Tickets", value: stats.total_tickets, icon: Ticket, color: "#16233F", soft: "#E9ECF2", text: "#16233F" },
     { key: "paid", title: "Paid Tickets", value: stats.paid_tickets, icon: CheckCircle, ...STATUS.paid },
     { key: "issued", title: "Issued/Pending", value: stats.issued_tickets, icon: Clock, ...STATUS.issued },
-    { key: "contested", title: "Contested", value: stats.contested_tickets, icon: AlertTriangle, ...STATUS.contested },
     { key: "dismissed", title: "Dismissed", value: stats.dismissed_tickets, icon: XCircle, ...STATUS.dismissed },
     { key: undefined, title: "Collection Rate", value: stats.collection_rate, suffix: "%", icon: TrendingUp, color: "#3B5170", soft: "#EEF1F5", text: "#3B5170" },
   ];
@@ -112,7 +132,7 @@ const Dashboard = () => {
   if (error) return (
     <div className="flex flex-col items-center justify-center h-96">
       <div className="text-[#C8202F] mb-4 text-lg">⚠️ {error}</div>
-      <Button onClick={fetchData} variant="outline"><RefreshCw className="w-4 h-4 mr-2" />Retry</Button>
+      <Button onClick={() => fetchData()} variant="outline"><RefreshCw className="w-4 h-4 mr-2" />Retry</Button>
     </div>
   );
 
@@ -126,7 +146,6 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6 font-['Inter']">
-      {/* Banner header */}
       <header className="relative overflow-hidden rounded-2xl bg-[#16233F] text-white px-6 py-7 flex flex-wrap items-center justify-between gap-4">
         <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: "repeating-linear-gradient(115deg, transparent 0 40px, #F0B429 40px 42px)" }} />
         <div className="relative">
@@ -135,15 +154,21 @@ const Dashboard = () => {
         </div>
         <div className="relative flex items-center gap-4">
           <div className="hidden sm:flex gap-1.5">{["#C8202F", "#F0B429", "#1E8449"].map((c) => <span key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />)}</div>
-          <Button onClick={fetchData} variant="outline" size="sm" className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white">
-            <RefreshCw className="w-4 h-4 mr-2" />Refresh
+          <Button
+            onClick={() => fetchData(true)}
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-70"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing…" : "Refresh"}
           </Button>
         </div>
       </header>
 
-      {/* Ticket-stub strip: click a status to focus Recent Tickets */}
-      <section className="bg-white rounded-xl border border-[#E3E7EE] grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 overflow-hidden">
-        {statCards.map((s, i) => {
+      <section className="bg-white rounded-xl border border-[#E3E7EE] grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 overflow-hidden">
+        {statCards.map((s) => {
           const clickable = s.key !== undefined;
           const active = clickable && s.key !== null && filter === s.key;
           const dim = filter && clickable && s.key !== null && filter !== s.key;
@@ -161,7 +186,6 @@ const Dashboard = () => {
         })}
       </section>
 
-      {/* Trend (wide) + status donut (narrow) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <section className="lg:col-span-8 bg-white border-t-4 border-[#16233F] rounded-b-xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -204,7 +228,6 @@ const Dashboard = () => {
         </section>
       </div>
 
-      {/* Finance (navy, road gauge) + ticket timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <section className="lg:col-span-5 bg-[#16233F] text-white rounded-xl p-6">
           <div className="mb-6"><h2 className="text-lg font-['Oswald'] font-medium flex items-center gap-2"><PhilippinePeso className="w-5 h-5 text-[#F0B429]" />Financial Summary</h2></div>
@@ -269,7 +292,6 @@ const Dashboard = () => {
         </section>
       </div>
 
-      {/* Quick stats band */}
       <section className="bg-[#16233F] rounded-xl grid grid-cols-2 md:grid-cols-4 md:divide-x divide-white/10 text-white">
         {quick.map((q) => (
           <div key={q.label} className="p-5 flex items-center gap-3">

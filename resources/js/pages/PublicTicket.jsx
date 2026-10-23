@@ -105,7 +105,6 @@ const PublicTicket = () => {
     const styles = {
       paid: "bg-[#E5F2EA] text-[#1E8449] border-[#1E8449]/20",
       issued: "bg-[#FBF1DC] text-[#92600A] border-[#F0B429]/20",
-      contested: "bg-[#FBEAE2] text-[#C2541F] border-[#C2541F]/20",
       dismissed: "bg-[#FBE7E9] text-[#C8202F] border-[#C8202F]/20",
       partial_paid: "bg-[#EEF1F5] text-[#3B5170] border-[#3B5170]/20",
     };
@@ -118,8 +117,6 @@ const PublicTicket = () => {
         return <CheckCircle className="w-5 h-5 text-[#1E8449]" />;
       case "issued":
         return <Clock className="w-5 h-5 text-[#92600A]" />;
-      case "contested":
-        return <AlertCircle className="w-5 h-5 text-[#C2541F]" />;
       case "dismissed":
         return <XCircle className="w-5 h-5 text-[#C8202F]" />;
       default:
@@ -131,7 +128,6 @@ const PublicTicket = () => {
     const labels = {
       paid: "PAID",
       issued: "ISSUED",
-      contested: "CONTESTED",
       dismissed: "DISMISSED",
       partial_paid: "PARTIAL PAID",
     };

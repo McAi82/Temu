@@ -520,7 +520,7 @@ class DatabaseSeeder extends Seeder
             'Zone 5, National Highway, Barangay Sta. Cruz',
         ];
 
-        $statuses = ['issued', 'issued', 'issued', 'paid', 'paid', 'partial_paid', 'contested', 'dismissed'];
+        $statuses = ['issued', 'issued', 'issued', 'paid', 'paid', 'partial_paid', 'dismissed'];
 
         $tickets = [];
         $ticketViolations = [];
@@ -624,7 +624,7 @@ class DatabaseSeeder extends Seeder
     private function seedPayments(): void
     {
         // Only seed payments for tickets whose status is 'paid' or
-        // 'partial_paid'. The rest are unpaid / contested / dismissed.
+        // 'partial_paid'. The rest are unpaid/ dismissed.
         $tickets = DB::table('tickets')
             ->whereIn('status', ['paid', 'partial_paid'])
             ->orderBy('ticket_id')
@@ -902,49 +902,51 @@ class DatabaseSeeder extends Seeder
      ================================================================== */
 
     private function seedAppeals(): void
-    {
-        $contestedTickets = DB::table('tickets')
-            ->where('status', 'contested')
-            ->get(['ticket_id', 'violator_id', 'created_at']);
+{
+    $appealedTickets = DB::table('tickets')
+        ->whereIn('status', ['issued'])
+        ->inRandomOrder()
+        ->limit(5)
+        ->get(['ticket_id', 'violator_id', 'created_at']);
 
-        if ($contestedTickets->isEmpty()) {
-            $this->command->info('  ✓ Appeals: 0');
-            return;
-        }
-
-        $reviewers = DB::table('users')
-            ->whereIn('role', ['admin', 'staff'])
-            ->pluck('user_id')
-            ->toArray();
-
-        $statuses = ['pending', 'under_review', 'approved', 'rejected'];
-        $now = now();
-        $rows = [];
-
-        foreach ($contestedTickets as $i => $ticket) {
-            $status = $statuses[$i % count($statuses)];
-            $createdAt = Carbon::parse($ticket->created_at)->addDays(1);
-            $decided = $status === 'approved' || $status === 'rejected';
-
-            $rows[] = [
-                'ticket_id' => $ticket->ticket_id,
-                'violator_id' => $ticket->violator_id,
-                'appeal_reason' => 'I believe this ticket was issued in error. Requesting adjudication.',
-                'supporting_documents' => null,
-                'status' => $status,
-                'reviewed_by' => $decided ? $reviewers[$i % count($reviewers)] : null,
-                'review_notes' => $decided
-                    ? 'Reviewed by the traffic adjudication board.'
-                    : null,
-                'decision_date' => $decided ? $createdAt->copy()->addDays(5) : null,
-                'created_at' => $createdAt,
-                'updated_at' => $decided ? $createdAt->copy()->addDays(5) : $createdAt,
-            ];
-        }
-
-        DB::table('appeals')->insert($rows);
-        $this->command->info('  ✓ Appeals: ' . count($rows));
+    if ($appealedTickets->isEmpty()) {
+        $this->command->info('  ✓ Appeals: 0');
+        return;
     }
+
+    $reviewers = DB::table('users')
+        ->whereIn('role', ['admin', 'staff'])
+        ->pluck('user_id')
+        ->toArray();
+
+    $statuses = ['pending', 'under_review', 'approved', 'rejected'];
+    $now = now();
+    $rows = [];
+
+    foreach ($appealedTickets as $i => $ticket) {
+        $status = $statuses[$i % count($statuses)];
+        $createdAt = Carbon::parse($ticket->created_at)->addDays(1);
+        $decided = $status === 'approved' || $status === 'rejected';
+
+        $rows[] = [
+            'ticket_id' => $ticket->ticket_id,
+            'violator_id' => $ticket->violator_id,
+            'appeal_reason' => 'I believe this ticket was issued in error. Requesting adjudication.',
+            'supporting_documents' => null,
+            'status' => $status,
+            'reviewed_by' => $decided ? $reviewers[$i % count($reviewers)] : null,
+            'review_notes' => $decided
+                ? 'Reviewed by the traffic adjudication board.'
+                : null,
+            'decision_date' => $decided ? $createdAt->copy()->addDays(5) : null,
+            'created_at' => $createdAt,
+            'updated_at' => $decided ? $createdAt->copy()->addDays(5) : $createdAt,
+        ];
+    }
+
+    DB::table('appeals')->insert($rows);
+    $this->command->info('  ✓ Appeals: ' . count($rows));
+}
 
     /* ==================================================================
      |  NOTIFICATIONS

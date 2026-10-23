@@ -58,14 +58,6 @@ const STATUS_META = {
     chip: 'bg-[#E5F2EA] text-[#1E8449]',
     icon: CheckCircle,
   },
-  contested: {
-    label: 'Contested',
-    color: '#C2541F',
-    soft: '#FBEAE2',
-    text: '#C2541F',
-    chip: 'bg-[#FBEAE2] text-[#C2541F]',
-    icon: AlertCircle,
-  },
   dismissed: {
     label: 'Dismissed',
     color: '#C8202F',
@@ -222,7 +214,6 @@ const Spec = ({ label, children, mono, danger }) => (
   </div>
 );
 
-/* Shared grid: flex-wrap on mobile, 7-column grid on md+ */
 const ROW_CLASS =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
   'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,14rem)] md:gap-4';
@@ -232,6 +223,7 @@ const Tickets = () => {
   const notify = useAlert();
   const [view, setView] = useState('list');
   const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState([]);
@@ -247,7 +239,6 @@ const Tickets = () => {
     setPage(1);
   }, [debouncedSearch, statusFilter, dateFrom, dateTo, enforcerId, violationId]);
 
-  /* ------------- Lookups for filter dropdowns ------------- */
   const { data: enforcersResponse } = useQuery({
     queryKey: ['users', 'enforcer'],
     queryFn: () => getUsers(1, 200, { role: 'enforcer' }),
@@ -262,7 +253,6 @@ const Tickets = () => {
   });
   const violations = getDataArray(violationsResponse);
 
-  /* ------------- Tickets query ------------- */
   const {
     data: ticketsResponse,
     isLoading,
@@ -298,7 +288,6 @@ const Tickets = () => {
   const tickets = getDataArray(ticketsResponse);
   const meta = getMeta(ticketsResponse);
 
-  /* ------------- Mutations ------------- */
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }) => updateTicketStatus(id, status),
     onSuccess: () => {
@@ -340,6 +329,18 @@ const Tickets = () => {
       { confirmText: 'Archive', destructive: true },
     );
     if (ok) archiveMutation.mutate(id);
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refetch({ cancelRefetch: true });
+    } catch (e) {
+      console.warn('Refresh failed:', e);
+    } finally {
+      setTimeout(() => setRefreshing(false), 600);
+    }
   };
 
   const toggleStatus = (value) => {
@@ -440,48 +441,21 @@ const Tickets = () => {
   const rowActions = (ticket) => (
     <div className="flex flex-wrap gap-2">
       {ticket.status === 'issued' && (
-        <>
-          <ActionButton
-            icon={CheckCircle}
-            variant="primary"
-            onClick={() =>
-              handleStatusUpdate(ticket.ticket_id, 'paid')
-            }
-          >
-            Mark Paid
-          </ActionButton>
-          <ActionButton
-            icon={AlertCircle}
-            variant="warning"
-            onClick={() =>
-              handleStatusUpdate(ticket.ticket_id, 'contested')
-            }
-          >
-            Contest
-          </ActionButton>
-        </>
-      )}
-      {(ticket.status === 'paid' ||
-        ticket.status === 'partial_paid') && (
-          <ActionButton
-            icon={XCircle}
-            variant="danger"
-            onClick={() =>
-              handleStatusUpdate(ticket.ticket_id, 'dismissed')
-            }
-          >
-            Dismiss
-          </ActionButton>
-        )}
-      {ticket.status === 'contested' && (
         <ActionButton
-          icon={AlertCircle}
-          variant="warning"
-          onClick={() =>
-            handleStatusUpdate(ticket.ticket_id, 'issued')
-          }
+          icon={CheckCircle}
+          variant="primary"
+          onClick={() => handleStatusUpdate(ticket.ticket_id, 'paid')}
         >
-          Re-open
+          Mark Paid
+        </ActionButton>
+      )}
+      {(ticket.status === 'paid' || ticket.status === 'partial_paid') && (
+        <ActionButton
+          icon={XCircle}
+          variant="danger"
+          onClick={() => handleStatusUpdate(ticket.ticket_id, 'dismissed')}
+        >
+          Dismiss
         </ActionButton>
       )}
       <ActionButton
@@ -606,7 +580,7 @@ const Tickets = () => {
           Error loading tickets: {error.message}
         </p>
         <Button
-          onClick={() => refetch()}
+          onClick={handleRefresh}
           variant="outline"
           className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
         >
@@ -618,7 +592,6 @@ const Tickets = () => {
 
   return (
     <div className="space-y-6 font-['Inter']">
-      {/* Navy banner header */}
       <header className="relative overflow-hidden rounded-2xl bg-[#16233F] text-white px-6 py-7 flex flex-wrap items-center justify-between gap-4">
         <div
           className="absolute inset-0 opacity-[0.07] pointer-events-none"
@@ -636,14 +609,17 @@ const Tickets = () => {
           </p>
         </div>
         <Button
-  onClick={() => refetch()}
-  variant="outline"
-  disabled={isFetching}
-  className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
->
-  <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-  Refresh
-</Button>
+          onClick={handleRefresh}
+          variant="outline"
+          disabled={refreshing}
+          className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-70"
+        >
+          <RefreshCw
+            className={`w-4 h-4 mr-2 transition-transform ${refreshing ? 'animate-spin' : ''
+              }`}
+          />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </Button>
       </header>
 
       <div
@@ -653,7 +629,6 @@ const Tickets = () => {
         {showFilters && panel}
 
         <div className="space-y-4 min-w-0">
-          {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-3">
             <Button
               variant="outline"
@@ -691,7 +666,6 @@ const Tickets = () => {
             <ViewToggle view={view} setView={setView} />
           </div>
 
-          {/* Active filter chips */}
           {chips.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {chips.map(([label, clear]) => (
@@ -700,7 +674,6 @@ const Tickets = () => {
             </div>
           )}
 
-          {/* Section heading */}
           <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
             <TicketIcon className="w-5 h-5 text-[#F0B429]" />
             Tickets List
@@ -709,7 +682,6 @@ const Tickets = () => {
             </span>
           </h2>
 
-          {/* Body */}
           {isLoading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
@@ -809,7 +781,6 @@ const Tickets = () => {
             </div>
           ) : (
             <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
-              {/* Header row uses the exact same grid as the body rows */}
               <div
                 className={`hidden ${ROW_CLASS} bg-[#16233F] text-white text-xs font-semibold`}
               >

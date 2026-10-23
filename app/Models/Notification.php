@@ -50,7 +50,6 @@ class Notification extends Model
 
     public const TYPE_TICKET_CREATED         = 'ticket_created';
     public const TYPE_TICKET_PAID            = 'ticket_paid';
-    public const TYPE_TICKET_CONTESTED       = 'ticket_contested';
     public const TYPE_TICKET_DISMISSED       = 'ticket_dismissed';
     public const TYPE_TICKET_PARTIAL_PAID    = 'ticket_partial_paid';
     public const TYPE_TICKET_OVERDUE         = 'ticket_overdue';

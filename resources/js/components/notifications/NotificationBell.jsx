@@ -42,7 +42,6 @@ import { useAlert } from "../ui/AlertProvider";
 const ICONS = {
     ticket_created: Ticket,
     ticket_paid: Check,
-    ticket_contested: AlertCircle,
     ticket_dismissed: XCircle,
     ticket_partial_paid: Wallet,
     ticket_overdue: Clock,
@@ -102,7 +101,6 @@ const ICONS = {
 const TINTS = {
     ticket_created: { bg: "#E9ECF2", fg: "#16233F" },
     ticket_paid: { bg: "#E5F2EA", fg: "#1E8449" },
-    ticket_contested: { bg: "#FBEAE2", fg: "#C2541F" },
     ticket_dismissed: { bg: "#FBE7E9", fg: "#C8202F" },
     ticket_partial_paid: { bg: "#EEF1F5", fg: "#3B5170" },
     ticket_overdue: { bg: "#FBE7E9", fg: "#C8202F" },

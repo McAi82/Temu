@@ -19,7 +19,7 @@ return new class extends Migration {
             $table->decimal('longitude', 11, 8)->nullable()->comment('GPS longitude');
             $table->datetime('violation_datetime');
             $table->text('remarks')->nullable();
-            $table->enum('status', ['issued', 'paid', 'contested', 'dismissed', 'partial_paid'])->default('issued');
+            $table->enum('status', ['issued', 'paid', 'dismissed', 'partial_paid'])->default('issued');
             $table->string('qr_code', 255)->nullable();
             $table->string('pdf_path', 255)->nullable();
             $table->timestamps();

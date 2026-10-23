@@ -35,7 +35,6 @@ class TicketController extends Controller
             'violations.violationType',
         ]);
 
-        // ---- Archive visibility ----
         $visibility = $request->get('visibility', 'active');
         if ($visibility === 'archived') {
             $query->archived();
@@ -45,7 +44,6 @@ class TicketController extends Controller
             $query->active();
         }
 
-        // ---- Status (comma-separated list or single) ----
         if ($request->filled('status')) {
             $statuses = is_array($request->status)
                 ? $request->status
@@ -55,7 +53,6 @@ class TicketController extends Controller
             }
         }
 
-        // ---- Date range ----
         if ($request->filled('date_from')) {
             $query->whereDate('violation_datetime', '>=', $request->date_from);
         }
@@ -63,29 +60,24 @@ class TicketController extends Controller
             $query->whereDate('violation_datetime', '<=', $request->date_to);
         }
 
-        // ---- Enforcer ----
         if ($request->filled('enforcer_id')) {
             $query->where('enforcer_id', $request->enforcer_id);
         }
 
-        // ---- Violator ----
         if ($request->filled('violator_id')) {
             $query->where('violator_id', $request->violator_id);
         }
 
-        // ---- Vehicle ----
         if ($request->filled('vehicle_id')) {
             $query->where('vehicle_id', $request->vehicle_id);
         }
 
-        // ---- Violation type ----
         if ($request->filled('violation_id')) {
             $query->whereHas('violations', function ($q) use ($request) {
                 $q->where('violation_id', $request->violation_id);
             });
         }
 
-        // ---- Fine range ----
         if ($request->filled('min_fine') || $request->filled('max_fine')) {
             $query->whereHas('violations', function ($q) use ($request) {
                 if ($request->filled('min_fine')) {
@@ -97,7 +89,6 @@ class TicketController extends Controller
             });
         }
 
-        // ---- Search ----
         if ($request->filled('search')) {
             $s = $request->search;
             $query->where(function ($q) use ($s) {
@@ -114,7 +105,6 @@ class TicketController extends Controller
             });
         }
 
-        // ---- Sort ----
         $sortable = ['created_at', 'violation_datetime', 'ticket_number', 'status'];
         $sortBy   = in_array($request->get('sort_by'), $sortable, true)
             ? $request->get('sort_by')
@@ -441,7 +431,7 @@ class TicketController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'status' => 'required|in:issued,paid,contested,dismissed,partial_paid'
+            'status' => 'required|in:issued,paid,partial_paid,dismissed',
         ]);
 
         if ($validator->fails()) {
@@ -465,24 +455,6 @@ class TicketController extends Controller
                             'Ticket Paid',
                             "Ticket {$ticket->ticket_number} has been paid",
                             Notification::TYPE_TICKET_PAID,
-                            'ticket',
-                            $ticket->ticket_id
-                        );
-                        break;
-
-                    case 'contested':
-                        NotificationService::notifyUser(
-                            $enforcerId,
-                            'Ticket Contested',
-                            "Ticket {$ticket->ticket_number} has been contested",
-                            Notification::TYPE_TICKET_CONTESTED,
-                            'ticket',
-                            $ticket->ticket_id
-                        );
-                        NotificationService::notifyAdminStaff(
-                            'Ticket Needs Adjudication',
-                            "Ticket {$ticket->ticket_number} was contested and needs review",
-                            Notification::TYPE_TICKET_CONTESTED,
                             'ticket',
                             $ticket->ticket_id
                         );
@@ -522,7 +494,7 @@ class TicketController extends Controller
     }
 
     /* ==================================================================
-     |  ARCHIVE (replaces destroy)
+     |  ARCHIVE
      ================================================================== */
 
     public function destroy(Request $request, $id)
@@ -645,10 +617,9 @@ class TicketController extends Controller
         try {
             $base = Ticket::query()->active();
 
-            $totalTickets = (clone $base)->count();
-            $paidTickets = (clone $base)->where('status', 'paid')->count();
-            $issuedTickets = (clone $base)->where('status', 'issued')->count();
-            $contestedTickets = (clone $base)->where('status', 'contested')->count();
+            $totalTickets     = (clone $base)->count();
+            $paidTickets      = (clone $base)->where('status', 'paid')->count();
+            $issuedTickets    = (clone $base)->where('status', 'issued')->count();
             $dismissedTickets = (clone $base)->where('status', 'dismissed')->count();
 
             $totalFines = DB::table('ticket_violations')
@@ -680,28 +651,26 @@ class TicketController extends Controller
             $monthlyData = array_reverse($monthlyData);
 
             return response()->json([
-                'total_tickets' => (int) $totalTickets,
-                'paid_tickets' => (int) $paidTickets,
-                'issued_tickets' => (int) $issuedTickets,
-                'contested_tickets' => (int) $contestedTickets,
+                'total_tickets'     => (int) $totalTickets,
+                'paid_tickets'      => (int) $paidTickets,
+                'issued_tickets'    => (int) $issuedTickets,
                 'dismissed_tickets' => (int) $dismissedTickets,
-                'total_fines' => (float) $totalFines,
-                'collected_fines' => (float) $collectedFines,
-                'collection_rate' => (float) $collectionRate,
-                'tickets_by_month' => $monthlyData,
+                'total_fines'       => (float) $totalFines,
+                'collected_fines'   => (float) $collectedFines,
+                'collection_rate'   => (float) $collectionRate,
+                'tickets_by_month'  => $monthlyData,
             ]);
         } catch (\Exception $e) {
             Log::error('Statistics error: ' . $e->getMessage());
             return response()->json([
-                'total_tickets' => Ticket::active()->count(),
-                'paid_tickets' => Ticket::active()->where('status', 'paid')->count(),
-                'issued_tickets' => Ticket::active()->where('status', 'issued')->count(),
-                'contested_tickets' => Ticket::active()->where('status', 'contested')->count(),
+                'total_tickets'     => Ticket::active()->count(),
+                'paid_tickets'      => Ticket::active()->where('status', 'paid')->count(),
+                'issued_tickets'    => Ticket::active()->where('status', 'issued')->count(),
                 'dismissed_tickets' => Ticket::active()->where('status', 'dismissed')->count(),
-                'total_fines' => 0,
-                'collected_fines' => 0,
-                'collection_rate' => 0,
-                'tickets_by_month' => [],
+                'total_fines'       => 0,
+                'collected_fines'   => 0,
+                'collection_rate'   => 0,
+                'tickets_by_month'  => [],
             ]);
         }
     }
