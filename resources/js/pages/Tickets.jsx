@@ -28,6 +28,8 @@ import {
   LayoutGrid,
   List as ListIcon,
   Ticket as TicketIcon,
+  Clock,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
 
@@ -40,14 +42,6 @@ const STATUS_META = {
     soft: '#FBF1DC',
     text: '#92600A',
     chip: 'bg-[#FBF1DC] text-[#92600A]',
-    icon: AlertCircle,
-  },
-  partial_paid: {
-    label: 'Partial Paid',
-    color: '#3B5170',
-    soft: '#EEF1F5',
-    text: '#3B5170',
-    chip: 'bg-[#EEF1F5] text-[#3B5170]',
     icon: AlertCircle,
   },
   paid: {
@@ -214,9 +208,72 @@ const Spec = ({ label, children, mono, danger }) => (
   </div>
 );
 
+/* ============================================================
+ *  Due / Overdue badge — used in both list and card views
+ * ============================================================ */
+const DueBadge = ({ ticket, compact = false }) => {
+  if (!ticket?.payment_due_at) {
+    return <span className="text-sm text-[#94A3B8]">—</span>;
+  }
+
+  const dueDate = new Date(ticket.payment_due_at);
+  const dueLabel = dueDate.toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  // Paid or dismissed tickets don't need urgency styling.
+  if (ticket.status === 'paid' || ticket.status === 'dismissed') {
+    return <span className="text-sm text-[#64748B]">{dueLabel}</span>;
+  }
+
+  const days = ticket.days_until_due ?? 0;
+  const isOverdue = ticket.is_overdue === true || days < 0;
+  const isDueSoon = !isOverdue && days <= 1;
+
+  const base = `inline-flex items-center gap-1 rounded-full font-semibold whitespace-nowrap ${
+    compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs'
+  }`;
+
+  if (isOverdue) {
+    const overdueDays = Math.abs(days);
+    return (
+      <span
+        className={`${base} bg-[#FBE7E9] text-[#C8202F]`}
+        title={`Overdue by ${overdueDays} day${overdueDays === 1 ? '' : 's'} (due ${dueLabel})`}
+      >
+        <AlertTriangle className="w-3 h-3" />
+        Overdue · {dueLabel}
+      </span>
+    );
+  }
+
+  if (isDueSoon) {
+    return (
+      <span
+        className={`${base} bg-[#FBEAE2] text-[#C2541F]`}
+        title={`Due in ${days} day${days === 1 ? '' : 's'} (${dueLabel})`}
+      >
+        <Clock className="w-3 h-3" />
+        Due in {days}d · {dueLabel}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`${base} bg-[#F1F5F9] text-[#475569]`}
+      title={`Due ${dueLabel}`}
+    >
+      Due {dueLabel}
+    </span>
+  );
+};
+
 const ROW_CLASS =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-  'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,14rem)] md:gap-4';
+  'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,14rem)] md:gap-4';
 
 const Tickets = () => {
   const queryClient = useQueryClient();
@@ -232,12 +289,13 @@ const Tickets = () => {
   const [enforcerId, setEnforcerId] = useState('');
   const [violationId, setViolationId] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, dateFrom, dateTo, enforcerId, violationId]);
+  }, [debouncedSearch, statusFilter, dateFrom, dateTo, enforcerId, violationId, overdueOnly]);
 
   const { data: enforcersResponse } = useQuery({
     queryKey: ['users', 'enforcer'],
@@ -363,6 +421,7 @@ const Tickets = () => {
     setDateTo('');
     setEnforcerId('');
     setViolationId('');
+    setOverdueOnly(false);
   };
 
   const activeFilterCount = useMemo(() => {
@@ -372,11 +431,18 @@ const Tickets = () => {
     if (dateFrom || dateTo) c++;
     if (enforcerId) c++;
     if (violationId) c++;
+    if (overdueOnly) c++;
     return c;
-  }, [searchTerm, statusFilter, dateFrom, dateTo, enforcerId, violationId]);
+  }, [searchTerm, statusFilter, dateFrom, dateTo, enforcerId, violationId, overdueOnly]);
 
   const filteredTickets = useMemo(() => {
-    return [...tickets].sort((a, b) => {
+    let list = tickets;
+
+    if (overdueOnly) {
+      list = list.filter((t) => t.status === 'issued' && t.is_overdue === true);
+    }
+
+    return [...list].sort((a, b) => {
       const cmp = byFields('lastname', 'firstname')(
         a.violator || {},
         b.violator || {},
@@ -384,7 +450,12 @@ const Tickets = () => {
       if (cmp !== 0) return cmp;
       return (a.ticket_number || '').localeCompare(b.ticket_number || '');
     });
-  }, [tickets]);
+  }, [tickets, overdueOnly]);
+
+  const overdueCount = useMemo(
+    () => tickets.filter((t) => t.status === 'issued' && t.is_overdue === true).length,
+    [tickets],
+  );
 
   const getTotalFine = (ticket) => {
     if (!ticket) return 0;
@@ -423,6 +494,7 @@ const Tickets = () => {
       }`,
       () => setViolationId(''),
     ],
+    overdueOnly && ['Overdue only', () => setOverdueOnly(false)],
   ].filter(Boolean);
 
   const statusBadge = (status) => {
@@ -449,7 +521,7 @@ const Tickets = () => {
           Mark Paid
         </ActionButton>
       )}
-      {(ticket.status === 'paid' || ticket.status === 'partial_paid') && (
+      {ticket.status === 'paid' && (
         <ActionButton
           icon={XCircle}
           variant="danger"
@@ -532,6 +604,19 @@ const Tickets = () => {
       </div>
 
       <div>
+        <L icon={AlertTriangle}>Overdue</L>
+        <label className="flex items-center gap-2 text-sm text-[#C8202F] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={overdueOnly}
+            onChange={(e) => setOverdueOnly(e.target.checked)}
+            className="w-4 h-4 accent-[#C8202F]"
+          />
+          Show overdue tickets only
+        </label>
+      </div>
+
+      <div>
         <L>Enforcer</L>
         <select
           className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-[#1F2937] focus-visible:ring-[#F0B429]"
@@ -608,18 +693,26 @@ const Tickets = () => {
             View, filter, and manage all traffic violation tickets
           </p>
         </div>
-        <Button
-          onClick={handleRefresh}
-          variant="outline"
-          disabled={refreshing}
-          className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-70"
-        >
-          <RefreshCw
-            className={`w-4 h-4 mr-2 transition-transform ${refreshing ? 'animate-spin' : ''
-              }`}
-          />
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </Button>
+        <div className="relative flex items-center gap-3">
+          {overdueCount > 0 && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#C8202F] text-white text-xs font-semibold shadow">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {overdueCount} overdue
+            </div>
+          )}
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            disabled={refreshing}
+            className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-70"
+          >
+            <RefreshCw
+              className={`w-4 h-4 mr-2 transition-transform ${refreshing ? 'animate-spin' : ''
+                }`}
+            />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        </div>
       </header>
 
       <div
@@ -643,6 +736,29 @@ const Tickets = () => {
                 </span>
               )}
             </Button>
+
+            <button
+              type="button"
+              onClick={() => setOverdueOnly((v) => !v)}
+              aria-pressed={overdueOnly}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium transition-colors ${overdueOnly
+                  ? 'bg-[#C8202F] text-white border-[#C8202F] hover:bg-[#A01622]'
+                  : 'bg-white text-[#C8202F] border-[#C8202F]/30 hover:bg-[#FBE7E9]'
+                }`}
+            >
+              <AlertTriangle className="w-4 h-4" />
+              Overdue
+              {overdueCount > 0 && (
+                <span
+                  className={`ml-1 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${overdueOnly
+                      ? 'bg-white/20 text-white'
+                      : 'bg-[#FBE7E9] text-[#C8202F]'
+                    }`}
+                >
+                  {overdueCount}
+                </span>
+              )}
+            </button>
 
             <div className="relative flex-1 min-w-[240px] max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
@@ -690,11 +806,13 @@ const Tickets = () => {
             <div className="text-center py-14">
               <Eye className="w-12 h-12 text-[#CBD5E1] mx-auto mb-3" />
               <p className="text-sm text-[#64748B]">
-                {activeFilterCount > 0
-                  ? 'No tickets match the current filters.'
-                  : 'No tickets found.'}
+                {overdueOnly
+                  ? 'No overdue tickets on this page. 🎉'
+                  : activeFilterCount > 0
+                    ? 'No tickets match the current filters.'
+                    : 'No tickets found.'}
               </p>
-              {activeFilterCount > 0 && (
+              {(activeFilterCount > 0 || overdueOnly) && (
                 <button
                   onClick={clearAllFilters}
                   className="text-xs text-[#1E8449] hover:underline mt-2"
@@ -706,70 +824,68 @@ const Tickets = () => {
           ) : view === 'cards' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredTickets.map((ticket) => {
-                const meta =
-                  STATUS_META[ticket.status] ||
-                  STATUS_META.issued;
+                const meta = STATUS_META[ticket.status] || STATUS_META.issued;
+                const isOverdue = ticket.status === 'issued' && ticket.is_overdue === true;
                 return (
                   <article
                     key={ticket.ticket_id}
-                    className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                    className={`rounded-xl bg-white border overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 ${isOverdue
+                        ? 'border-[#C8202F]/40 ring-1 ring-[#C8202F]/20'
+                        : 'border-[#E3E7EE]'
+                      }`}
                   >
                     <div
                       className="h-2"
-                      style={{ background: meta.color }}
+                      style={{ background: isOverdue ? '#C8202F' : meta.color }}
                     />
                     <div className="p-4">
                       <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                         <span className="font-mono text-sm font-semibold text-[#16233F]">
                           {ticket.ticket_number}
                         </span>
-                        {statusBadge(ticket.status)}
+                        <div className="flex items-center gap-1.5">
+                          {isOverdue && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#C8202F] text-white">
+                              <AlertTriangle className="w-3 h-3" />
+                              Overdue
+                            </span>
+                          )}
+                          {statusBadge(ticket.status)}
+                        </div>
                       </div>
                       <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
-                        {ticket.violator?.firstname}{' '}
-                        {ticket.violator?.lastname}
+                        {ticket.violator?.firstname} {ticket.violator?.lastname}
                       </p>
                       <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3">
                         <Spec label="Plate" mono>
-                          {ticket.vehicle
-                            ?.platenumber || '—'}
+                          {ticket.vehicle?.platenumber || '—'}
                         </Spec>
                         <Spec label="License" mono>
-                          {ticket.violator
-                            ?.license || '—'}
+                          {ticket.violator?.license || '—'}
                         </Spec>
                         <Spec label="Date">
                           {ticket.violation_datetime
-                            ? new Date(
-                              ticket.violation_datetime,
-                            ).toLocaleDateString()
+                            ? new Date(ticket.violation_datetime).toLocaleDateString()
                             : '—'}
                         </Spec>
-                        <Spec
-                          label="Total fine"
-                          danger
-                        >
-                          ₱
-                          {getTotalFine(
-                            ticket,
-                          ).toLocaleString()}
+                        <Spec label="Total fine" danger>
+                          ₱{getTotalFine(ticket).toLocaleString()}
                         </Spec>
                       </dl>
+                      <div className="mt-3">
+                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                          Payment due
+                        </p>
+                        <DueBadge ticket={ticket} />
+                      </div>
                       <div className="mt-3 text-xs text-[#64748B] line-clamp-2">
                         {ticket.violations
                           ?.slice(0, 2)
-                          .map(
-                            (v) =>
-                              v.violation_type
-                                ?.violation_name,
-                          )
+                          .map((v) => v.violation_type?.violation_name)
                           .filter(Boolean)
                           .join(' · ')}
-                        {ticket.violations?.length >
-                          2 &&
-                          ` +${ticket.violations
-                            .length - 2
-                          } more`}
+                        {ticket.violations?.length > 2 &&
+                          ` +${ticket.violations.length - 2} more`}
                       </div>
                       <div className="mt-4 pt-4 border-t border-dashed border-[#CBD5E1]">
                         {rowActions(ticket)}
@@ -791,6 +907,7 @@ const Tickets = () => {
                   'Violations',
                   'Fine',
                   'Status',
+                  'Due',
                   'Actions',
                 ].map((c) => (
                   <span key={c}>{c}</span>
@@ -798,26 +915,31 @@ const Tickets = () => {
               </div>
               <ul className="divide-y divide-[#EEF0F4]">
                 {filteredTickets.map((ticket) => {
-                  const meta =
-                    STATUS_META[ticket.status] ||
-                    STATUS_META.issued;
+                  const meta = STATUS_META[ticket.status] || STATUS_META.issued;
+                  const isOverdue = ticket.status === 'issued' && ticket.is_overdue === true;
                   return (
                     <li
                       key={ticket.ticket_id}
-                      className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
+                      className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0 ${isOverdue ? 'bg-[#FEF6F7]' : ''
+                        }`}
                       style={{
-                        borderLeftColor: meta.color,
+                        borderLeftColor: isOverdue ? '#C8202F' : meta.color,
                       }}
                     >
-                      <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate">
+                      <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate flex items-center gap-1.5">
                         <Mini>Ticket</Mini>
-                        {ticket.ticket_number}
+                        {isOverdue && (
+                          <AlertTriangle
+                            className="w-3.5 h-3.5 text-[#C8202F] flex-shrink-0"
+                            title="Overdue"
+                          />
+                        )}
+                        <span className="truncate">{ticket.ticket_number}</span>
                       </span>
 
                       <div className="min-w-0">
                         <div className="text-sm text-[#1F2937] truncate">
-                          {ticket.violator?.firstname}{' '}
-                          {ticket.violator?.lastname}
+                          {ticket.violator?.firstname} {ticket.violator?.lastname}
                         </div>
                         <div className="text-xs text-[#64748B] font-mono truncate">
                           {ticket.violator?.license}
@@ -826,44 +948,33 @@ const Tickets = () => {
 
                       <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
                         <Mini>Plate</Mini>
-                        {ticket.vehicle?.platenumber ||
-                          '—'}
+                        {ticket.vehicle?.platenumber || '—'}
                       </span>
 
                       <div className="space-y-0.5 min-w-0">
-                        {ticket.violations
-                          ?.slice(0, 2)
-                          .map((v, i) => (
-                            <div
-                              key={i}
-                              className="text-xs text-[#1F2937] truncate"
-                            >
-                              {
-                                v.violation_type
-                                  ?.violation_name
-                              }
-                            </div>
-                          ))}
-                        {ticket.violations?.length >
-                          2 && (
-                            <div className="text-xs text-[#94A3B8]">
-                              +
-                              {ticket.violations
-                                .length - 2}{' '}
-                              more
-                            </div>
-                          )}
+                        {ticket.violations?.slice(0, 2).map((v, i) => (
+                          <div key={i} className="text-xs text-[#1F2937] truncate">
+                            {v.violation_type?.violation_name}
+                          </div>
+                        ))}
+                        {ticket.violations?.length > 2 && (
+                          <div className="text-xs text-[#94A3B8]">
+                            +{ticket.violations.length - 2} more
+                          </div>
+                        )}
                       </div>
 
                       <span className="font-bold text-[#C8202F] tabular-nums whitespace-nowrap">
-                        <Mini>Fine</Mini>₱
-                        {getTotalFine(
-                          ticket,
-                        ).toLocaleString()}
+                        <Mini>Fine</Mini>₱{getTotalFine(ticket).toLocaleString()}
                       </span>
 
                       <span className="justify-self-start">
                         {statusBadge(ticket.status)}
+                      </span>
+
+                      <span className="justify-self-start min-w-0">
+                        <Mini>Due</Mini>
+                        <DueBadge ticket={ticket} />
                       </span>
 
                       <div className="justify-self-end md:justify-self-start">
