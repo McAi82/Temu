@@ -46,6 +46,7 @@ import {
     Info,
     Copy,
     Check,
+    CalendarDays,
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
 
@@ -84,11 +85,6 @@ const TICKET_STATUS_META = {
         color: '#F0B429',
         chip: 'bg-[#FBF1DC] text-[#92600A]',
     },
-    partial_paid: {
-        label: 'Partial Paid',
-        color: '#3B5170',
-        chip: 'bg-[#EEF1F5] text-[#3B5170]',
-    },
     paid: {
         label: 'Paid',
         color: '#1E8449',
@@ -120,16 +116,29 @@ const toISODate = (d) => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
+const toISOMonth = (d) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+};
+
 const daysAgoISO = (n) => {
     const d = new Date();
     d.setDate(d.getDate() - n);
     return toISODate(d);
 };
 
+const formatMonthLabel = (iso) => {
+    if (!iso) return '';
+    const [y, m] = iso.split('-');
+    if (!y || !m) return iso;
+    const d = new Date(Number(y), Number(m) - 1, 1);
+    return d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+};
+
 /* Shared grids */
 const PENDING_ROW =
     'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-    'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,14rem)] md:gap-4';
+    'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,1.2fr)_minmax(0,14rem)] md:gap-4';
 
 const HISTORY_ROW =
     'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
@@ -358,20 +367,43 @@ const ticketStatusBadge = (status) => {
     );
 };
 
+/* Month picker — reusable across both tabs */
+const MonthPicker = ({ value, onChange, min, max }) => (
+    <div className="flex items-center gap-2">
+        <CalendarDays className="w-4 h-4 text-[#16233F]" />
+        <Input
+            type="month"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            min={min}
+            max={max}
+            className="w-48 focus-visible:ring-[#F0B429]"
+        />
+        {value && (
+            <button
+                type="button"
+                onClick={() => onChange('')}
+                className="text-xs text-[#64748B] hover:text-[#C8202F]"
+                title="Clear month filter"
+            >
+                Clear
+            </button>
+        )}
+    </div>
+);
+
 const Payments = () => {
     const queryClient = useQueryClient();
     const notify = useAlert();
     const [tab, setTab] = useState('pending');
 
-    // Visible-spinner state for the header Refresh button.
-    // Stays true for a minimum window so the spin animation is
-    // always seen, even when the network round-trip is instant.
     const [refreshing, setRefreshing] = useState(false);
 
     /* ---------- Pending tab ---------- */
     const [pendingView, setPendingView] = useState('list');
     const [pendingPage, setPendingPage] = useState(1);
     const [pendingSearch, setPendingSearch] = useState('');
+    const [pendingMonth, setPendingMonth] = useState('');
     const [pendingShowFilters, setPendingShowFilters] = useState(false);
     const [pendingFilters, setPendingFilters] = useState({
         min_balance: '',
@@ -383,6 +415,7 @@ const Payments = () => {
     const [historyView, setHistoryView] = useState('list');
     const [historyPage, setHistoryPage] = useState(1);
     const [historySearch, setHistorySearch] = useState('');
+    const [historyMonth, setHistoryMonth] = useState('');
     const [historyShowFilters, setHistoryShowFilters] = useState(false);
     const [historyFilters, setHistoryFilters] = useState({
         status: [],
@@ -419,10 +452,11 @@ const Payments = () => {
         refetch: refetchPending,
         error: pendingError,
     } = useQuery({
-        queryKey: ['payments-pending', pendingPage, pendingSearch],
+        queryKey: ['payments-pending', pendingPage, pendingSearch, pendingMonth],
         queryFn: () =>
             getPendingPayments(pendingPage, ITEMS_PER_PAGE, {
                 search: pendingSearch || undefined,
+                month: pendingMonth || undefined,
             }),
         keepPreviousData: true,
         staleTime: 1000 * 30,
@@ -435,10 +469,17 @@ const Payments = () => {
         refetch: refetchHistory,
         error: historyError,
     } = useQuery({
-        queryKey: ['payments-history', historyPage, historySearch, historyFilters],
+        queryKey: [
+            'payments-history',
+            historyPage,
+            historySearch,
+            historyFilters,
+            historyMonth,
+        ],
         queryFn: () =>
             getPayments(historyPage, ITEMS_PER_PAGE, {
                 ticket_number: historySearch || undefined,
+                month: historyMonth || undefined,
                 status: historyFilters.status.length
                     ? historyFilters.status.join(',')
                     : undefined,
@@ -532,20 +573,22 @@ const Payments = () => {
     const pendingFilterCount = useMemo(() => {
         let c = 0;
         if (pendingSearch) c++;
+        if (pendingMonth) c++;
         if (pendingFilters.min_balance || pendingFilters.max_balance) c++;
         if (pendingFilters.only_partial) c++;
         return c;
-    }, [pendingSearch, pendingFilters]);
+    }, [pendingSearch, pendingMonth, pendingFilters]);
 
     const historyFilterCount = useMemo(() => {
         let c = 0;
         if (historySearch) c++;
+        if (historyMonth) c++;
         if (historyFilters.status.length) c++;
         if (historyFilters.method) c++;
         if (historyFilters.date_from || historyFilters.date_to) c++;
         if (historyFilters.min_amount || historyFilters.max_amount) c++;
         return c;
-    }, [historySearch, historyFilters]);
+    }, [historySearch, historyMonth, historyFilters]);
 
     /* ---------- Refresh handler ---------- */
     const handleRefresh = async () => {
@@ -562,7 +605,6 @@ const Payments = () => {
         } catch (e) {
             console.warn('Refresh failed:', e);
         } finally {
-            // Hold the spinner for a visible minimum.
             setTimeout(() => setRefreshing(false), 600);
         }
     };
@@ -579,23 +621,12 @@ const Payments = () => {
             setIsDialogOpen(false);
             resetForm();
 
-            if (data.ticket_status === 'paid') {
-                notify.success(
-                    `Payment recorded. Ticket is now fully paid. (Balance: ${formatPeso(
-                        data.balance,
-                    )})`,
-                    { title: 'Payment Recorded' },
-                );
-            } else {
-                notify.success(
-                    `Partial payment recorded.\n\nPaid this time: ${formatPeso(
-                        data.amount_paid,
-                    )}\nTotal paid so far: ${formatPeso(
-                        data.total_paid,
-                    )}\nRemaining balance: ${formatPeso(data.balance)}`,
-                    { title: 'Partial Payment Recorded' },
-                );
-            }
+            notify.success(
+                `Payment recorded. Ticket is now fully paid. (Balance: ${formatPeso(
+                    data.balance,
+                )})`,
+                { title: 'Payment Recorded' },
+            );
         },
         onError: (error) => {
             const payload = error.response?.data || {};
@@ -704,14 +735,17 @@ const Payments = () => {
             date_to: daysAgoISO(0),
         }));
 
-    const clearPendingFilters = () =>
+    const clearPendingFilters = () => {
+        setPendingMonth('');
         setPendingFilters({
             min_balance: '',
             max_balance: '',
             only_partial: false,
         });
+    };
 
-    const clearHistoryFilters = () =>
+    const clearHistoryFilters = () => {
+        setHistoryMonth('');
         setHistoryFilters({
             status: [],
             method: '',
@@ -720,6 +754,7 @@ const Payments = () => {
             min_amount: '',
             max_amount: '',
         });
+    };
 
     const handleCopy = async (label, value) => {
         const ok = await copyText(value);
@@ -735,6 +770,9 @@ const Payments = () => {
     const ticketHistorySummary = ticketHistoryResponse?.data?.summary;
     const ticketPayments = ticketHistory?.payments || [];
 
+    const today = new Date();
+    const currentMonth = toISOMonth(today);
+
     /* ---------- Panels ---------- */
     const pendingPanel = (
         <FilterShell
@@ -742,6 +780,18 @@ const Payments = () => {
             onClose={() => setPendingShowFilters(false)}
             onReset={clearPendingFilters}
         >
+            <div>
+                <L icon={CalendarDays}>Month</L>
+                <MonthPicker
+                    value={pendingMonth}
+                    onChange={(v) => setPendingMonth(v)}
+                    max={currentMonth}
+                />
+                <p className="text-[11px] text-[#94A3B8] mt-1.5">
+                    Filters by the month of the violation date.
+                </p>
+            </div>
+
             <div>
                 <L>Balance range (₱)</L>
                 <div className="flex flex-wrap items-center gap-2">
@@ -798,6 +848,18 @@ const Payments = () => {
             onClose={() => setHistoryShowFilters(false)}
             onReset={clearHistoryFilters}
         >
+            <div>
+                <L icon={CalendarDays}>Month</L>
+                <MonthPicker
+                    value={historyMonth}
+                    onChange={(v) => setHistoryMonth(v)}
+                    max={currentMonth}
+                />
+                <p className="text-[11px] text-[#94A3B8] mt-1.5">
+                    Filters by the month of the payment date.
+                </p>
+            </div>
+
             <div>
                 <L>Status</L>
                 <div className="flex flex-wrap gap-2">
@@ -926,6 +988,10 @@ const Payments = () => {
             `Search: ${pendingSearch}`,
             () => setPendingSearch(''),
         ],
+        pendingMonth && [
+            `Month: ${formatMonthLabel(pendingMonth)}`,
+            () => setPendingMonth(''),
+        ],
         (pendingFilters.min_balance || pendingFilters.max_balance) && [
             `Balance: ₱${pendingFilters.min_balance || '0'} → ₱${pendingFilters.max_balance || '∞'
             }`,
@@ -950,6 +1016,10 @@ const Payments = () => {
         historySearch && [
             `Search: ${historySearch}`,
             () => setHistorySearch(''),
+        ],
+        historyMonth && [
+            `Month: ${formatMonthLabel(historyMonth)}`,
+            () => setHistoryMonth(''),
         ],
         historyFilters.status.length > 0 && [
             `Status: ${historyFilters.status.join(', ')}`,
@@ -982,29 +1052,17 @@ const Payments = () => {
     ].filter(Boolean);
 
     /* ---------- Actions ---------- */
-    const pendingRowActions = (ticket) => {
-        const isPartial = ticket.status === 'partial_paid';
-        return (
-            <div className="flex flex-wrap gap-2">
-                {isPartial && (
-                    <ActionButton
-                        icon={History}
-                        variant="info"
-                        onClick={() => openTicketHistory(ticket.ticket_id)}
-                    >
-                        History
-                    </ActionButton>
-                )}
-                <ActionButton
-                    icon={PhilippinePeso}
-                    variant="primary"
-                    onClick={() => openPaymentDialog(ticket)}
-                >
-                    {isPartial ? 'Add Payment' : 'Record Payment'}
-                </ActionButton>
-            </div>
-        );
-    };
+    const pendingRowActions = (ticket) => (
+        <div className="flex flex-wrap gap-2">
+            <ActionButton
+                icon={PhilippinePeso}
+                variant="primary"
+                onClick={() => openPaymentDialog(ticket)}
+            >
+                Record Payment
+            </ActionButton>
+        </div>
+    );
 
     return (
         <div className="space-y-6 font-['Inter']">
@@ -1089,6 +1147,12 @@ const Payments = () => {
                                     )}
                                 </Button>
 
+                                <MonthPicker
+                                    value={pendingMonth}
+                                    onChange={setPendingMonth}
+                                    max={currentMonth}
+                                />
+
                                 <div className="relative flex-1 min-w-[240px] max-w-md">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
                                     <Input
@@ -1137,7 +1201,9 @@ const Payments = () => {
                                 <Wallet className="w-5 h-5 text-[#F0B429]" />
                                 Tickets Awaiting Payment
                                 <span className="text-xs font-normal text-[#64748B] font-['Inter']">
-                                    (alphabetical by violator)
+                                    {pendingMonth
+                                        ? `(${formatMonthLabel(pendingMonth)})`
+                                        : '(alphabetical by violator)'}
                                 </span>
                             </h2>
 
@@ -1459,6 +1525,12 @@ const Payments = () => {
                                     )}
                                 </Button>
 
+                                <MonthPicker
+                                    value={historyMonth}
+                                    onChange={setHistoryMonth}
+                                    max={currentMonth}
+                                />
+
                                 <div className="relative flex-1 min-w-[240px] max-w-md">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
                                     <Input
@@ -1504,6 +1576,11 @@ const Payments = () => {
                             <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
                                 <Receipt className="w-5 h-5 text-[#F0B429]" />
                                 Recorded Payments
+                                {historyMonth && (
+                                    <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+                                        ({formatMonthLabel(historyMonth)})
+                                    </span>
+                                )}
                             </h2>
 
                             {historyLoading && !historyResponse ? (
@@ -1750,9 +1827,7 @@ const Payments = () => {
                             </span>
                             <div>
                                 <div className="leading-tight">
-                                    {selectedTicket?.status === 'partial_paid'
-                                        ? 'Add Payment'
-                                        : 'Record Payment'}
+                                    Record Payment
                                 </div>
                                 <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
                                     {selectedTicket
@@ -1854,24 +1929,14 @@ const Payments = () => {
                                                         step="0.01"
                                                         min="0.01"
                                                         value={formData.amount_paid}
-                                                        onChange={(e) =>
-                                                            setFormData({
-                                                                ...formData,
-                                                                amount_paid: e.target.value,
-                                                            })
-                                                        }
-                                                        required
-                                                        className="pl-8 focus-visible:ring-[#F0B429] font-mono h-11 tabular-nums"
+                                                        readOnly
+                                                        disabled
+                                                        className="pl-8 focus-visible:ring-0 font-mono h-11 tabular-nums bg-[#F5F6F8] cursor-not-allowed"
                                                     />
                                                 </div>
-                                                {selectedTicket &&
-                                                    parseFloat(formData.amount_paid) >
-                                                    (parseFloat(selectedTicket.balance) || 0) + 0.01 && (
-                                                        <p className="text-xs text-[#C8202F] mt-1.5 flex items-center gap-1">
-                                                            <AlertCircle className="w-3 h-3" />
-                                                            Amount exceeds outstanding balance.
-                                                        </p>
-                                                    )}
+                                                <p className="text-[11px] text-[#64748B] mt-1.5">
+                                                    Ticket payments must be settled in full.
+                                                </p>
                                             </div>
                                             <div>
                                                 <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
@@ -2023,83 +2088,15 @@ const Payments = () => {
                                                     </span>
                                                 </div>
 
-                                                {(selectedTicket.total_paid ?? 0) > 0 && (
-                                                    <>
-                                                        <div className="flex items-center justify-between text-sm">
-                                                            <span className="text-[#64748B]">
-                                                                Already Paid
-                                                            </span>
-                                                            <span className="font-semibold text-[#1E8449] tabular-nums">
-                                                                − {formatPeso(selectedTicket.total_paid || 0)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between text-sm pt-3 border-t border-dashed border-[#CBD5E1]">
-                                                            <span className="text-[#64748B] font-medium">
-                                                                Outstanding
-                                                            </span>
-                                                            <span className="font-bold text-[#C2541F] tabular-nums">
-                                                                {formatPeso(
-                                                                    selectedTicket.balance ??
-                                                                    getTotalFine(selectedTicket),
-                                                                )}
-                                                            </span>
-                                                        </div>
-                                                    </>
-                                                )}
-
                                                 {parseFloat(formData.amount_paid) > 0 && (
-                                                    <>
-                                                        <div className="pt-3 border-t border-dashed border-[#CBD5E1]">
-                                                            <p className="text-[10px] uppercase tracking-wider text-[#94A3B8] mb-2">
-                                                                After this payment
-                                                            </p>
-                                                            <div className="space-y-2">
-                                                                <div className="flex items-center justify-between text-sm">
-                                                                    <span className="text-[#64748B]">
-                                                                        Paying now
-                                                                    </span>
-                                                                    <span className="font-semibold text-[#1E8449] tabular-nums">
-                                                                        + {formatPeso(formData.amount_paid)}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="flex items-center justify-between text-sm">
-                                                                    <span className="text-[#64748B]">
-                                                                        New balance
-                                                                    </span>
-                                                                    <span className="font-bold text-[#16233F] tabular-nums">
-                                                                        {formatPeso(
-                                                                            Math.max(
-                                                                                0,
-                                                                                (parseFloat(
-                                                                                    selectedTicket.balance ??
-                                                                                    getTotalFine(selectedTicket),
-                                                                                ) || 0) -
-                                                                                (parseFloat(formData.amount_paid) || 0),
-                                                                            ),
-                                                                        )}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
+                                                    <div className="pt-3 border-t border-dashed border-[#CBD5E1]">
+                                                        <div className="flex items-center gap-2 bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-2.5 text-xs text-[#1E8449]">
+                                                            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                                                            <span className="font-medium">
+                                                                This payment will fully settle the ticket.
+                                                            </span>
                                                         </div>
-
-                                                        {Math.max(
-                                                            0,
-                                                            (parseFloat(
-                                                                selectedTicket.balance ??
-                                                                getTotalFine(selectedTicket),
-                                                            ) || 0) -
-                                                            (parseFloat(formData.amount_paid) || 0),
-                                                        ) <= 0.01 && (
-                                                                <div className="pt-3 border-t border-dashed border-[#CBD5E1]">
-                                                                    <div className="flex items-center gap-2 bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-2.5 text-xs text-[#1E8449]">
-                                                                        <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                                                                        <span className="font-medium">
-                                                                            This payment will fully settle the ticket.
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                    </>
+                                                    </div>
                                                 )}
                                             </div>
                                         </section>
@@ -2116,8 +2113,7 @@ const Payments = () => {
                                                         receipt before saving.
                                                     </li>
                                                     <li>
-                                                        Partial payments are allowed; the ticket stays
-                                                        open until the balance is zero.
+                                                        Payments must cover the full outstanding balance.
                                                     </li>
                                                     <li>
                                                         Voiding a payment is possible later from the
@@ -2136,9 +2132,6 @@ const Payments = () => {
                                 <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
                                 {!formData.receipt_number ? (
                                     <span>Enter the receipt number to continue.</span>
-                                ) : !formData.amount_paid ||
-                                    parseFloat(formData.amount_paid) <= 0 ? (
-                                    <span>Enter an amount greater than zero.</span>
                                 ) : (
                                     <span>
                                         Ready to record{' '}
@@ -2341,7 +2334,6 @@ const Payments = () => {
                                                         const meta =
                                                             STATUS_META[p.payment_status] ||
                                                             STATUS_META.pending;
-                                                        const Icon = meta.Icon;
                                                         return (
                                                             <li
                                                                 key={p.payment_id}
@@ -2474,51 +2466,6 @@ const Payments = () => {
                                                     )}
                                             </div>
                                         </section>
-
-                                        {ticketPayments.length > 0 &&
-                                            parseFloat(ticketHistorySummary?.total_fine) > 0 && (
-                                                <section>
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <Wallet className="w-4 h-4 text-[#1E8449]" />
-                                                        <h3 className="font-['Oswald'] text-lg text-[#16233F]">
-                                                            Progress
-                                                        </h3>
-                                                    </div>
-                                                    <div className="rounded-xl bg-white border border-[#E3E7EE] p-4">
-                                                        {(() => {
-                                                            const total = parseFloat(
-                                                                ticketHistorySummary?.total_fine,
-                                                            ) || 0;
-                                                            const paid = parseFloat(
-                                                                ticketHistorySummary?.total_paid,
-                                                            ) || 0;
-                                                            const pct = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
-                                                            return (
-                                                                <>
-                                                                    <div className="flex items-center justify-between text-xs mb-2">
-                                                                        <span className="text-[#64748B]">
-                                                                            Paid
-                                                                        </span>
-                                                                        <span className="font-semibold text-[#1E8449] tabular-nums">
-                                                                            {pct.toFixed(0)}%
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="h-2.5 rounded-full bg-[#E9ECF2] overflow-hidden">
-                                                                        <div
-                                                                            className="h-full rounded-full bg-[#1E8449] transition-all duration-700"
-                                                                            style={{ width: `${pct}%` }}
-                                                                        />
-                                                                    </div>
-                                                                    <div className="flex items-center justify-between text-[11px] text-[#94A3B8] mt-2 tabular-nums">
-                                                                        <span>{formatPeso(paid)}</span>
-                                                                        <span>{formatPeso(total)}</span>
-                                                                    </div>
-                                                                </>
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                </section>
-                                            )}
 
                                         <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
                                             <div className="flex items-start gap-2.5">
