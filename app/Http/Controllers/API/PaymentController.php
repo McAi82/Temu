@@ -62,59 +62,79 @@ class PaymentController extends Controller
     }
 
     public function pending(Request $request)
-    {
-        $perPage = (int) $request->get('per_page', 20);
-        $page    = (int) $request->get('page', 1);
+{
+    $perPage = (int) $request->get('per_page', 20);
+    $page    = (int) $request->get('page', 1);
 
-        $query = Ticket::with([
-            'violator',
-            'vehicle',
-            'enforcer',
-            'violations.violationType',
-            'payments',
-        ])
-            ->where('status', 'issued')
-            ->where('is_archived', false);
+    $query = Ticket::with([
+        'violator',
+        'vehicle',
+        'enforcer',
+        'violations.violationType',
+        'payments',
+    ])
+        ->where('status', 'issued')
+        ->where('is_archived', false);
 
-        if ($request->filled('ticket_number')) {
-            $query->where('ticket_number', 'like', '%' . $request->ticket_number . '%');
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('ticket_number', 'like', "%{$search}%")
-                    ->orWhereHas('violator', function ($vq) use ($search) {
-                        $vq->where('firstname', 'like', "%{$search}%")
-                            ->orWhere('lastname', 'like', "%{$search}%")
-                            ->orWhere('license', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('vehicle', function ($vq) use ($search) {
-                        $vq->where('platenumber', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        $tickets = $query->orderBy('payment_due_at', 'asc')
-            ->orderBy('created_at', 'desc')
-            ->paginate($perPage, ['*'], 'page', $page);
-
-        $tickets->getCollection()->each(function ($ticket) {
-            $totalFine = (float) $ticket->violations->sum('fine_amount');
-            $totalPaid = (float) $ticket->payments
-                ->where('payment_status', 'completed')
-                ->where('is_archived', false)
-                ->sum('amount_paid');
-
-            $ticket->total_fine = $totalFine;
-            $ticket->total_paid = $totalPaid;
-            $ticket->balance    = max(0, $totalFine - $totalPaid);
-        });
-
-        $this->fireDueNotificationsFromPayment($tickets->getCollection());
-
-        return response()->json($tickets);
+    if ($request->filled('ticket_number')) {
+        $query->where('ticket_number', 'like', '%' . $request->ticket_number . '%');
     }
+
+    if ($request->filled('search')) {
+        $search = $request->search;
+        $query->where(function ($q) use ($search) {
+            $q->where('ticket_number', 'like', "%{$search}%")
+                ->orWhereHas('violator', function ($vq) use ($search) {
+                    $vq->where('firstname', 'like', "%{$search}%")
+                        ->orWhere('lastname', 'like', "%{$search}%")
+                        ->orWhere('license', 'like', "%{$search}%");
+                })
+                ->orWhereHas('vehicle', function ($vq) use ($search) {
+                    $vq->where('platenumber', 'like', "%{$search}%");
+                });
+        });
+    }
+
+    // Sort by due date when the column exists, otherwise fall back
+    // to created_at so the endpoint never breaks on a legacy DB.
+    $hasDueColumn = \Schema::hasColumn('tickets', 'payment_due_at');
+
+    if ($hasDueColumn) {
+        $query->orderBy('payment_due_at', 'asc')
+              ->orderBy('created_at', 'desc');
+    } else {
+        $query->orderBy('created_at', 'desc');
+    }
+
+    $tickets = $query->paginate($perPage, ['*'], 'page', $page);
+
+    // Decorate each row using transform(), which is what Laravel's
+    // paginator expects for in-place mutation.
+    $tickets->getCollection()->transform(function ($ticket) {
+        $totalFine = (float) $ticket->violations->sum('fine_amount');
+
+        $totalPaid = (float) $ticket->payments
+            ->where('payment_status', 'completed')
+            ->where('is_archived', false)
+            ->sum('amount_paid');
+
+        // addSelect-style assignment: these are NOT accessors on the
+        // model, so they won't collide with getTotalFineAttribute().
+        // If the model accessor already exists, use the appended
+        // attribute directly instead of re-assigning.
+        $ticket->setAttribute('total_fine', $totalFine);
+        $ticket->setAttribute('total_paid', $totalPaid);
+        $ticket->setAttribute('balance', max(0, $totalFine - $totalPaid));
+
+        // Strip the heavy `payments` relation from the payload —
+        // the frontend only needs the aggregated totals.
+        $ticket->unsetRelation('payments');
+
+        return $ticket;
+    });
+
+    return response()->json($tickets);
+}
 
     public function show($id)
     {
