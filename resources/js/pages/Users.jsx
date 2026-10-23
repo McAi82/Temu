@@ -1087,15 +1087,14 @@ const Users = () => {
         </div>
         <div className="relative flex gap-2">
           <Button
-            onClick={() => refetch()}
-            variant="outline"
-            className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
-          >
-            <RefreshCw
-              className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`}
-            />
-            Refresh
-          </Button>
+  onClick={() => refetch()}
+  variant="outline"
+  disabled={isFetching}
+  className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
+>
+  <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+  Refresh
+</Button>
 
           {canManage && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

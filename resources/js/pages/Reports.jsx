@@ -2395,17 +2395,14 @@ const Reports = () => {
                         ))}
                     </div>
                     <Button
-                        onClick={fetchReport}
-                        variant="outline"
-                        disabled={loading}
-                        className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
-                    >
-                        <RefreshCw
-                            className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''
-                                }`}
-                        />
-                        Refresh
-                    </Button>
+  onClick={fetchReport}
+  variant="outline"
+  disabled={loading}
+  className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
+>
+  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+  Refresh
+</Button>
                     <Button
                         onClick={() => window.print()}
                         variant="outline"

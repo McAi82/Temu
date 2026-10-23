@@ -1153,15 +1153,14 @@ const Schedule = () => {
 
         <div className="relative flex flex-wrap gap-2">
           <Button
-            onClick={fetchSchedules}
-            variant="outline"
-            className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
-          >
-            <RefreshCw
-              className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`}
-            />
-            Refresh
-          </Button>
+  onClick={fetchSchedules}
+  variant="outline"
+  disabled={isLoading}
+  className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
+>
+  <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+  Refresh
+</Button>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>

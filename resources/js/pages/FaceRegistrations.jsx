@@ -769,17 +769,22 @@ const FaceRegistrations = () => {
                         </span>
                     )}
                     <Button
-                        onClick={() => {
-                            refetchRequests();
-                            refetchRegistrations();
-                            refetchPendingCount();
-                        }}
-                        variant="outline"
-                        className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
-                    >
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Refresh
-                    </Button>
+  onClick={() => {
+    refetchRequests();
+    refetchRegistrations();
+    refetchPendingCount();
+  }}
+  variant="outline"
+  disabled={requestsLoading || registrationsLoading}
+  className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
+>
+  <RefreshCw
+    className={`w-4 h-4 mr-2 ${
+      requestsLoading || registrationsLoading ? "animate-spin" : ""
+    }`}
+  />
+  Refresh
+</Button>
                 </div>
             </header>
 

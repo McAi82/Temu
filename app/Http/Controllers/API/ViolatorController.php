@@ -27,12 +27,10 @@ class ViolatorController extends Controller
                 $q->where('is_archived', false);
             }])
             ->with(['tickets' => function ($q) {
-                // Non-archived tickets with their violations + enforcer.
-                // Ordered so the first item is the most recent ticket.
                 $q->where('is_archived', false)
                   ->with([
                       'enforcer:user_id,firstname,lastname',
-                      'violations.violationType:violation_id,violation_name',
+                      'violations.violationType:violation_id,violation_name,fine_amount,demerit_points',
                   ])
                   ->orderByDesc('created_at');
             }]);
@@ -53,7 +51,6 @@ class ViolatorController extends Controller
                     ->orWhere('license', 'like', "%{$s}%")
                     ->orWhere('email', 'like', "%{$s}%")
                     ->orWhere('contact_number', 'like', "%{$s}%")
-                    // Search by enforcer who ticketed this violator
                     ->orWhereHas('tickets', function ($tq) use ($s) {
                         $tq->where('is_archived', false)
                            ->whereHas('enforcer', function ($eq) use ($s) {
@@ -61,7 +58,6 @@ class ViolatorController extends Controller
                                   ->orWhere('lastname', 'like', "%{$s}%");
                            });
                     })
-                    // Search by violation type name
                     ->orWhereHas('tickets', function ($tq) use ($s) {
                         $tq->where('is_archived', false)
                            ->whereHas('violations.violationType', function ($vq) use ($s) {
@@ -96,41 +92,101 @@ class ViolatorController extends Controller
             ->orderBy('firstname')
             ->paginate($perPage, ['*'], 'page', $page);
 
-        // Decorate each row with derived fields the frontend renders
-        // directly, so the UI doesn't have to walk nested arrays.
         $violators->getCollection()->transform(function ($v) {
-            $latest = $v->tickets->first();
-
-            $v->ticketed_by = $latest && $latest->enforcer
-                ? trim("{$latest->enforcer->firstname} {$latest->enforcer->lastname}")
-                : null;
-
-            // Collect distinct violation names across all of the
-            // violator's non-archived tickets. Preserves first-seen order
-            // (most recent ticket first).
-            $names = [];
-            foreach ($v->tickets as $ticket) {
-                foreach ($ticket->violations as $tv) {
-                    $name = $tv->violationType?->violation_name;
-                    if ($name && !in_array($name, $names, true)) {
-                        $names[] = $name;
-                    }
-                }
-            }
-
-            $v->violation_names       = $names;
-            $v->violation_names_count = count($names);
-
-            unset($v->tickets);
-            return $v;
+            return $this->decorate($v);
         });
 
         return response()->json($violators);
     }
 
+    /* ==================================================================
+     |  SHOW — full detail for the row-click modal
+     ================================================================== */
+
     public function show($id)
     {
-        return response()->json(Violator::with('archivedBy')->findOrFail($id));
+        $violator = Violator::withCount(['tickets as violations_committed_count' => function ($q) {
+                $q->where('is_archived', false);
+            }])
+            ->with(['tickets' => function ($q) {
+                $q->where('is_archived', false)
+                  ->with([
+                      'enforcer:user_id,firstname,lastname,email',
+                      'vehicle:vehicle_id,platenumber,make,model,color',
+                      'violations.violationType:violation_id,violation_name,fine_amount,demerit_points',
+                  ])
+                  ->orderByDesc('created_at');
+            }, 'archivedBy'])
+            ->findOrFail($id);
+
+        $decorated = $this->decorate($violator, /* keepTickets */ true);
+
+        // Flatten to a rich payload for the modal.
+        $tickets = $violator->tickets->map(function ($t) {
+            return [
+                'ticket_id'          => $t->ticket_id,
+                'ticket_number'      => $t->ticket_number,
+                'status'             => $t->status,
+                'violation_datetime' => $t->violation_datetime,
+                'location'           => $t->location,
+                'enforcer_name'      => $t->enforcer
+                    ? trim("{$t->enforcer->firstname} {$t->enforcer->lastname}")
+                    : null,
+                'vehicle_plate'      => $t->vehicle?->platenumber,
+                'vehicle_make_model' => trim(
+                    ($t->vehicle?->make ?? '') . ' ' . ($t->vehicle?->model ?? '')
+                ) ?: null,
+                'total_fine'         => (float) $t->violations->sum('fine_amount'),
+                'violations'         => $t->violations->map(function ($tv) {
+                    return [
+                        'violation_name'  => $tv->violationType?->violation_name,
+                        'fine_amount'     => (float) $tv->fine_amount,
+                        'demerit_points'  => (int) $tv->demerit_points,
+                    ];
+                })->filter(fn($x) => $x['violation_name'])->values(),
+            ];
+        })->values();
+
+        $totalFines = $tickets->sum('total_fine');
+        $totalPoints = $violator->tickets->flatMap->violations->sum('demerit_points');
+
+        $decorated['tickets']         = $tickets;
+        $decorated['total_fines']     = (float) $totalFines;
+        $decorated['total_points']    = (int) $totalPoints;
+        $decorated['tickets_count']   = $tickets->count();
+
+        return response()->json($decorated);
+    }
+
+    /**
+     * Adds `ticketed_by`, `violation_names`, and count onto the model.
+     */
+    private function decorate(Violator $v, bool $keepTickets = false)
+    {
+        $latest = $v->tickets->first();
+
+        $v->ticketed_by = $latest && $latest->enforcer
+            ? trim("{$latest->enforcer->firstname} {$latest->enforcer->lastname}")
+            : null;
+
+        $names = [];
+        foreach ($v->tickets as $ticket) {
+            foreach ($ticket->violations as $tv) {
+                $name = $tv->violationType?->violation_name;
+                if ($name && !in_array($name, $names, true)) {
+                    $names[] = $name;
+                }
+            }
+        }
+
+        $v->violation_names       = $names;
+        $v->violation_names_count = count($names);
+
+        if (!$keepTickets) {
+            unset($v->tickets);
+        }
+
+        return $v;
     }
 
     public function searchByLicense($license)

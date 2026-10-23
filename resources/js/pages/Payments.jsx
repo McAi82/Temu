@@ -1004,16 +1004,19 @@ const Payments = () => {
                     </p>
                 </div>
                 <Button
-                    onClick={() => {
-                        refetchPending();
-                        if (tab === 'history') refetchHistory();
-                    }}
-                    variant="outline"
-                    className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
-                >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Refresh
-                </Button>
+  onClick={() => {
+    refetchPending();
+    refetchHistory();
+  }}
+  variant="outline"
+  disabled={pendingLoading || historyLoading}
+  className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
+>
+  <RefreshCw
+    className={`w-4 h-4 mr-2 ${pendingLoading || historyLoading ? "animate-spin" : ""}`}
+  />
+  Refresh
+</Button>
             </header>
 
             <Tabs value={tab} onValueChange={setTab} className="space-y-6">

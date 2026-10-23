@@ -23,6 +23,7 @@ import {
   updateVehicle,
   deleteVehicle,
   getViolators,
+  getViolator,
   createViolator,
   updateViolator,
   deleteViolator,
@@ -51,6 +52,10 @@ import {
   IdCard,
   Info,
   AlertTriangle,
+  Ticket as TicketIcon,
+  Shield,
+  MapPin,
+  FileText,
 } from "lucide-react";
 import { useAlert } from "../components/ui/AlertProvider";
 
@@ -69,6 +74,14 @@ const PRESETS = [
   { label: "Last 30d", days: 29 },
   { label: "Last 90d", days: 89 },
 ];
+
+const TICKET_STATUS = {
+  issued:        { label: "Issued",       color: "#F0B429", chip: "bg-[#FBF1DC] text-[#92600A]" },
+  partial_paid:  { label: "Partial",      color: "#3B5170", chip: "bg-[#EEF1F5] text-[#3B5170]" },
+  paid:          { label: "Paid",         color: "#1E8449", chip: "bg-[#E5F2EA] text-[#1E8449]" },
+  contested:     { label: "Contested",    color: "#C2541F", chip: "bg-[#FBEAE2] text-[#C2541F]" },
+  dismissed:     { label: "Dismissed",    color: "#C8202F", chip: "bg-[#FBE7E9] text-[#C8202F]" },
+};
 
 function useDebouncedValue(value, delay = 350) {
   const [debounced, setDebounced] = useState(value);
@@ -112,8 +125,7 @@ const PreviewRow = ({ icon: Icon, label, value, mono, danger }) => (
         {label}
       </p>
       <p
-        className={`text-sm truncate ${mono ? 'font-mono text-[#16233F]' : 'text-[#1F2937]'
-          } ${danger ? 'text-[#C8202F] font-medium' : ''}`}
+        className={`text-sm truncate ${mono ? "font-mono text-[#16233F]" : "text-[#1F2937]"} ${danger ? "text-[#C8202F] font-medium" : ""}`}
       >
         {value}
       </p>
@@ -163,14 +175,38 @@ const isExpiringSoon = (expiry) => {
   return new Date(expiry) <= cutoff;
 };
 
+const formatDate = (v) => {
+  if (!v) return "—";
+  try {
+    return new Date(v).toLocaleDateString();
+  } catch {
+    return "—";
+  }
+};
+
+const formatDateTime = (v) => {
+  if (!v) return "—";
+  try {
+    return new Date(v).toLocaleString();
+  } catch {
+    return "—";
+  }
+};
+
+const formatPeso = (n) =>
+  `₱${(parseFloat(n) || 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
 /* Widen the grid: the Violations column needs room for names. */
 const VIOLATOR_ROW =
-  'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-  'md:grid md:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,.9fr)_minmax(0,.6fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,12rem)] md:gap-4';
+  "flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 cursor-pointer " +
+  "md:grid md:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,.9fr)_minmax(0,.6fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,12rem)] md:gap-4";
 
 const VEHICLE_ROW =
-  'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-  'md:grid md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,14rem)] md:gap-4';
+  "flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 " +
+  "md:grid md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,14rem)] md:gap-4";
 
 const ViewToggle = ({ view, setView }) => (
   <div className="ml-auto flex bg-[#E9ECF2] rounded-full p-1 text-xs" role="group" aria-label="Choose layout">
@@ -211,7 +247,6 @@ const Quick = ({ apply }) => (
   </div>
 );
 
-/* Filters live in a side drawer that pushes the list over */
 const FilterShell = ({ title, onClose, onReset, children }) => (
   <aside className="self-start rounded-xl bg-[#FBF1DC] border-t-4 border-[#F0B429] p-5 space-y-5 lg:sticky lg:top-4">
     <div className="flex justify-between items-center">
@@ -226,7 +261,6 @@ const FilterShell = ({ title, onClose, onReset, children }) => (
   </aside>
 );
 
-/* One section layout shared by both tabs */
 const Section = ({ title, hint, icon: Icon, accent, placeholder, search, setSearch, showFilters, setShowFilters, count, panel, chips, loading, items, noneText, renderItem, renderRow, columns, rowClass, view, setView, meta, setPage }) => (
   <div className={`grid gap-6 ${showFilters ? "lg:grid-cols-[300px_minmax(0,1fr)]" : ""}`}>
     {showFilters && panel}
@@ -282,7 +316,6 @@ const Spec = ({ label, children, mono, danger }) => (
   </div>
 );
 
-/* Renders up to 2 violation names as chips + "+N more" */
 const ViolationNamesCell = ({ names = [], compact = false }) => {
   if (!names.length) {
     return <span className="text-sm text-[#94A3B8]">None</span>;
@@ -316,17 +349,315 @@ const ViolationNamesCell = ({ names = [], compact = false }) => {
   );
 };
 
+/* ============================================================
+ *  VIOLATOR DETAILS MODAL (row-click)
+ * ============================================================ */
+const ViolatorDetailsModal = ({ violatorId, open, onClose }) => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["violator", violatorId],
+    queryFn: () => getViolator(violatorId),
+    enabled: !!violatorId && open,
+    staleTime: 1000 * 30,
+  });
+
+  const v = data?.data || data;
+  const tickets = v?.tickets || [];
+  const violationNames = v?.violation_names || [];
+
+  const getImageUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return path;
+    return `${API_BASE_URL}/storage/${path}`;
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[85vw] max-w-[1100px] max-h-[92vh] overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+          <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+            <span className="w-10 h-10 rounded-lg bg-[#FBF1DC] flex items-center justify-center flex-shrink-0">
+              <UserIcon className="w-5 h-5 text-[#92600A]" />
+            </span>
+            <div>
+              <div className="leading-tight">Violator Details</div>
+              <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                {isLoading
+                  ? "Loading record…"
+                  : v
+                  ? `${v.firstname} ${v.lastname} · ${v.license || ""}`
+                  : "—"}
+              </div>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-[#16233F]" />
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-[#C8202F]">
+            <AlertCircle className="w-10 h-10 mx-auto mb-2" />
+            <p>Failed to load violator: {error.message}</p>
+          </div>
+        ) : !v ? (
+          <div className="p-8 text-center text-[#64748B]">
+            <AlertCircle className="w-10 h-10 mx-auto mb-2 text-[#94A3B8]" />
+            <p>No record found.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col max-h-[calc(92vh-100px)]">
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                {/* LEFT: SUMMARY */}
+                <div className="lg:col-span-1 p-7 space-y-6 border-r border-dashed border-[#CBD5E1] bg-[#F8F9FA]">
+                  <div className="flex flex-col items-center text-center">
+                    {v.profile_photo ? (
+                      <img src={getImageUrl(v.profile_photo)} alt={`${v.firstname} ${v.lastname}`}
+                        className="w-28 h-28 rounded-full object-cover border-4 border-white shadow-md"
+                        onError={(e) => { e.target.style.display = "none"; }} />
+                    ) : (
+                      <div className="w-28 h-28 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-3xl font-['Oswald'] font-semibold border-4 border-white shadow-md">
+                        {v.firstname?.[0]}{v.lastname?.[0]}
+                      </div>
+                    )}
+                    <p className="font-['Oswald'] text-xl leading-tight text-[#1F2937] mt-4">
+                      {v.lastname}, {v.firstname}{v.middlename ? ` ${v.middlename[0]}.` : ""}
+                    </p>
+                    <p className="text-xs text-[#64748B] mt-0.5">
+                      {v.gender} · {v.nationality}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#16233F] text-white uppercase tracking-wider">
+                        Violator
+                      </span>
+                      {violationNames.length >= 3 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#FBEAE2] text-[#C2541F] flex items-center gap-1">
+                          <AlertTriangle className="w-2.5 h-2.5" />
+                          Repeat offender
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <dl className="grid grid-cols-1 gap-y-3">
+                    <PreviewRow icon={CreditCard} label="License #" value={v.license || "—"} mono />
+                    <PreviewRow
+                      icon={CalendarDays}
+                      label="License Expiry"
+                      value={formatDate(v.expiry)}
+                      danger={isExpiringSoon(v.expiry)}
+                    />
+                    <PreviewRow icon={CalendarDays} label="Birthday" value={formatDate(v.birthday)} />
+                    {v.email && <PreviewRow icon={FileText} label="Email" value={v.email} mono />}
+                    {v.contact_number && <PreviewRow icon={Info} label="Contact" value={v.contact_number} mono />}
+                    {v.address && <PreviewRow icon={MapPin} label="Address" value={v.address} />}
+                  </dl>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-[#FBE7E9] border border-[#C8202F]/20 p-3">
+                      <p className="text-[10px] text-[#C8202F] uppercase tracking-wider mb-0.5">Violations</p>
+                      <p className="text-2xl font-['Oswald'] font-semibold text-[#C8202F] tabular-nums">
+                        {v.violations_committed_count ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-[#FBF1DC] border border-[#F0B429]/30 p-3">
+                      <p className="text-[10px] text-[#92600A] uppercase tracking-wider mb-0.5">Points</p>
+                      <p className="text-2xl font-['Oswald'] font-semibold text-[#92600A] tabular-nums">
+                        {v.total_points ?? 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-[#16233F] text-white p-3">
+                    <p className="text-[10px] text-[#C7CEDB] uppercase tracking-wider mb-0.5">Total Fines</p>
+                    <p className="text-xl font-['Oswald'] font-semibold tabular-nums">
+                      {formatPeso(v.total_fines)}
+                    </p>
+                  </div>
+
+                  {v.ticketed_by && (
+                    <div>
+                      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">Most recently ticketed by</p>
+                      <p className="text-sm font-medium text-[#16233F] flex items-center gap-1.5">
+                        <Shield className="w-3.5 h-3.5 text-[#F0B429]" />
+                        {v.ticketed_by}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* RIGHT: TICKETS + VIOLATIONS */}
+                <div className="lg:col-span-2 p-7 space-y-6">
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <AlertTriangle className="w-4 h-4 text-[#C2541F]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Violations Committed
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                      <span className="text-xs text-[#64748B]">
+                        {violationNames.length} distinct
+                      </span>
+                    </div>
+
+                    {violationNames.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8F9FA] p-8 text-center">
+                        <CheckCircle className="w-10 h-10 text-[#1E8449] mx-auto mb-2" />
+                        <p className="text-sm text-[#64748B]">
+                          No violations on record — clean record.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {violationNames.map((n) => (
+                          <span
+                            key={n}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium bg-[#FBEAE2] text-[#C2541F]"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <TicketIcon className="w-4 h-4 text-[#16233F]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Tickets Issued
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                      <span className="text-xs text-[#64748B]">
+                        {tickets.length} total
+                      </span>
+                    </div>
+
+                    {tickets.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8F9FA] p-8 text-center">
+                        <TicketIcon className="w-10 h-10 text-[#94A3B8] mx-auto mb-2" />
+                        <p className="text-sm text-[#64748B]">No tickets on record.</p>
+                      </div>
+                    ) : (
+                      <ol className="relative ml-2 border-l-2 border-dashed border-[#CBD5E1] space-y-4">
+                        {tickets.map((t) => {
+                          const meta = TICKET_STATUS[t.status] || TICKET_STATUS.issued;
+                          return (
+                            <li key={t.ticket_id} className="relative pl-6">
+                              <span
+                                className="absolute -left-[9px] top-3 w-4 h-4 rounded-full border-[3px] border-white ring-2"
+                                style={{
+                                  background: meta.color,
+                                  "--tw-ring-color": meta.color,
+                                }}
+                              />
+                              <div className="rounded-lg border border-[#E3E7EE] bg-white p-4 hover:shadow-md transition-shadow">
+                                <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-mono text-sm font-semibold text-[#16233F]">
+                                        {t.ticket_number}
+                                      </span>
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${meta.chip}`}>
+                                        {meta.label.toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-[#64748B] mt-1">
+                                      {formatDateTime(t.violation_datetime)}
+                                    </p>
+                                  </div>
+                                  <p className="text-lg font-['Oswald'] font-semibold text-[#C8202F] tabular-nums shrink-0">
+                                    {formatPeso(t.total_fine)}
+                                  </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2 mt-2 border-t border-dashed border-[#CBD5E1]">
+                                  {t.enforcer_name && (
+                                    <Spec label="Enforcer">
+                                      <span className="flex items-center gap-1">
+                                        <Shield className="w-3 h-3 text-[#94A3B8]" />
+                                        {t.enforcer_name}
+                                      </span>
+                                    </Spec>
+                                  )}
+                                  {t.vehicle_plate && (
+                                    <Spec label="Plate">
+                                      <span className="flex items-center gap-1">
+                                        <Car className="w-3 h-3 text-[#94A3B8]" />
+                                        {t.vehicle_plate}
+                                      </span>
+                                    </Spec>
+                                  )}
+                                  {t.location && (
+                                    <Spec label="Location">
+                                      <span className="flex items-center gap-1">
+                                        <MapPin className="w-3 h-3 text-[#94A3B8]" />
+                                        <span className="truncate">{t.location}</span>
+                                      </span>
+                                    </Spec>
+                                  )}
+                                </div>
+
+                                {t.violations?.length > 0 && (
+                                  <div className="mt-3 pt-3 border-t border-dashed border-[#CBD5E1]">
+                                    <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                                      Violations on this ticket
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {t.violations.map((tv, i) => (
+                                        <span
+                                          key={i}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#FBEAE2] text-[#C2541F]"
+                                        >
+                                          {tv.violation_name}
+                                          <span className="text-[#C8202F]">· {formatPeso(tv.fine_amount)}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )}
+                  </section>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+              <p className="text-xs text-[#64748B] flex items-center gap-2">
+                <Info className="w-3.5 h-3.5 text-[#94A3B8]" />
+                Click outside or press Esc to close.
+              </p>
+              <Button onClick={onClose} className="bg-[#16233F] hover:bg-[#0F1A2E] min-w-[120px]">
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 const VehiclesViolators = () => {
   const queryClient = useQueryClient();
   const notify = useAlert();
   const { isAdmin } = useAuth();
-  const [view, setView] = useState("list"); // "list" | "cards"
+  const [view, setView] = useState("list");
 
   /* ---------------- Violators state ---------------- */
   const [violatorPage, setViolatorPage] = useState(1);
   const [violatorSearchTerm, setViolatorSearchTerm] = useState("");
   const [isViolatorDialogOpen, setIsViolatorDialogOpen] = useState(false);
   const [editingViolator, setEditingViolator] = useState(null);
+  const [detailViolatorId, setDetailViolatorId] = useState(null);
+
   const [violatorFormData, setViolatorFormData] = useState({
     firstname: "",
     middlename: "",
@@ -340,7 +671,6 @@ const VehiclesViolators = () => {
   });
   const [violatorPhotoPreview, setViolatorPhotoPreview] = useState(null);
 
-  // Violator filters
   const [violatorShowFilters, setViolatorShowFilters] = useState(false);
   const [violatorFilters, setViolatorFilters] = useState({
     gender: "",
@@ -349,7 +679,7 @@ const VehiclesViolators = () => {
     expiry_to: "",
     created_from: "",
     created_to: "",
-    license_expiring: false, // only show expiring within 90 days
+    license_expiring: false,
   });
 
   /* ---------------- Vehicles state ---------------- */
@@ -365,7 +695,6 @@ const VehiclesViolators = () => {
     color: "",
   });
 
-  // Vehicle filters
   const [vehicleShowFilters, setVehicleShowFilters] = useState(false);
   const [vehicleFilters, setVehicleFilters] = useState({
     make: "",
@@ -391,6 +720,7 @@ const VehiclesViolators = () => {
   const {
     data: violatorsResponse,
     isLoading: violatorsLoading,
+    isFetching: violatorsFetching,
     refetch: refetchViolators,
     error: violatorsError,
   } = useQuery({
@@ -412,6 +742,7 @@ const VehiclesViolators = () => {
   const {
     data: vehiclesResponse,
     isLoading: vehiclesLoading,
+    isFetching: vehiclesFetching,
     refetch: refetchVehicles,
     error: vehiclesError,
   } = useQuery({
@@ -448,6 +779,7 @@ const VehiclesViolators = () => {
     mutationFn: ({ id, data }) => updateViolator(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries(["violators"]);
+      queryClient.invalidateQueries(["violator"]);
       setIsViolatorDialogOpen(false);
       resetViolatorForm();
       notify.success("Violator updated successfully");
@@ -506,6 +838,15 @@ const VehiclesViolators = () => {
       notify.error(error.response?.data?.message || "Error archiving vehicle");
     },
   });
+
+  /* ---------------- Refresh handler (shared) ---------------- */
+  const handleRefresh = () => {
+    refetchViolators();
+    refetchVehicles();
+    notify.toastInfo?.("Refreshed");
+  };
+
+  const isRefreshing = violatorsFetching || vehiclesFetching;
 
   /* ---------------- Helpers ---------------- */
   const getImageUrl = (profilePhoto) => {
@@ -692,8 +1033,6 @@ const VehiclesViolators = () => {
   const vehicles = getDataArray(vehiclesResponse);
   const isLoading = violatorsLoading || vehiclesLoading;
 
-  /* ---------------- Filter + Sort (client-side refinement) ---------------- */
-
   const filteredViolators = useMemo(() => {
     const term = debouncedViolatorSearch.trim().toLowerCase();
 
@@ -756,13 +1095,11 @@ const VehiclesViolators = () => {
           {violatorsError?.message || vehiclesError?.message}
         </p>
         <Button
-          onClick={() => {
-            refetchViolators();
-            refetchVehicles();
-          }}
+          onClick={handleRefresh}
           variant="outline"
           className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
         >
+          <RefreshCw className="w-4 h-4 mr-2" />
           Retry
         </Button>
       </div>
@@ -862,9 +1199,14 @@ const VehiclesViolators = () => {
           <h1 className="text-4xl font-['Oswald'] font-semibold tracking-tight">Vehicles &amp; Violators</h1>
           <p className="text-[#C7CEDB] text-sm mt-1">Manage vehicle and violator records</p>
         </div>
-        <Button onClick={() => { refetchViolators(); refetchVehicles(); }} variant="outline"
-          className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white">
-          <RefreshCw className="w-4 h-4 mr-2" />Refresh
+        <Button
+          onClick={handleRefresh}
+          variant="outline"
+          disabled={isRefreshing}
+          className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+          Refresh
         </Button>
       </header>
 
@@ -880,7 +1222,7 @@ const VehiclesViolators = () => {
         </TabsList>
 
         <TabsContent value="violators" className="mt-0">
-          <Section title="Violators List" hint="(alphabetical by last name)" icon={Users} accent="#F0B429"
+          <Section title="Violators List" hint="(click a row for details)" icon={Users} accent="#F0B429"
             placeholder="Search by name, license, violation, enforcer..." search={violatorSearchTerm} setSearch={setViolatorSearchTerm}
             showFilters={violatorShowFilters} setShowFilters={setViolatorShowFilters} count={violatorActiveFilterCount}
             panel={violatorPanel} chips={vChips} loading={violatorsLoading} items={filteredViolators}
@@ -893,9 +1235,16 @@ const VehiclesViolators = () => {
               const names = v.violation_names || [];
               const isRepeat = names.length >= 3;
               return (
-                <li key={v.violator_id}
+                <li
+                  key={v.violator_id}
+                  onClick={(e) => {
+                    // Don't open modal when clicking action buttons
+                    if (e.target.closest("button")) return;
+                    setDetailViolatorId(v.violator_id);
+                  }}
                   className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 border-l-4 hover:bg-[#F8F9FB] transition-colors ${VIOLATOR_ROW}`}
-                  style={{ borderLeftColor: soon ? "#C8202F" : isRepeat ? "#C2541F" : "transparent" }}>
+                  style={{ borderLeftColor: soon ? "#C8202F" : isRepeat ? "#C2541F" : "transparent" }}
+                >
                   <div className="flex items-center gap-3 min-w-0 w-full md:w-auto">
                     {v.profile_photo ? (
                       <img src={getImageUrl(v.profile_photo)} alt={`${v.firstname} ${v.lastname}`}
@@ -930,7 +1279,14 @@ const VehiclesViolators = () => {
               const names = v.violation_names || [];
               const isRepeat = names.length >= 3;
               return (
-                <article key={v.violator_id} className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
+                <article
+                  key={v.violator_id}
+                  onClick={(e) => {
+                    if (e.target.closest("button")) return;
+                    setDetailViolatorId(v.violator_id);
+                  }}
+                  className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
+                >
                   <div className="h-2" style={{ background: soon ? "#C8202F" : isRepeat ? "#C2541F" : "#F0B429" }} />
                   <div className="p-4 flex gap-4">
                     {v.profile_photo ? (
@@ -1010,7 +1366,14 @@ const VehiclesViolators = () => {
         </TabsContent>
       </Tabs>
 
-      {/* -------------------- VIOLATOR DIALOG (redesigned, 70% width) -------------------- */}
+      {/* -------- Violator details modal (row click) -------- */}
+      <ViolatorDetailsModal
+        violatorId={detailViolatorId}
+        open={!!detailViolatorId}
+        onClose={() => setDetailViolatorId(null)}
+      />
+
+      {/* -------- Violator add/edit dialog -------- */}
       <Dialog
         open={isViolatorDialogOpen}
         onOpenChange={(open) => {
@@ -1019,349 +1382,158 @@ const VehiclesViolators = () => {
         }}
       >
         <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
-          {/* -------- Header -------- */}
           <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
             <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
               <span className="w-10 h-10 rounded-lg bg-[#FBF1DC] flex items-center justify-center flex-shrink-0">
-                {editingViolator ? (
-                  <Pencil className="w-5 h-5 text-[#92600A]" />
-                ) : (
-                  <UserIcon className="w-5 h-5 text-[#92600A]" />
-                )}
+                {editingViolator ? <Pencil className="w-5 h-5 text-[#92600A]" /> : <UserIcon className="w-5 h-5 text-[#92600A]" />}
               </span>
               <div>
-                <div className="leading-tight">
-                  {editingViolator ? 'Edit Violator' : 'Add New Violator'}
-                </div>
+                <div className="leading-tight">{editingViolator ? 'Edit Violator' : 'Add New Violator'}</div>
                 <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
-                  {editingViolator
-                    ? `Update the details for ${editingViolator.firstname} ${editingViolator.lastname}`
-                    : 'Register a new violator and their license details'}
+                  {editingViolator ? `Update the details for ${editingViolator.firstname} ${editingViolator.lastname}` : 'Register a new violator and their license details'}
                 </div>
               </div>
             </DialogTitle>
           </DialogHeader>
 
-          <form
-            onSubmit={handleViolatorSubmit}
-            className="flex flex-col max-h-[calc(90vh-100px)]"
-          >
+          <form onSubmit={handleViolatorSubmit} className="flex flex-col max-h-[calc(90vh-100px)]">
             <div className="flex-1 overflow-y-auto">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-                {/* ============ LEFT: FORM FIELDS ============ */}
                 <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
-                  {/* ──── PHOTO ──── */}
                   <section>
                     <div className="flex items-center gap-2 mb-4">
                       <UserIcon className="w-4 h-4 text-[#F0B429]" />
-                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
-                        Photo
-                      </h3>
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">Photo</h3>
                       <span className="h-px flex-1 bg-[#E3E7EE]" />
                     </div>
-
                     <div className="flex items-center gap-5">
                       {violatorPhotoPreview ? (
                         <div className="relative flex-shrink-0">
-                          <img
-                            src={violatorPhotoPreview}
-                            alt="Preview"
-                            className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md"
-                          />
-                          <button
-                            type="button"
-                            className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-1 hover:bg-[#A01622]"
-                            onClick={() => {
-                              setViolatorPhotoPreview(null);
-                              setViolatorFormData({
-                                ...violatorFormData,
-                                profile_photo: null,
-                              });
-                            }}
-                            aria-label="Remove photo"
-                          >
+                          <img src={violatorPhotoPreview} alt="Preview" className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md" />
+                          <button type="button" className="absolute -top-1 -right-1 bg-[#C8202F] text-white rounded-full p-1 hover:bg-[#A01622]"
+                            onClick={() => { setViolatorPhotoPreview(null); setViolatorFormData({ ...violatorFormData, profile_photo: null }); }}
+                            aria-label="Remove photo">
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ) : (
                         <div className="w-24 h-24 flex-shrink-0 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-2xl font-['Oswald'] font-semibold border-4 border-white shadow-md">
-                          {violatorFormData.firstname?.[0] || '?'}
-                          {violatorFormData.lastname?.[0] || ''}
+                          {violatorFormData.firstname?.[0] || '?'}{violatorFormData.lastname?.[0] || ''}
                         </div>
                       )}
                       <div className="flex-1">
-                        <label
-                          htmlFor="violator_photo_input"
-                          className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-[#CBD5E1] rounded-lg cursor-pointer hover:border-[#16233F] hover:bg-[#F8F9FA] transition-colors"
-                        >
+                        <label htmlFor="violator_photo_input" className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-[#CBD5E1] rounded-lg cursor-pointer hover:border-[#16233F] hover:bg-[#F8F9FA] transition-colors">
                           <Car className="w-4 h-4 text-[#64748B]" />
-                          <span className="text-sm font-medium text-[#64748B]">
-                            {violatorPhotoPreview ? 'Change Photo' : 'Upload Photo'}
-                          </span>
-                          <input
-                            id="violator_photo_input"
-                            type="file"
-                            accept="image/*"
-                            onChange={handleViolatorPhotoChange}
-                            className="hidden"
-                          />
+                          <span className="text-sm font-medium text-[#64748B]">{violatorPhotoPreview ? 'Change Photo' : 'Upload Photo'}</span>
+                          <input id="violator_photo_input" type="file" accept="image/*" onChange={handleViolatorPhotoChange} className="hidden" />
                         </label>
-                        <p className="text-[11px] text-[#94A3B8] mt-1.5">
-                          JPG or PNG up to 2&nbsp;MB. Face should be clearly visible.
-                        </p>
+                        <p className="text-[11px] text-[#94A3B8] mt-1.5">JPG or PNG up to 2&nbsp;MB. Face should be clearly visible.</p>
                       </div>
                     </div>
                   </section>
 
-                  {/* ──── IDENTITY ──── */}
                   <section>
                     <div className="flex items-center gap-2 mb-4">
                       <IdCard className="w-4 h-4 text-[#F0B429]" />
-                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
-                        Identity
-                      </h3>
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">Identity</h3>
                       <span className="h-px flex-1 bg-[#E3E7EE]" />
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          First Name <span className="text-[#C8202F]">*</span>
-                        </label>
-                        <Input
-                          value={violatorFormData.firstname}
-                          onChange={(e) =>
-                            setViolatorFormData({
-                              ...violatorFormData,
-                              firstname: e.target.value,
-                            })
-                          }
-                          required
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">First Name <span className="text-[#C8202F]">*</span></label>
+                        <Input value={violatorFormData.firstname} onChange={(e) => setViolatorFormData({ ...violatorFormData, firstname: e.target.value })} required className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          Middle Name
-                        </label>
-                        <Input
-                          value={violatorFormData.middlename}
-                          onChange={(e) =>
-                            setViolatorFormData({
-                              ...violatorFormData,
-                              middlename: e.target.value,
-                            })
-                          }
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Middle Name</label>
+                        <Input value={violatorFormData.middlename} onChange={(e) => setViolatorFormData({ ...violatorFormData, middlename: e.target.value })} className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          Last Name <span className="text-[#C8202F]">*</span>
-                        </label>
-                        <Input
-                          value={violatorFormData.lastname}
-                          onChange={(e) =>
-                            setViolatorFormData({
-                              ...violatorFormData,
-                              lastname: e.target.value,
-                            })
-                          }
-                          required
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Last Name <span className="text-[#C8202F]">*</span></label>
+                        <Input value={violatorFormData.lastname} onChange={(e) => setViolatorFormData({ ...violatorFormData, lastname: e.target.value })} required className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          Gender
-                        </label>
-                        <select
-                          className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
-                          value={violatorFormData.gender}
-                          onChange={(e) =>
-                            setViolatorFormData({
-                              ...violatorFormData,
-                              gender: e.target.value,
-                            })
-                          }
-                        >
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Gender</label>
+                        <select className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
+                          value={violatorFormData.gender} onChange={(e) => setViolatorFormData({ ...violatorFormData, gender: e.target.value })}>
                           <option value="Male">Male</option>
                           <option value="Female">Female</option>
                           <option value="Other">Other</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          Nationality
-                        </label>
-                        <Input
-                          value={violatorFormData.nationality}
-                          onChange={(e) =>
-                            setViolatorFormData({
-                              ...violatorFormData,
-                              nationality: e.target.value,
-                            })
-                          }
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Nationality</label>
+                        <Input value={violatorFormData.nationality} onChange={(e) => setViolatorFormData({ ...violatorFormData, nationality: e.target.value })} className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                       <div>
                         <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
                           <CalendarDays className="w-3.5 h-3.5 text-[#92600A]" />
                           Birthday <span className="text-[#C8202F]">*</span>
                         </label>
-                        <Input
-                          type="date"
-                          value={violatorFormData.birthday}
-                          onChange={(e) =>
-                            setViolatorFormData({
-                              ...violatorFormData,
-                              birthday: e.target.value,
-                            })
-                          }
-                          required
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <Input type="date" value={violatorFormData.birthday} onChange={(e) => setViolatorFormData({ ...violatorFormData, birthday: e.target.value })} required className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                     </div>
                   </section>
 
-                  {/* ──── LICENSE ──── */}
                   <section>
                     <div className="flex items-center gap-2 mb-4">
                       <CreditCard className="w-4 h-4 text-[#F0B429]" />
-                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
-                        License
-                      </h3>
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">License</h3>
                       <span className="h-px flex-1 bg-[#E3E7EE]" />
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          License Number <span className="text-[#C8202F]">*</span>
-                        </label>
-                        <Input
-                          value={violatorFormData.license}
-                          onChange={(e) =>
-                            setViolatorFormData({
-                              ...violatorFormData,
-                              license: e.target.value.toUpperCase(),
-                            })
-                          }
-                          required
-                          className="focus-visible:ring-[#F0B429] h-11 font-mono tracking-wider"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">License Number <span className="text-[#C8202F]">*</span></label>
+                        <Input value={violatorFormData.license} onChange={(e) => setViolatorFormData({ ...violatorFormData, license: e.target.value.toUpperCase() })} required className="focus-visible:ring-[#F0B429] h-11 font-mono tracking-wider" />
                       </div>
                       <div>
                         <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
                           <CalendarDays className="w-3.5 h-3.5 text-[#92600A]" />
                           Expiry Date <span className="text-[#C8202F]">*</span>
                         </label>
-                        <Input
-                          type="date"
-                          value={violatorFormData.expiry}
-                          onChange={(e) =>
-                            setViolatorFormData({
-                              ...violatorFormData,
-                              expiry: e.target.value,
-                            })
-                          }
-                          required
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
-                        {violatorFormData.expiry &&
-                          new Date(violatorFormData.expiry) <= new Date() && (
-                            <p className="text-xs text-[#C8202F] mt-1.5 flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" />
-                              This license has already expired.
-                            </p>
-                          )}
+                        <Input type="date" value={violatorFormData.expiry} onChange={(e) => setViolatorFormData({ ...violatorFormData, expiry: e.target.value })} required className="focus-visible:ring-[#F0B429] h-11" />
+                        {violatorFormData.expiry && new Date(violatorFormData.expiry) <= new Date() && (
+                          <p className="text-xs text-[#C8202F] mt-1.5 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            This license has already expired.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </section>
                 </div>
 
-                {/* ============ RIGHT: PREVIEW ============ */}
                 <div className="p-7 space-y-6 bg-[#F8F9FA]">
                   <section>
                     <div className="flex items-center gap-2 mb-3">
                       <CheckCircle className="w-4 h-4 text-[#1E8449]" />
-                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
-                        Preview
-                      </h3>
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">Preview</h3>
                     </div>
                     <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
-                      <div
-                        className="h-1.5"
-                        style={{ background: '#F0B429' }}
-                      />
+                      <div className="h-1.5" style={{ background: '#F0B429' }} />
                       <div className="p-4">
                         <div className="flex items-center gap-3">
                           {violatorPhotoPreview ? (
-                            <img
-                              src={violatorPhotoPreview}
-                              alt=""
-                              className="w-12 h-12 rounded-full object-cover border border-[#E9ECF2] flex-shrink-0"
-                            />
+                            <img src={violatorPhotoPreview} alt="" className="w-12 h-12 rounded-full object-cover border border-[#E9ECF2] flex-shrink-0" />
                           ) : (
                             <div className="w-12 h-12 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-base font-bold flex-shrink-0">
-                              {violatorFormData.firstname?.[0] || '?'}
-                              {violatorFormData.lastname?.[0] || ''}
+                              {violatorFormData.firstname?.[0] || '?'}{violatorFormData.lastname?.[0] || ''}
                             </div>
                           )}
                           <div className="min-w-0">
                             <p className="font-['Oswald'] text-base leading-tight text-[#1F2937] truncate">
-                              {violatorFormData.lastname || 'Lastname'}
-                              {violatorFormData.firstname
-                                ? `, ${violatorFormData.firstname}`
-                                : ''}
+                              {violatorFormData.lastname || 'Lastname'}{violatorFormData.firstname ? `, ${violatorFormData.firstname}` : ''}
                             </p>
                             <p className="text-[11px] text-[#64748B]">
-                              {violatorFormData.gender}
-                              {violatorFormData.nationality
-                                ? ` · ${violatorFormData.nationality}`
-                                : ''}
+                              {violatorFormData.gender}{violatorFormData.nationality ? ` · ${violatorFormData.nationality}` : ''}
                             </p>
                           </div>
                         </div>
-
                         <dl className="grid grid-cols-1 gap-y-3 mt-4">
-                          <PreviewRow
-                            icon={CreditCard}
-                            label="License"
-                            value={violatorFormData.license || '—'}
-                            mono
-                          />
-                          <PreviewRow
-                            icon={CalendarDays}
-                            label="Expiry"
-                            value={
-                              violatorFormData.expiry
-                                ? new Date(
-                                  violatorFormData.expiry,
-                                ).toLocaleDateString()
-                                : '—'
-                            }
-                            danger={
-                              violatorFormData.expiry &&
-                              new Date(violatorFormData.expiry) <= new Date()
-                            }
-                          />
-                          <PreviewRow
-                            icon={CalendarDays}
-                            label="Birthday"
-                            value={
-                              violatorFormData.birthday
-                                ? new Date(
-                                  violatorFormData.birthday,
-                                ).toLocaleDateString()
-                                : '—'
-                            }
-                          />
+                          <PreviewRow icon={CreditCard} label="License" value={violatorFormData.license || '—'} mono />
+                          <PreviewRow icon={CalendarDays} label="Expiry" value={violatorFormData.expiry ? new Date(violatorFormData.expiry).toLocaleDateString() : '—'} danger={violatorFormData.expiry && new Date(violatorFormData.expiry) <= new Date()} />
+                          <PreviewRow icon={CalendarDays} label="Birthday" value={violatorFormData.birthday ? new Date(violatorFormData.birthday).toLocaleDateString() : '—'} />
                         </dl>
                       </div>
                     </div>
@@ -1373,18 +1545,9 @@ const VehiclesViolators = () => {
                       <div className="text-xs text-[#92600A] leading-relaxed">
                         <p className="font-semibold mb-1">Reminders</p>
                         <ul className="space-y-1 list-disc list-inside">
-                          <li>
-                            License numbers must be unique — a duplicate will be
-                            rejected by the server.
-                          </li>
-                          <li>
-                            Use uppercase letters for the license number; the field
-                            normalises automatically.
-                          </li>
-                          <li>
-                            A profile photo makes it easier to identify the violator
-                            during enforcement.
-                          </li>
+                          <li>License numbers must be unique — a duplicate will be rejected by the server.</li>
+                          <li>Use uppercase letters for the license number; the field normalises automatically.</li>
+                          <li>A profile photo makes it easier to identify the violator during enforcement.</li>
                         </ul>
                       </div>
                     </div>
@@ -1393,7 +1556,6 @@ const VehiclesViolators = () => {
               </div>
             </div>
 
-            {/* ============ STICKY FOOTER ============ */}
             <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
               <div className="text-xs text-[#64748B] flex items-center gap-2">
                 <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
@@ -1403,52 +1565,22 @@ const VehiclesViolators = () => {
                   <span>Enter the license number to continue.</span>
                 ) : (
                   <span>
-                    Ready to{' '}
-                    {editingViolator ? 'save changes to' : 'register'}{' '}
-                    <strong className="text-[#16233F]">
-                      {violatorFormData.firstname} {violatorFormData.lastname}
-                    </strong>
-                    .
+                    Ready to {editingViolator ? 'save changes to' : 'register'}{' '}
+                    <strong className="text-[#16233F]">{violatorFormData.firstname} {violatorFormData.lastname}</strong>.
                   </span>
                 )}
               </div>
               <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsViolatorDialogOpen(false)}
-                  className="min-w-[100px]"
-                  disabled={
-                    createViolatorMutation.isPending ||
-                    updateViolatorMutation.isPending
-                  }
-                >
+                <Button type="button" variant="outline" onClick={() => setIsViolatorDialogOpen(false)} className="min-w-[100px]" disabled={createViolatorMutation.isPending || updateViolatorMutation.isPending}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[180px]"
-                  disabled={
-                    createViolatorMutation.isPending ||
-                    updateViolatorMutation.isPending
-                  }
-                >
-                  {createViolatorMutation.isPending ||
-                    updateViolatorMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saving…
-                    </>
+                <Button type="submit" className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[180px]" disabled={createViolatorMutation.isPending || updateViolatorMutation.isPending}>
+                  {createViolatorMutation.isPending || updateViolatorMutation.isPending ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</>
                   ) : editingViolator ? (
-                    <>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Update Violator
-                    </>
+                    <><CheckCircle className="w-4 h-4 mr-2" />Update Violator</>
                   ) : (
-                    <>
-                      <UserIcon className="w-4 h-4 mr-2" />
-                      Create Violator
-                    </>
+                    <><UserIcon className="w-4 h-4 mr-2" />Create Violator</>
                   )}
                 </Button>
               </div>
@@ -1457,198 +1589,87 @@ const VehiclesViolators = () => {
         </DialogContent>
       </Dialog>
 
-      {/* -------------------- VEHICLE DIALOG (redesigned, 70% width) -------------------- */}
-      <Dialog
-        open={isVehicleDialogOpen}
-        onOpenChange={(open) => {
-          setIsVehicleDialogOpen(open);
-          if (!open) resetVehicleForm();
-        }}
-      >
+      {/* -------- Vehicle add/edit dialog -------- */}
+      <Dialog open={isVehicleDialogOpen} onOpenChange={(open) => { setIsVehicleDialogOpen(open); if (!open) resetVehicleForm(); }}>
         <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
-          {/* -------- Header -------- */}
           <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
             <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
               <span className="w-10 h-10 rounded-lg bg-[#E5F2EA] flex items-center justify-center flex-shrink-0">
-                {editingVehicle ? (
-                  <Pencil className="w-5 h-5 text-[#1E8449]" />
-                ) : (
-                  <Car className="w-5 h-5 text-[#1E8449]" />
-                )}
+                {editingVehicle ? <Pencil className="w-5 h-5 text-[#1E8449]" /> : <Car className="w-5 h-5 text-[#1E8449]" />}
               </span>
               <div>
-                <div className="leading-tight">
-                  {editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
-                </div>
+                <div className="leading-tight">{editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}</div>
                 <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
-                  {editingVehicle
-                    ? `Update the details for plate ${editingVehicle.platenumber}`
-                    : 'Register a new vehicle and its ownership details'}
+                  {editingVehicle ? `Update the details for plate ${editingVehicle.platenumber}` : 'Register a new vehicle and its ownership details'}
                 </div>
               </div>
             </DialogTitle>
           </DialogHeader>
 
-          <form
-            onSubmit={handleVehicleSubmit}
-            className="flex flex-col max-h-[calc(90vh-100px)]"
-          >
+          <form onSubmit={handleVehicleSubmit} className="flex flex-col max-h-[calc(90vh-100px)]">
             <div className="flex-1 overflow-y-auto">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-                {/* ============ LEFT: FORM FIELDS ============ */}
                 <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
-                  {/* ──── PLATE & OWNER ──── */}
                   <section>
                     <div className="flex items-center gap-2 mb-4">
                       <Car className="w-4 h-4 text-[#F0B429]" />
-                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
-                        Identification
-                      </h3>
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">Identification</h3>
                       <span className="h-px flex-1 bg-[#E3E7EE]" />
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          Plate Number <span className="text-[#C8202F]">*</span>
-                        </label>
-                        <Input
-                          value={vehicleFormData.platenumber}
-                          onChange={(e) =>
-                            setVehicleFormData({
-                              ...vehicleFormData,
-                              platenumber: e.target.value.toUpperCase(),
-                            })
-                          }
-                          required
-                          placeholder="ABC-1234"
-                          className="focus-visible:ring-[#F0B429] h-11 font-mono tracking-widest font-bold text-base"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Plate Number <span className="text-[#C8202F]">*</span></label>
+                        <Input value={vehicleFormData.platenumber} onChange={(e) => setVehicleFormData({ ...vehicleFormData, platenumber: e.target.value.toUpperCase() })} required placeholder="ABC-1234" className="focus-visible:ring-[#F0B429] h-11 font-mono tracking-widest font-bold text-base" />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          Owner Name <span className="text-[#C8202F]">*</span>
-                        </label>
-                        <Input
-                          value={vehicleFormData.owner}
-                          onChange={(e) =>
-                            setVehicleFormData({
-                              ...vehicleFormData,
-                              owner: e.target.value,
-                            })
-                          }
-                          required
-                          placeholder="Full name of registered owner"
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Owner Name <span className="text-[#C8202F]">*</span></label>
+                        <Input value={vehicleFormData.owner} onChange={(e) => setVehicleFormData({ ...vehicleFormData, owner: e.target.value })} required placeholder="Full name of registered owner" className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                     </div>
                   </section>
 
-                  {/* ──── VEHICLE DETAILS ──── */}
                   <section>
                     <div className="flex items-center gap-2 mb-4">
                       <Tag className="w-4 h-4 text-[#F0B429]" />
-                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
-                        Vehicle Details
-                      </h3>
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">Vehicle Details</h3>
                       <span className="h-px flex-1 bg-[#E3E7EE]" />
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          Make
-                        </label>
-                        <Input
-                          value={vehicleFormData.make}
-                          onChange={(e) =>
-                            setVehicleFormData({
-                              ...vehicleFormData,
-                              make: e.target.value,
-                            })
-                          }
-                          placeholder="Toyota, Honda, …"
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Make</label>
+                        <Input value={vehicleFormData.make} onChange={(e) => setVehicleFormData({ ...vehicleFormData, make: e.target.value })} placeholder="Toyota, Honda, …" className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">
-                          Model
-                        </label>
-                        <Input
-                          value={vehicleFormData.model}
-                          onChange={(e) =>
-                            setVehicleFormData({
-                              ...vehicleFormData,
-                              model: e.target.value,
-                            })
-                          }
-                          placeholder="Vios, Civic, …"
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Model</label>
+                        <Input value={vehicleFormData.model} onChange={(e) => setVehicleFormData({ ...vehicleFormData, model: e.target.value })} placeholder="Vios, Civic, …" className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                       <div>
                         <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
                           <Palette className="w-3.5 h-3.5 text-[#92600A]" />
                           Color
                         </label>
-                        <Input
-                          value={vehicleFormData.color}
-                          onChange={(e) =>
-                            setVehicleFormData({
-                              ...vehicleFormData,
-                              color: e.target.value,
-                            })
-                          }
-                          placeholder="White, Black, Red, …"
-                          className="focus-visible:ring-[#F0B429] h-11"
-                        />
+                        <Input value={vehicleFormData.color} onChange={(e) => setVehicleFormData({ ...vehicleFormData, color: e.target.value })} placeholder="White, Black, Red, …" className="focus-visible:ring-[#F0B429] h-11" />
                       </div>
                     </div>
                   </section>
                 </div>
 
-                {/* ============ RIGHT: PREVIEW ============ */}
                 <div className="p-7 space-y-6 bg-[#F8F9FA]">
                   <section>
                     <div className="flex items-center gap-2 mb-3">
                       <CheckCircle className="w-4 h-4 text-[#1E8449]" />
-                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
-                        Preview
-                      </h3>
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">Preview</h3>
                     </div>
                     <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
-                      <div
-                        className="h-1.5"
-                        style={{ background: '#1E8449' }}
-                      />
+                      <div className="h-1.5" style={{ background: '#1E8449' }} />
                       <div className="p-4">
-                        {/* Plate visual */}
                         <div className="rounded-md border-2 border-[#16233F] bg-[#FFF6D6] py-2.5 text-center font-mono text-lg font-bold tracking-[0.25em] text-[#16233F]">
                           {vehicleFormData.platenumber || 'ABC-0000'}
                         </div>
-
                         <dl className="grid grid-cols-1 gap-y-3 mt-4">
-                          <PreviewRow
-                            icon={UserIcon}
-                            label="Owner"
-                            value={vehicleFormData.owner || '—'}
-                          />
-                          <PreviewRow
-                            icon={Car}
-                            label="Make / Model"
-                            value={
-                              [vehicleFormData.make, vehicleFormData.model]
-                                .filter(Boolean)
-                                .join(' ') || '—'
-                            }
-                          />
-                          <PreviewRow
-                            icon={Palette}
-                            label="Color"
-                            value={vehicleFormData.color || '—'}
-                          />
+                          <PreviewRow icon={UserIcon} label="Owner" value={vehicleFormData.owner || '—'} />
+                          <PreviewRow icon={Car} label="Make / Model" value={[vehicleFormData.make, vehicleFormData.model].filter(Boolean).join(' ') || '—'} />
+                          <PreviewRow icon={Palette} label="Color" value={vehicleFormData.color || '—'} />
                         </dl>
                       </div>
                     </div>
@@ -1660,17 +1681,9 @@ const VehiclesViolators = () => {
                       <div className="text-xs text-[#1E8449] leading-relaxed">
                         <p className="font-semibold mb-1">Reminders</p>
                         <ul className="space-y-1 list-disc list-inside">
-                          <li>
-                            Plate numbers must be unique — a duplicate will be
-                            rejected or returned as an existing record.
-                          </li>
-                          <li>
-                            Enter the plate exactly as it appears on the physical
-                            plate, without spaces.
-                          </li>
-                          <li>
-                            Owner name should match the registered owner in the CR.
-                          </li>
+                          <li>Plate numbers must be unique — a duplicate will be rejected.</li>
+                          <li>Enter the plate exactly as it appears on the physical plate, without spaces.</li>
+                          <li>Owner name should match the registered owner in the CR.</li>
                         </ul>
                       </div>
                     </div>
@@ -1679,7 +1692,6 @@ const VehiclesViolators = () => {
               </div>
             </div>
 
-            {/* ============ STICKY FOOTER ============ */}
             <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
               <div className="text-xs text-[#64748B] flex items-center gap-2">
                 <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
@@ -1689,52 +1701,22 @@ const VehiclesViolators = () => {
                   <span>Enter the owner name to continue.</span>
                 ) : (
                   <span>
-                    Ready to{' '}
-                    {editingVehicle ? 'save changes to' : 'register'}{' '}
-                    <strong className="text-[#16233F] font-mono">
-                      {vehicleFormData.platenumber}
-                    </strong>
-                    .
+                    Ready to {editingVehicle ? 'save changes to' : 'register'}{' '}
+                    <strong className="text-[#16233F] font-mono">{vehicleFormData.platenumber}</strong>.
                   </span>
                 )}
               </div>
               <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsVehicleDialogOpen(false)}
-                  className="min-w-[100px]"
-                  disabled={
-                    createVehicleMutation.isPending ||
-                    updateVehicleMutation.isPending
-                  }
-                >
+                <Button type="button" variant="outline" onClick={() => setIsVehicleDialogOpen(false)} className="min-w-[100px]" disabled={createVehicleMutation.isPending || updateVehicleMutation.isPending}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[180px]"
-                  disabled={
-                    createVehicleMutation.isPending ||
-                    updateVehicleMutation.isPending
-                  }
-                >
-                  {createVehicleMutation.isPending ||
-                    updateVehicleMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saving…
-                    </>
+                <Button type="submit" className="bg-[#1E8449] hover:bg-[#186B3B] min-w-[180px]" disabled={createVehicleMutation.isPending || updateVehicleMutation.isPending}>
+                  {createVehicleMutation.isPending || updateVehicleMutation.isPending ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</>
                   ) : editingVehicle ? (
-                    <>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Update Vehicle
-                    </>
+                    <><CheckCircle className="w-4 h-4 mr-2" />Update Vehicle</>
                   ) : (
-                    <>
-                      <Car className="w-4 h-4 mr-2" />
-                      Create Vehicle
-                    </>
+                    <><Car className="w-4 h-4 mr-2" />Create Vehicle</>
                   )}
                 </Button>
               </div>
