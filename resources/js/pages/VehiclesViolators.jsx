@@ -843,7 +843,6 @@ const VehiclesViolators = () => {
   const handleRefresh = () => {
     refetchViolators();
     refetchVehicles();
-    notify.toastInfo?.("Refreshed");
   };
 
   const isRefreshing = violatorsFetching || vehiclesFetching;

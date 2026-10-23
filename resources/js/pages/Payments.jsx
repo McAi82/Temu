@@ -113,6 +113,14 @@ const STATUS_OPTIONS = Object.keys(STATUS_META).map((key) => ({
 
 const METHOD_OPTIONS = [{ value: 'cash', label: 'Cash' }];
 
+const handleRefresh = () => {
+    // Always refetch the pending list (that's the active default tab).
+    refetchPending();
+    if (tab === 'history') {
+        refetchHistory();
+    }
+};
+
 const PRESETS = [
     { label: 'Today', days: 0 },
     { label: 'Last 7d', days: 6 },
@@ -413,11 +421,12 @@ const Payments = () => {
 
     /* ---------- Queries ---------- */
     const {
-        data: pendingResponse,
-        isLoading: pendingLoading,
-        refetch: refetchPending,
-        error: pendingError,
-    } = useQuery({
+    data: pendingResponse,
+    isLoading: pendingLoading,
+    isFetching: pendingFetching,
+    refetch: refetchPending,
+    error: pendingError,
+} = useQuery({
         queryKey: ['payments-pending', pendingPage, pendingSearch],
         queryFn: () =>
             getPendingPayments(pendingPage, ITEMS_PER_PAGE, {
@@ -428,11 +437,12 @@ const Payments = () => {
     });
 
     const {
-        data: historyResponse,
-        isLoading: historyLoading,
-        refetch: refetchHistory,
-        error: historyError,
-    } = useQuery({
+    data: historyResponse,
+    isLoading: historyLoading,
+    isFetching: historyFetching,
+    refetch: refetchHistory,
+    error: historyError,
+} = useQuery({
         queryKey: ['payments-history', historyPage, historySearch, historyFilters],
         queryFn: () =>
             getPayments(historyPage, ITEMS_PER_PAGE, {
@@ -1004,18 +1014,16 @@ const Payments = () => {
                     </p>
                 </div>
                 <Button
-  onClick={() => {
-    refetchPending();
-    refetchHistory();
-  }}
-  variant="outline"
-  disabled={pendingLoading || historyLoading}
-  className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
+    onClick={handleRefresh}
+    variant="outline"
+    disabled={pendingFetching || historyFetching}
+    className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
 >
-  <RefreshCw
-    className={`w-4 h-4 mr-2 ${pendingLoading || historyLoading ? "animate-spin" : ""}`}
-  />
-  Refresh
+    <RefreshCw
+        className={`w-4 h-4 mr-2 ${pendingFetching || historyFetching ? 'animate-spin' : ''
+            }`}
+    />
+    Refresh
 </Button>
             </header>
 
