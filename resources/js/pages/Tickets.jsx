@@ -3,11 +3,18 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 import { Pagination } from '../components/ui/Pagination';
 import ActionButton from '../components/ui/ActionButton';
 import { byFields } from '../lib/sortBy';
 import {
   getTickets,
+  getTicket,
   updateTicketStatus,
   deleteTicket,
   getUsers,
@@ -30,6 +37,15 @@ import {
   Ticket as TicketIcon,
   Clock,
   AlertTriangle,
+  User as UserIcon,
+  Car,
+  MapPin,
+  FileText,
+  Shield,
+  Banknote,
+  Copy,
+  Check,
+  PhilippinePeso,
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
 
@@ -116,6 +132,64 @@ const getMeta = (response) => {
     };
   }
   return { current_page: 1, last_page: 1, total: 0 };
+};
+
+const formatDate = (v) => {
+  if (!v) return '—';
+  try {
+    return new Date(v).toLocaleDateString('en-PH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return '—';
+  }
+};
+
+const formatDateTime = (v) => {
+  if (!v) return '—';
+  try {
+    return new Date(v).toLocaleString('en-PH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '—';
+  }
+};
+
+const formatPeso = (n) =>
+  `₱${(parseFloat(n) || 0).toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const copyText = async (text) => {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy */
+  }
+  try {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.position = 'fixed';
+    el.style.left = '-9999px';
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
 };
 
 const Chip = ({ label, onClear }) => (
@@ -209,7 +283,7 @@ const Spec = ({ label, children, mono, danger }) => (
 );
 
 /* ============================================================
- *  Due / Overdue badge — used in both list and card views
+ *  Due / Overdue badge
  * ============================================================ */
 const DueBadge = ({ ticket, compact = false }) => {
   if (!ticket?.payment_due_at) {
@@ -223,7 +297,6 @@ const DueBadge = ({ ticket, compact = false }) => {
     year: 'numeric',
   });
 
-  // Paid or dismissed tickets don't need urgency styling.
   if (ticket.status === 'paid' || ticket.status === 'dismissed') {
     return <span className="text-sm text-[#64748B]">{dueLabel}</span>;
   }
@@ -271,8 +344,369 @@ const DueBadge = ({ ticket, compact = false }) => {
   );
 };
 
+const PreviewRow = ({ icon: Icon, label, value, mono, danger }) => (
+  <div className="flex items-start gap-2.5">
+    <div className="w-7 h-7 rounded-md bg-[#F5F6F8] flex items-center justify-center flex-shrink-0">
+      <Icon className="w-3.5 h-3.5 text-[#64748B]" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">
+        {label}
+      </p>
+      <p
+        className={`text-sm truncate ${mono ? 'font-mono text-[#16233F]' : 'text-[#1F2937]'
+          } ${danger ? 'text-[#C8202F] font-medium' : ''}`}
+      >
+        {value}
+      </p>
+    </div>
+  </div>
+);
+
+/* ============================================================
+ *  Ticket Details Modal — read-only
+ * ============================================================ */
+const TicketDetailsModal = ({ ticketId, open, onClose }) => {
+  const [copied, setCopied] = useState(null);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['ticket', ticketId],
+    queryFn: () => getTicket(ticketId),
+    enabled: !!ticketId && open,
+    staleTime: 1000 * 30,
+  });
+
+  const t = data?.data || data;
+
+  const handleCopy = async (label, value) => {
+    const ok = await copyText(value);
+    if (ok) {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    }
+  };
+
+  const meta = t ? STATUS_META[t.status] || STATUS_META.issued : STATUS_META.issued;
+  const totalFine = (t?.violations || []).reduce(
+    (s, v) => s + (parseFloat(v.fine_amount) || 0),
+    0,
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[85vw] max-w-[1100px] max-h-[92vh] overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+          <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+            <span className="w-10 h-10 rounded-lg bg-[#E9ECF2] flex items-center justify-center flex-shrink-0">
+              <TicketIcon className="w-5 h-5 text-[#16233F]" />
+            </span>
+            <div>
+              <div className="leading-tight">Ticket Details</div>
+              <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                {isLoading
+                  ? 'Loading…'
+                  : t
+                  ? `${t.ticket_number} · ${t.violator?.firstname || ''} ${t.violator?.lastname || ''}`.trim()
+                  : '—'}
+              </div>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-[#16233F]" />
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-[#C8202F]">
+            <AlertCircle className="w-10 h-10 mx-auto mb-2" />
+            <p>Failed to load ticket: {error.message}</p>
+          </div>
+        ) : !t ? (
+          <div className="p-8 text-center text-[#64748B]">
+            <AlertCircle className="w-10 h-10 mx-auto mb-2 text-[#94A3B8]" />
+            <p>No record found.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col max-h-[calc(92vh-100px)]">
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                {/* ─── LEFT: Summary ─── */}
+                <div className="lg:col-span-1 p-7 space-y-6 border-r border-dashed border-[#CBD5E1] bg-[#F8F9FA]">
+                  <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
+                    <div
+                      className="h-1.5"
+                      style={{
+                        background:
+                          t.status === 'issued' && t.is_overdue
+                            ? '#C8202F'
+                            : meta.color,
+                      }}
+                    />
+                    <div className="p-4 text-center">
+                      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                        Ticket Number
+                      </p>
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="font-mono text-lg font-bold text-[#16233F]">
+                          {t.ticket_number}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('ticket', t.ticket_number)}
+                          className="p-1 rounded text-[#94A3B8] hover:text-[#16233F] hover:bg-[#F1F5F9]"
+                          title="Copy"
+                        >
+                          {copied === 'ticket' ? (
+                            <Check className="w-3.5 h-3.5 text-[#1E8449]" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-1.5 mt-3">
+                        {t.status === 'issued' && t.is_overdue && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#C8202F] text-white">
+                            <AlertTriangle className="w-3 h-3" />
+                            Overdue
+                          </span>
+                        )}
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${meta.chip}`}
+                        >
+                          {meta.label}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                      Total Fine
+                    </p>
+                    <p className="font-['Oswald'] text-3xl font-semibold text-[#C8202F] tabular-nums">
+                      {formatPeso(totalFine)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                      Payment due
+                    </p>
+                    <DueBadge ticket={t} />
+                  </div>
+
+                  <div className="space-y-3 pt-4 border-t border-dashed border-[#CBD5E1]">
+                    <PreviewRow
+                      icon={Calendar}
+                      label="Violation Date"
+                      value={formatDateTime(t.violation_datetime)}
+                    />
+                    <PreviewRow
+                      icon={Calendar}
+                      label="Payment Due Date"
+                      value={formatDateTime(t.payment_due_at)}
+                    />
+                    <PreviewRow
+                      icon={MapPin}
+                      label="Location"
+                      value={t.location || '—'}
+                    />
+                  </div>
+                </div>
+
+                {/* ─── RIGHT: Details ─── */}
+                <div className="lg:col-span-2 p-7 space-y-6">
+                  {/* Violator */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <UserIcon className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Violator
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+                    <div className="rounded-xl border border-[#E3E7EE] bg-white p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <Spec label="Name">
+                        {t.violator?.firstname} {t.violator?.lastname}
+                      </Spec>
+                      <Spec label="License" mono>
+                        {t.violator?.license || '—'}
+                      </Spec>
+                      <Spec label="License Expiry">
+                        {formatDate(t.violator?.expiry)}
+                      </Spec>
+                      <Spec label="Gender">{t.violator?.gender || '—'}</Spec>
+                      <Spec label="Contact" mono>
+                        {t.violator?.contact_number || '—'}
+                      </Spec>
+                      <Spec label="Nationality">
+                        {t.violator?.nationality || '—'}
+                      </Spec>
+                    </div>
+                  </section>
+
+                  {/* Vehicle */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Car className="w-4 h-4 text-[#1E8449]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Vehicle
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+                    <div className="rounded-xl border border-[#E3E7EE] bg-white p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <Spec label="Plate" mono>
+                        {t.vehicle?.platenumber || '—'}
+                      </Spec>
+                      <Spec label="Make">{t.vehicle?.make || '—'}</Spec>
+                      <Spec label="Model">{t.vehicle?.model || '—'}</Spec>
+                      <Spec label="Color">{t.vehicle?.color || '—'}</Spec>
+                      <Spec label="Owner">{t.vehicle?.owner || '—'}</Spec>
+                      <Spec label="Body Type">
+                        {t.vehicle?.body_type || '—'}
+                      </Spec>
+                    </div>
+                  </section>
+
+                  {/* Violations */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <AlertCircle className="w-4 h-4 text-[#C2541F]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Violations
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                      <span className="text-xs text-[#64748B] tabular-nums">
+                        {t.violations?.length || 0}{' '}
+                        {t.violations?.length === 1 ? 'item' : 'items'}
+                      </span>
+                    </div>
+
+                    {t.violations?.length ? (
+                      <ul className="space-y-2">
+                        {t.violations.map((v, i) => (
+                          <li
+                            key={i}
+                            className="rounded-lg border border-[#E3E7EE] bg-white p-3 flex items-start gap-3"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-[#FBEAE2] flex items-center justify-center flex-shrink-0">
+                              <AlertCircle className="w-4 h-4 text-[#C2541F]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-[#1F2937] truncate">
+                                {v.violation_type?.violation_name ||
+                                  v.violation_name ||
+                                  'Violation'}
+                              </p>
+                              {v.violation_type?.description && (
+                                <p className="text-xs text-[#64748B] mt-0.5 line-clamp-2">
+                                  {v.violation_type.description}
+                                </p>
+                              )}
+                              {v.violation_type?.category && (
+                                <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mt-1">
+                                  {v.violation_type.category}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-sm font-semibold text-[#C8202F] tabular-nums">
+                                {formatPeso(v.fine_amount)}
+                              </p>
+                              {v.demerit_points > 0 && (
+                                <p className="text-[10px] text-[#94A3B8]">
+                                  {v.demerit_points} pts
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8F9FA] p-8 text-center">
+                        <p className="text-sm text-[#64748B]">
+                          No violations on record for this ticket.
+                        </p>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Enforcer */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Shield className="w-4 h-4 text-[#16233F]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Issued By
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+                    <div className="rounded-xl border border-[#E3E7EE] bg-white p-4 grid grid-cols-2 gap-3">
+                      <Spec label="Enforcer">
+                        {t.enforcer?.firstname} {t.enforcer?.lastname}
+                      </Spec>
+                      <Spec label="Email" mono>
+                        {t.enforcer?.email || '—'}
+                      </Spec>
+                    </div>
+                  </section>
+
+                  {t.remarks && (
+                    <section>
+                      <div className="flex items-center gap-2 mb-4">
+                        <FileText className="w-4 h-4 text-[#92600A]" />
+                        <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                          Remarks
+                        </h3>
+                        <span className="h-px flex-1 bg-[#E3E7EE]" />
+                      </div>
+                      <div className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4 text-sm text-[#92600A]">
+                        {t.remarks}
+                      </div>
+                    </section>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ─── Footer ─── */}
+            <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+              <div className="text-xs text-[#64748B] flex items-center gap-2">
+                <Info className="w-3.5 h-3.5 text-[#94A3B8]" />
+                <span>Read-only view. Use Payments page to record settlement.</span>
+              </div>
+              <Button
+                onClick={onClose}
+                className="bg-[#16233F] hover:bg-[#0F1A2E] min-w-[120px]"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+/* Small icon used in footer above; declare inline to avoid extra import */
+const Info = (props) => (
+  <svg
+    {...props}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4M12 8h.01" />
+  </svg>
+);
+
 const ROW_CLASS =
-  'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
+  'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 cursor-pointer ' +
   'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,14rem)] md:gap-4';
 
 const Tickets = () => {
@@ -291,11 +725,21 @@ const Tickets = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
 
+  const [detailTicketId, setDetailTicketId] = useState(null);
+
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, dateFrom, dateTo, enforcerId, violationId, overdueOnly]);
+  }, [
+    debouncedSearch,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    enforcerId,
+    violationId,
+    overdueOnly,
+  ]);
 
   const { data: enforcersResponse } = useQuery({
     queryKey: ['users', 'enforcer'],
@@ -350,6 +794,7 @@ const Tickets = () => {
     mutationFn: ({ id, status }) => updateTicketStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      queryClient.invalidateQueries({ queryKey: ['ticket'] });
       notify.success('Ticket status updated successfully');
     },
     onError: (err) => {
@@ -433,13 +878,23 @@ const Tickets = () => {
     if (violationId) c++;
     if (overdueOnly) c++;
     return c;
-  }, [searchTerm, statusFilter, dateFrom, dateTo, enforcerId, violationId, overdueOnly]);
+  }, [
+    searchTerm,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    enforcerId,
+    violationId,
+    overdueOnly,
+  ]);
 
   const filteredTickets = useMemo(() => {
     let list = tickets;
 
     if (overdueOnly) {
-      list = list.filter((t) => t.status === 'issued' && t.is_overdue === true);
+      list = list.filter(
+        (t) => t.status === 'issued' && t.is_overdue === true,
+      );
     }
 
     return [...list].sort((a, b) => {
@@ -453,7 +908,9 @@ const Tickets = () => {
   }, [tickets, overdueOnly]);
 
   const overdueCount = useMemo(
-    () => tickets.filter((t) => t.status === 'issued' && t.is_overdue === true).length,
+    () =>
+      tickets.filter((t) => t.status === 'issued' && t.is_overdue === true)
+        .length,
     [tickets],
   );
 
@@ -482,15 +939,17 @@ const Tickets = () => {
       },
     ],
     enforcerId && [
-      `Enforcer: ${enforcers.find((u) => String(u.user_id) === String(enforcerId))
-        ?.firstname || enforcerId
+      `Enforcer: ${
+        enforcers.find((u) => String(u.user_id) === String(enforcerId))
+          ?.firstname || enforcerId
       }`,
       () => setEnforcerId(''),
     ],
     violationId && [
-      `Violation: ${violations.find(
-        (v) => String(v.violation_id) === String(violationId),
-      )?.violation_name || violationId
+      `Violation: ${
+        violations.find(
+          (v) => String(v.violation_id) === String(violationId),
+        )?.violation_name || violationId
       }`,
       () => setViolationId(''),
     ],
@@ -510,17 +969,9 @@ const Tickets = () => {
     );
   };
 
+  /* Only Dismiss + Archive remain — Mark Paid is gone. */
   const rowActions = (ticket) => (
     <div className="flex flex-wrap gap-2">
-      {ticket.status === 'issued' && (
-        <ActionButton
-          icon={CheckCircle}
-          variant="primary"
-          onClick={() => handleStatusUpdate(ticket.ticket_id, 'paid')}
-        >
-          Mark Paid
-        </ActionButton>
-      )}
       {ticket.status === 'paid' && (
         <ActionButton
           icon={XCircle}
@@ -540,6 +991,8 @@ const Tickets = () => {
       </ActionButton>
     </div>
   );
+
+  const openDetails = (ticketId) => setDetailTicketId(ticketId);
 
   const panel = (
     <FilterShell
@@ -565,9 +1018,7 @@ const Tickets = () => {
           />
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mt-2">
-          <span className="text-xs text-[#92600A]/70 mr-1">
-            Quick:
-          </span>
+          <span className="text-xs text-[#92600A]/70 mr-1">Quick:</span>
           {PRESETS.map((p) => (
             <button
               key={p.label}
@@ -591,10 +1042,11 @@ const Tickets = () => {
                 key={opt.value}
                 type="button"
                 onClick={() => toggleStatus(opt.value)}
-                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${active
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
+                  active
                     ? 'bg-[#16233F] text-white border-[#16233F]'
                     : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
-                  }`}
+                }`}
               >
                 {opt.label}
               </button>
@@ -690,7 +1142,8 @@ const Tickets = () => {
             Tickets Management
           </h1>
           <p className="text-[#C7CEDB] text-sm mt-1">
-            View, filter, and manage all traffic violation tickets
+            Click any ticket to see details. Record payments from the Payments
+            page.
           </p>
         </div>
         <div className="relative flex items-center gap-3">
@@ -707,8 +1160,9 @@ const Tickets = () => {
             className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-70"
           >
             <RefreshCw
-              className={`w-4 h-4 mr-2 transition-transform ${refreshing ? 'animate-spin' : ''
-                }`}
+              className={`w-4 h-4 mr-2 transition-transform ${
+                refreshing ? 'animate-spin' : ''
+              }`}
             />
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </Button>
@@ -716,8 +1170,9 @@ const Tickets = () => {
       </header>
 
       <div
-        className={`grid gap-6 ${showFilters ? 'lg:grid-cols-[300px_minmax(0,1fr)]' : ''
-          }`}
+        className={`grid gap-6 ${
+          showFilters ? 'lg:grid-cols-[300px_minmax(0,1fr)]' : ''
+        }`}
       >
         {showFilters && panel}
 
@@ -741,19 +1196,21 @@ const Tickets = () => {
               type="button"
               onClick={() => setOverdueOnly((v) => !v)}
               aria-pressed={overdueOnly}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium transition-colors ${overdueOnly
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium transition-colors ${
+                overdueOnly
                   ? 'bg-[#C8202F] text-white border-[#C8202F] hover:bg-[#A01622]'
                   : 'bg-white text-[#C8202F] border-[#C8202F]/30 hover:bg-[#FBE7E9]'
-                }`}
+              }`}
             >
               <AlertTriangle className="w-4 h-4" />
               Overdue
               {overdueCount > 0 && (
                 <span
-                  className={`ml-1 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${overdueOnly
+                  className={`ml-1 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${
+                    overdueOnly
                       ? 'bg-white/20 text-white'
                       : 'bg-[#FBE7E9] text-[#C8202F]'
-                    }`}
+                  }`}
                 >
                   {overdueCount}
                 </span>
@@ -794,7 +1251,7 @@ const Tickets = () => {
             <TicketIcon className="w-5 h-5 text-[#F0B429]" />
             Tickets List
             <span className="text-xs font-normal text-[#64748B] font-['Inter']">
-              (alphabetical by violator)
+              (click a row for details)
             </span>
           </h2>
 
@@ -809,8 +1266,8 @@ const Tickets = () => {
                 {overdueOnly
                   ? 'No overdue tickets on this page. 🎉'
                   : activeFilterCount > 0
-                    ? 'No tickets match the current filters.'
-                    : 'No tickets found.'}
+                  ? 'No tickets match the current filters.'
+                  : 'No tickets found.'}
               </p>
               {(activeFilterCount > 0 || overdueOnly) && (
                 <button
@@ -824,19 +1281,28 @@ const Tickets = () => {
           ) : view === 'cards' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredTickets.map((ticket) => {
-                const meta = STATUS_META[ticket.status] || STATUS_META.issued;
-                const isOverdue = ticket.status === 'issued' && ticket.is_overdue === true;
+                const meta =
+                  STATUS_META[ticket.status] || STATUS_META.issued;
+                const isOverdue =
+                  ticket.status === 'issued' && ticket.is_overdue === true;
                 return (
                   <article
                     key={ticket.ticket_id}
-                    className={`rounded-xl bg-white border overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 ${isOverdue
+                    onClick={(e) => {
+                      if (e.target.closest('button')) return;
+                      openDetails(ticket.ticket_id);
+                    }}
+                    className={`rounded-xl bg-white border overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer ${
+                      isOverdue
                         ? 'border-[#C8202F]/40 ring-1 ring-[#C8202F]/20'
                         : 'border-[#E3E7EE]'
-                      }`}
+                    }`}
                   >
                     <div
                       className="h-2"
-                      style={{ background: isOverdue ? '#C8202F' : meta.color }}
+                      style={{
+                        background: isOverdue ? '#C8202F' : meta.color,
+                      }}
                     />
                     <div className="p-4">
                       <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
@@ -854,7 +1320,8 @@ const Tickets = () => {
                         </div>
                       </div>
                       <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
-                        {ticket.violator?.firstname} {ticket.violator?.lastname}
+                        {ticket.violator?.firstname}{' '}
+                        {ticket.violator?.lastname}
                       </p>
                       <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3">
                         <Spec label="Plate" mono>
@@ -865,7 +1332,9 @@ const Tickets = () => {
                         </Spec>
                         <Spec label="Date">
                           {ticket.violation_datetime
-                            ? new Date(ticket.violation_datetime).toLocaleDateString()
+                            ? new Date(
+                                ticket.violation_datetime,
+                              ).toLocaleDateString()
                             : '—'}
                         </Spec>
                         <Spec label="Total fine" danger>
@@ -915,15 +1384,25 @@ const Tickets = () => {
               </div>
               <ul className="divide-y divide-[#EEF0F4]">
                 {filteredTickets.map((ticket) => {
-                  const meta = STATUS_META[ticket.status] || STATUS_META.issued;
-                  const isOverdue = ticket.status === 'issued' && ticket.is_overdue === true;
+                  const meta =
+                    STATUS_META[ticket.status] || STATUS_META.issued;
+                  const isOverdue =
+                    ticket.status === 'issued' &&
+                    ticket.is_overdue === true;
                   return (
                     <li
                       key={ticket.ticket_id}
-                      className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0 ${isOverdue ? 'bg-[#FEF6F7]' : ''
-                        }`}
+                      onClick={(e) => {
+                        if (e.target.closest('button')) return;
+                        openDetails(ticket.ticket_id);
+                      }}
+                      className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0 ${
+                        isOverdue ? 'bg-[#FEF6F7]' : ''
+                      }`}
                       style={{
-                        borderLeftColor: isOverdue ? '#C8202F' : meta.color,
+                        borderLeftColor: isOverdue
+                          ? '#C8202F'
+                          : meta.color,
                       }}
                     >
                       <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate flex items-center gap-1.5">
@@ -934,12 +1413,15 @@ const Tickets = () => {
                             title="Overdue"
                           />
                         )}
-                        <span className="truncate">{ticket.ticket_number}</span>
+                        <span className="truncate">
+                          {ticket.ticket_number}
+                        </span>
                       </span>
 
                       <div className="min-w-0">
                         <div className="text-sm text-[#1F2937] truncate">
-                          {ticket.violator?.firstname} {ticket.violator?.lastname}
+                          {ticket.violator?.firstname}{' '}
+                          {ticket.violator?.lastname}
                         </div>
                         <div className="text-xs text-[#64748B] font-mono truncate">
                           {ticket.violator?.license}
@@ -952,11 +1434,16 @@ const Tickets = () => {
                       </span>
 
                       <div className="space-y-0.5 min-w-0">
-                        {ticket.violations?.slice(0, 2).map((v, i) => (
-                          <div key={i} className="text-xs text-[#1F2937] truncate">
-                            {v.violation_type?.violation_name}
-                          </div>
-                        ))}
+                        {ticket.violations
+                          ?.slice(0, 2)
+                          .map((v, i) => (
+                            <div
+                              key={i}
+                              className="text-xs text-[#1F2937] truncate"
+                            >
+                              {v.violation_type?.violation_name}
+                            </div>
+                          ))}
                         {ticket.violations?.length > 2 && (
                           <div className="text-xs text-[#94A3B8]">
                             +{ticket.violations.length - 2} more
@@ -965,7 +1452,8 @@ const Tickets = () => {
                       </div>
 
                       <span className="font-bold text-[#C8202F] tabular-nums whitespace-nowrap">
-                        <Mini>Fine</Mini>₱{getTotalFine(ticket).toLocaleString()}
+                        <Mini>Fine</Mini>₱
+                        {getTotalFine(ticket).toLocaleString()}
                       </span>
 
                       <span className="justify-self-start">
@@ -998,6 +1486,13 @@ const Tickets = () => {
           )}
         </div>
       </div>
+
+      {/* ── Details modal ── */}
+      <TicketDetailsModal
+        ticketId={detailTicketId}
+        open={!!detailTicketId}
+        onClose={() => setDetailTicketId(null)}
+      />
     </div>
   );
 };
