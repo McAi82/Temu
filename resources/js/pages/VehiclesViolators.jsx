@@ -50,7 +50,7 @@ import {
   CheckCircle,
   IdCard,
   Info,
-  Shield,
+  AlertTriangle,
 } from "lucide-react";
 import { useAlert } from "../components/ui/AlertProvider";
 
@@ -163,9 +163,10 @@ const isExpiringSoon = (expiry) => {
   return new Date(expiry) <= cutoff;
 };
 
+/* Widen the grid: the Violations column needs room for names. */
 const VIOLATOR_ROW =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-  'md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,.7fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,12rem)] md:gap-4';
+  'md:grid md:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,.9fr)_minmax(0,.6fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,12rem)] md:gap-4';
 
 const VEHICLE_ROW =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
@@ -280,6 +281,40 @@ const Spec = ({ label, children, mono, danger }) => (
     <dd className={`text-sm truncate ${mono ? "font-mono text-[#16233F]" : "text-[#1F2937]"} ${danger ? "text-[#C8202F] font-medium" : ""}`}>{children}</dd>
   </div>
 );
+
+/* Renders up to 2 violation names as chips + "+N more" */
+const ViolationNamesCell = ({ names = [], compact = false }) => {
+  if (!names.length) {
+    return <span className="text-sm text-[#94A3B8]">None</span>;
+  }
+  const visible = names.slice(0, 2);
+  const extra = names.length - visible.length;
+  return (
+    <div className="flex flex-wrap items-center gap-1 min-w-0">
+      {visible.map((n) => (
+        <span
+          key={n}
+          className={`inline-block max-w-full truncate rounded-full font-medium ${
+            compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-xs"
+          } bg-[#FBEAE2] text-[#C2541F]`}
+          title={n}
+        >
+          {n}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span
+          className={`inline-block rounded-full font-semibold bg-[#FBE7E9] text-[#C8202F] ${
+            compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-xs"
+          }`}
+          title={names.join(", ")}
+        >
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+};
 
 const VehiclesViolators = () => {
   const queryClient = useQueryClient();
@@ -664,7 +699,6 @@ const VehiclesViolators = () => {
 
     let list = violators;
 
-    // Client-side license-expiring refinement (server sends all matching rows)
     if (violatorFilters.license_expiring) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() + 90);
@@ -685,7 +719,7 @@ const VehiclesViolators = () => {
           v.nationality,
           v.gender,
           v.ticketed_by,
-          String(v.violations_committed_count ?? ""),
+          ...(v.violation_names || []),
         ]
           .filter(Boolean)
           .join(" ")
@@ -847,7 +881,7 @@ const VehiclesViolators = () => {
 
         <TabsContent value="violators" className="mt-0">
           <Section title="Violators List" hint="(alphabetical by last name)" icon={Users} accent="#F0B429"
-            placeholder="Search by name, license, enforcer, or violations..." search={violatorSearchTerm} setSearch={setViolatorSearchTerm}
+            placeholder="Search by name, license, violation, enforcer..." search={violatorSearchTerm} setSearch={setViolatorSearchTerm}
             showFilters={violatorShowFilters} setShowFilters={setViolatorShowFilters} count={violatorActiveFilterCount}
             panel={violatorPanel} chips={vChips} loading={violatorsLoading} items={filteredViolators}
             noneText={violatorActiveFilterCount > 0 ? "No violators match the current filters." : "No violators found."}
@@ -856,8 +890,8 @@ const VehiclesViolators = () => {
             columns={["Name", "License #", "Expiry", "Gender", "Nationality", "Violations", "Ticketed By", "Actions"]}
             renderRow={(v) => {
               const soon = isExpiringSoon(v.expiry);
-              const count = v.violations_committed_count ?? 0;
-              const isRepeat = count >= 3;
+              const names = v.violation_names || [];
+              const isRepeat = names.length >= 3;
               return (
                 <li key={v.violator_id}
                   className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 border-l-4 hover:bg-[#F8F9FB] transition-colors ${VIOLATOR_ROW}`}
@@ -876,20 +910,9 @@ const VehiclesViolators = () => {
                   <span className={`text-sm ${soon ? "text-[#C8202F] font-medium" : "text-[#1F2937]"}`}><i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">Expiry</i>{new Date(v.expiry).toLocaleDateString()}{soon && <span className="ml-1 text-[10px]">⚠</span>}</span>
                   <span className="text-sm text-[#1F2937]"><i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">Gender</i>{v.gender}</span>
                   <span className="text-sm text-[#1F2937]"><i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">Nationality</i>{v.nationality}</span>
-                  <span>
+                  <span className="min-w-0">
                     <i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">Violations</i>
-                    {count === 0 ? (
-                      <span className="text-sm text-[#94A3B8]">None</span>
-                    ) : (
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          isRepeat ? "bg-[#FBEAE2] text-[#C2541F]" : "bg-[#FBF1DC] text-[#92600A]"
-                        }`}
-                        title={isRepeat ? "Repeat offender (≥ 3 violations)" : undefined}
-                      >
-                        {count}{isRepeat && " ⚠"}
-                      </span>
-                    )}
+                    <ViolationNamesCell names={names} />
                   </span>
                   <span className="text-sm text-[#1F2937] truncate">
                     <i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">Ticketed By</i>
@@ -904,8 +927,8 @@ const VehiclesViolators = () => {
             }}
             renderItem={(v) => {
               const soon = isExpiringSoon(v.expiry);
-              const count = v.violations_committed_count ?? 0;
-              const isRepeat = count >= 3;
+              const names = v.violation_names || [];
+              const isRepeat = names.length >= 3;
               return (
                 <article key={v.violator_id} className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
                   <div className="h-2" style={{ background: soon ? "#C8202F" : isRepeat ? "#C2541F" : "#F0B429" }} />
@@ -928,17 +951,14 @@ const VehiclesViolators = () => {
                         <Spec label="Expiry" danger={soon}>{new Date(v.expiry).toLocaleDateString()}{soon && <span className="ml-1 text-[10px]">⚠</span>}</Spec>
                         <Spec label="Gender">{v.gender}</Spec>
                         <Spec label="Nationality">{v.nationality}</Spec>
-                        <Spec label="Violations">
-                          {count === 0 ? (
-                            <span className="text-[#94A3B8]">None</span>
-                          ) : (
-                            <span className={isRepeat ? "text-[#C2541F] font-semibold" : "text-[#92600A] font-semibold"}>
-                              {count}{isRepeat && " ⚠"}
-                            </span>
-                          )}
-                        </Spec>
                         <Spec label="Ticketed By">{v.ticketed_by || <span className="text-[#94A3B8]">—</span>}</Spec>
                       </dl>
+                      <div className="mt-3">
+                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                          Violations {names.length > 0 && <span className="text-[#C2541F]">· {names.length}</span>}
+                        </p>
+                        <ViolationNamesCell names={names} />
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 px-4 pb-4">

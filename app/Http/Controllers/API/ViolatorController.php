@@ -27,10 +27,13 @@ class ViolatorController extends Controller
                 $q->where('is_archived', false);
             }])
             ->with(['tickets' => function ($q) {
-                // Most recent non-archived ticket + its enforcer, for the
-                // "Ticketed By" column and the search-by-enforcer fallback.
+                // Non-archived tickets with their violations + enforcer.
+                // Ordered so the first item is the most recent ticket.
                 $q->where('is_archived', false)
-                  ->with('enforcer:user_id,firstname,lastname')
+                  ->with([
+                      'enforcer:user_id,firstname,lastname',
+                      'violations.violationType:violation_id,violation_name',
+                  ])
                   ->orderByDesc('created_at');
             }]);
 
@@ -50,12 +53,19 @@ class ViolatorController extends Controller
                     ->orWhere('license', 'like', "%{$s}%")
                     ->orWhere('email', 'like', "%{$s}%")
                     ->orWhere('contact_number', 'like', "%{$s}%")
-                    // Search by the enforcer who ticketed this violator
+                    // Search by enforcer who ticketed this violator
                     ->orWhereHas('tickets', function ($tq) use ($s) {
                         $tq->where('is_archived', false)
                            ->whereHas('enforcer', function ($eq) use ($s) {
                                $eq->where('firstname', 'like', "%{$s}%")
                                   ->orWhere('lastname', 'like', "%{$s}%");
+                           });
+                    })
+                    // Search by violation type name
+                    ->orWhereHas('tickets', function ($tq) use ($s) {
+                        $tq->where('is_archived', false)
+                           ->whereHas('violations.violationType', function ($vq) use ($s) {
+                               $vq->where('violation_name', 'like', "%{$s}%");
                            });
                     });
             });
@@ -86,14 +96,31 @@ class ViolatorController extends Controller
             ->orderBy('firstname')
             ->paginate($perPage, ['*'], 'page', $page);
 
-        // Decorate each row with the derived "ticketed_by" name so the
-        // frontend doesn't have to walk the tickets array.
+        // Decorate each row with derived fields the frontend renders
+        // directly, so the UI doesn't have to walk nested arrays.
         $violators->getCollection()->transform(function ($v) {
             $latest = $v->tickets->first();
+
             $v->ticketed_by = $latest && $latest->enforcer
                 ? trim("{$latest->enforcer->firstname} {$latest->enforcer->lastname}")
                 : null;
-            // Keep the response lean — we only need the derived name.
+
+            // Collect distinct violation names across all of the
+            // violator's non-archived tickets. Preserves first-seen order
+            // (most recent ticket first).
+            $names = [];
+            foreach ($v->tickets as $ticket) {
+                foreach ($ticket->violations as $tv) {
+                    $name = $tv->violationType?->violation_name;
+                    if ($name && !in_array($name, $names, true)) {
+                        $names[] = $name;
+                    }
+                }
+            }
+
+            $v->violation_names       = $names;
+            $v->violation_names_count = count($names);
+
             unset($v->tickets);
             return $v;
         });
