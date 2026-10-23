@@ -15,10 +15,6 @@ use Illuminate\Support\Str;
 
 class PaymentController extends Controller
 {
-    /* ==================================================================
-     |  LIST
-     ================================================================== */
-
     public function index(Request $request)
     {
         $perPage = (int) $request->get('per_page', 20);
@@ -65,17 +61,19 @@ class PaymentController extends Controller
         return response()->json($payments);
     }
 
-    /* ==================================================================
-     |  PENDING
-     ================================================================== */
-
     public function pending(Request $request)
     {
         $perPage = (int) $request->get('per_page', 20);
         $page    = (int) $request->get('page', 1);
 
-        $query = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType', 'payments'])
-            ->whereIn('status', ['issued', 'partial_paid'])
+        $query = Ticket::with([
+            'violator',
+            'vehicle',
+            'enforcer',
+            'violations.violationType',
+            'payments',
+        ])
+            ->where('status', 'issued')
             ->where('is_archived', false);
 
         if ($request->filled('ticket_number')) {
@@ -97,7 +95,8 @@ class PaymentController extends Controller
             });
         }
 
-        $tickets = $query->orderBy('created_at', 'desc')
+        $tickets = $query->orderBy('payment_due_at', 'asc')
+            ->orderBy('created_at', 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
 
         $tickets->getCollection()->each(function ($ticket) {
@@ -110,15 +109,12 @@ class PaymentController extends Controller
             $ticket->total_fine = $totalFine;
             $ticket->total_paid = $totalPaid;
             $ticket->balance    = max(0, $totalFine - $totalPaid);
-            $ticket->is_partial = $ticket->status === 'partial_paid' || $totalPaid > 0;
         });
+
+        $this->fireDueNotificationsFromPayment($tickets->getCollection());
 
         return response()->json($tickets);
     }
-
-    /* ==================================================================
-     |  SHOW
-     ================================================================== */
 
     public function show($id)
     {
@@ -132,10 +128,6 @@ class PaymentController extends Controller
 
         return response()->json($payment);
     }
-
-    /* ==================================================================
-     |  STORE
-     ================================================================== */
 
     public function store(Request $request)
     {
@@ -189,23 +181,20 @@ class PaymentController extends Controller
             ->where('is_archived', false)
             ->sum('amount_paid');
 
-        $amountPaid     = (float) $request->amount_paid;
-        $outstanding    = max(0, $totalFine - $previouslyPaid);
-        $totalAfterThis = $previouslyPaid + $amountPaid;
-        $balance        = max(0, $totalFine - $totalAfterThis);
+        $amountPaid  = (float) $request->amount_paid;
+        $outstanding = max(0, $totalFine - $previouslyPaid);
 
-        if ($amountPaid > $outstanding + 0.01) {
+        if (abs($amountPaid - $outstanding) > 0.01) {
             return response()->json([
-                'message' => 'Amount exceeds the outstanding balance.',
+                'message' => 'Payment must settle the ticket in full.',
                 'errors'  => [
                     'amount_paid' => [
-                        'Outstanding balance is ₱' . number_format($outstanding, 2) . '.',
+                        'Outstanding balance is ₱' . number_format($outstanding, 2)
+                        . '. Please enter exactly that amount.',
                     ],
                 ],
             ], 422);
         }
-
-        $newTicketStatus = $totalAfterThis + 0.01 >= $totalFine ? 'paid' : 'partial_paid';
 
         DB::beginTransaction();
 
@@ -223,8 +212,7 @@ class PaymentController extends Controller
                 'notes'             => $request->notes,
             ]);
 
-            $oldStatus = $ticket->status;
-            $ticket->update(['status' => $newTicketStatus]);
+            $ticket->update(['status' => 'paid']);
 
             DB::commit();
 
@@ -239,8 +227,17 @@ class PaymentController extends Controller
                     NotificationService::notifyUser(
                         $ticket->enforcer_id,
                         'Payment Recorded',
-                        "Ticket {$ticket->ticket_number} received ₱{$amount} ({$request->payment_method}). Receipt: {$request->receipt_number}",
+                        "Ticket {$ticket->ticket_number} paid in full — ₱{$amount}. Receipt: {$request->receipt_number}",
                         Notification::TYPE_PAYMENT_RECEIVED,
+                        'ticket',
+                        $ticket->ticket_id
+                    );
+
+                    NotificationService::notifyUser(
+                        $ticket->enforcer_id,
+                        'Ticket Fully Paid',
+                        "Ticket {$ticket->ticket_number} is now fully paid.",
+                        Notification::TYPE_TICKET_PAID,
                         'ticket',
                         $ticket->ticket_id
                     );
@@ -253,32 +250,19 @@ class PaymentController extends Controller
                     'ticket',
                     $ticket->ticket_id
                 );
-
-                if ($newTicketStatus === 'paid' && $oldStatus !== 'paid' && $ticket->enforcer_id) {
-                    NotificationService::notifyUser(
-                        $ticket->enforcer_id,
-                        'Ticket Fully Paid',
-                        "Ticket {$ticket->ticket_number} is now fully paid.",
-                        Notification::TYPE_TICKET_PAID,
-                        'ticket',
-                        $ticket->ticket_id
-                    );
-                }
             } catch (\Throwable $ne) {
                 Log::warning('Payment notification failed: ' . $ne->getMessage());
             }
 
             return response()->json([
-                'message'         => $newTicketStatus === 'paid'
-                    ? 'Payment recorded. Ticket fully paid.'
-                    : 'Partial payment recorded. Balance remaining.',
+                'message'         => 'Payment recorded. Ticket is now fully paid.',
                 'payment'         => $payment->fresh(['ticket.violator', 'ticket.vehicle']),
-                'ticket_status'   => $newTicketStatus,
+                'ticket_status'   => 'paid',
                 'total_fine'      => $totalFine,
                 'previously_paid' => $previouslyPaid,
                 'amount_paid'     => $amountPaid,
-                'total_paid'      => $totalAfterThis,
-                'balance'         => $balance,
+                'total_paid'      => $previouslyPaid + $amountPaid,
+                'balance'         => 0,
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -289,10 +273,6 @@ class PaymentController extends Controller
             ], 500);
         }
     }
-
-    /* ==================================================================
-     |  VOID (unchanged — soft state change, not archive)
-     ================================================================== */
 
     public function void(Request $request, $id)
     {
@@ -319,28 +299,16 @@ class PaymentController extends Controller
                 'notes' => trim(($payment->notes ?? '') . "\n[VOIDED] " . $request->reason),
             ]);
 
-            $ticket = Ticket::with('violations')->find($payment->ticket_id);
+            $ticket = Ticket::find($payment->ticket_id);
             if ($ticket) {
-                $totalFine = (float) $ticket->violations->sum('fine_amount');
-                $totalPaid = (float) Payment::where('ticket_id', $ticket->ticket_id)
-                    ->where('payment_status', 'completed')
-                    ->where('is_archived', false)
-                    ->sum('amount_paid');
-
-                if ($totalPaid <= 0) {
-                    $ticket->status = 'issued';
-                } elseif ($totalPaid < $totalFine) {
-                    $ticket->status = 'partial_paid';
-                } else {
-                    $ticket->status = 'paid';
-                }
+                $ticket->status = 'issued';
                 $ticket->save();
             }
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Payment voided successfully',
+                'message' => 'Payment voided successfully. Ticket reverted to issued.',
                 'payment' => $payment->fresh(),
                 'ticket_status' => $ticket?->status,
             ]);
@@ -350,10 +318,6 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Failed to void payment'], 500);
         }
     }
-
-    /* ==================================================================
-     |  ARCHIVE (new — replaces hard delete)
-     ================================================================== */
 
     public function destroy(Request $request, $id)
     {
@@ -390,10 +354,6 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Failed to archive payment'], 500);
         }
     }
-
-    /* ==================================================================
-     |  BY TICKET
-     ================================================================== */
 
     public function byTicket($ticketId)
     {

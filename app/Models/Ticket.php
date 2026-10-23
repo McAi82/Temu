@@ -11,6 +11,8 @@ class Ticket extends Model
 
     protected $primaryKey = 'ticket_id';
 
+    public const PAYMENT_DUE_DAYS = 3;
+
     protected $fillable = [
         'ticket_number',
         'idempotency_key',
@@ -21,6 +23,7 @@ class Ticket extends Model
         'latitude',
         'longitude',
         'violation_datetime',
+        'payment_due_at',
         'remarks',
         'status',
         'qr_code',
@@ -32,13 +35,33 @@ class Ticket extends Model
 
     protected $casts = [
         'violation_datetime' => 'datetime',
+        'payment_due_at'     => 'datetime',
         'latitude'           => 'decimal:8',
         'longitude'          => 'decimal:8',
         'is_archived'        => 'boolean',
         'archived_at'        => 'datetime',
     ];
 
-    protected $appends = ['total_fine', 'qr_code_url'];
+    protected $appends = [
+        'total_fine',
+        'total_demerit_points',
+        'qr_code_url',
+        'days_until_due',
+        'is_overdue',
+        'is_due_soon',
+    ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Ticket $ticket) {
+            if (!$ticket->payment_due_at) {
+                $base = $ticket->created_at
+                    ? \Carbon\Carbon::parse($ticket->created_at)
+                    : now();
+                $ticket->payment_due_at = $base->copy()->addDays(self::PAYMENT_DUE_DAYS);
+            }
+        });
+    }
 
     /* ---------------- Relations ---------------- */
 
@@ -95,6 +118,33 @@ class Ticket extends Model
             return asset('storage/' . $this->qr_code);
         }
         return null;
+    }
+
+    /**
+     * Whole calendar days remaining until payment is due.
+     * Negative = overdue, 0 = due today.
+     */
+    public function getDaysUntilDueAttribute(): ?int
+    {
+        if (!$this->payment_due_at) return null;
+        return now()->startOfDay()->diffInDays(
+            $this->payment_due_at->copy()->startOfDay(),
+            false,
+        );
+    }
+
+    public function getIsOverdueAttribute(): bool
+    {
+        if (!$this->payment_due_at) return false;
+        if (in_array($this->status, ['paid', 'dismissed'], true)) return false;
+        return $this->payment_due_at->isPast();
+    }
+
+    public function getIsDueSoonAttribute(): bool
+    {
+        if (!$this->payment_due_at || $this->status !== 'issued') return false;
+        $days = $this->days_until_due;
+        return $days !== null && $days >= 0 && $days <= 1;
     }
 
     /* ---------------- Archive ---------------- */

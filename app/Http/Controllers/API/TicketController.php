@@ -19,10 +19,6 @@ use Illuminate\Support\Facades\Storage;
 
 class TicketController extends Controller
 {
-    /* ==================================================================
-     |  LIST — with full filters
-     ================================================================== */
-
     public function index(Request $request)
     {
         $perPage = (int) $request->get('per_page', 20);
@@ -63,15 +59,12 @@ class TicketController extends Controller
         if ($request->filled('enforcer_id')) {
             $query->where('enforcer_id', $request->enforcer_id);
         }
-
         if ($request->filled('violator_id')) {
             $query->where('violator_id', $request->violator_id);
         }
-
         if ($request->filled('vehicle_id')) {
             $query->where('vehicle_id', $request->vehicle_id);
         }
-
         if ($request->filled('violation_id')) {
             $query->whereHas('violations', function ($q) use ($request) {
                 $q->where('violation_id', $request->violation_id);
@@ -105,7 +98,7 @@ class TicketController extends Controller
             });
         }
 
-        $sortable = ['created_at', 'violation_datetime', 'ticket_number', 'status'];
+        $sortable = ['created_at', 'violation_datetime', 'ticket_number', 'status', 'payment_due_at'];
         $sortBy   = in_array($request->get('sort_by'), $sortable, true)
             ? $request->get('sort_by')
             : 'created_at';
@@ -120,12 +113,10 @@ class TicketController extends Controller
             $ticket->qr_code_url = $ticket->qr_code ? Storage::url($ticket->qr_code) : null;
         });
 
+        $this->fireDueNotifications($tickets->getCollection());
+
         return response()->json($tickets);
     }
-
-    /* ==================================================================
-     |  SHOW
-     ================================================================== */
 
     public function show($id)
     {
@@ -159,10 +150,6 @@ class TicketController extends Controller
 
         return response()->json($ticket);
     }
-
-    /* ==================================================================
-     |  HELPERS
-     ================================================================== */
 
     private function generateTicketNumber(): string
     {
@@ -238,10 +225,6 @@ class TicketController extends Controller
         }
     }
 
-    /* ==================================================================
-     |  STORE
-     ================================================================== */
-
     public function store(Request $request)
     {
         if ($request->user()->role !== 'enforcer') {
@@ -301,6 +284,8 @@ class TicketController extends Controller
                 'latitude' => $request->latitude,
                 'longitude' => $request->longitude,
                 'violation_datetime' => $request->violation_datetime,
+                'payment_due_at' => \Carbon\Carbon::parse($request->violation_datetime)
+                    ->addDays(Ticket::PAYMENT_DUE_DAYS),
                 'remarks' => $request->remarks,
                 'status' => 'issued',
             ]);
@@ -330,11 +315,14 @@ class TicketController extends Controller
                     ? trim("{$ticket->violator->firstname} {$ticket->violator->lastname}")
                     : 'Unknown';
                 $fine = number_format($ticket->total_fine, 2);
+                $due = $ticket->payment_due_at
+                    ? $ticket->payment_due_at->format('M d, Y')
+                    : '—';
 
                 NotificationService::notifyUser(
                     $enforcer->user_id,
                     'Ticket Issued',
-                    "Ticket {$ticket->ticket_number} issued to {$violatorName}. Fine: ₱{$fine}",
+                    "Ticket {$ticket->ticket_number} issued to {$violatorName}. Fine: ₱{$fine}. Due: {$due}.",
                     Notification::TYPE_TICKET_CREATED,
                     'ticket',
                     $ticket->ticket_id
@@ -342,7 +330,7 @@ class TicketController extends Controller
 
                 NotificationService::notifyAdminStaff(
                     'New Ticket Issued',
-                    "{$enforcer->firstname} {$enforcer->lastname} issued {$ticket->ticket_number} ({$violatorName})",
+                    "{$enforcer->firstname} {$enforcer->lastname} issued {$ticket->ticket_number} ({$violatorName}). Due {$due}.",
                     Notification::TYPE_TICKET_CREATED,
                     'ticket',
                     $ticket->ticket_id
@@ -424,14 +412,10 @@ class TicketController extends Controller
         }
     }
 
-    /* ==================================================================
-     |  UPDATE STATUS
-     ================================================================== */
-
     public function updateStatus(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'status' => 'required|in:issued,paid,partial_paid,dismissed',
+            'status' => 'required|in:issued,paid,dismissed',
         ]);
 
         if ($validator->fails()) {
@@ -470,17 +454,6 @@ class TicketController extends Controller
                             $ticket->ticket_id
                         );
                         break;
-
-                    case 'partial_paid':
-                        NotificationService::notifyUser(
-                            $enforcerId,
-                            'Ticket Partially Paid',
-                            "Ticket {$ticket->ticket_number} has been partially paid",
-                            Notification::TYPE_TICKET_PARTIAL_PAID,
-                            'ticket',
-                            $ticket->ticket_id
-                        );
-                        break;
                 }
             }
         } catch (\Throwable $ne) {
@@ -492,10 +465,6 @@ class TicketController extends Controller
             'ticket' => $ticket
         ]);
     }
-
-    /* ==================================================================
-     |  ARCHIVE
-     ================================================================== */
 
     public function destroy(Request $request, $id)
     {
@@ -548,10 +517,6 @@ class TicketController extends Controller
         }
     }
 
-    /* ==================================================================
-     |  MY TICKETS / SEARCH / STATS
-     ================================================================== */
-
     public function getMyTickets(Request $request)
     {
         $tickets = Ticket::with(['violator', 'vehicle', 'violations.violationType'])
@@ -578,24 +543,20 @@ class TicketController extends Controller
         if ($request->has('ticket_number')) {
             $query->where('ticket_number', 'like', "%{$request->ticket_number}%");
         }
-
         if ($request->has('plate_number')) {
             $query->whereHas('vehicle', function ($q) use ($request) {
                 $q->where('platenumber', 'like', "%{$request->plate_number}%");
             });
         }
-
         if ($request->has('violator_name')) {
             $query->whereHas('violator', function ($q) use ($request) {
                 $q->where('firstname', 'like', "%{$request->violator_name}%")
                     ->orWhere('lastname', 'like', "%{$request->violator_name}%");
             });
         }
-
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
-
         if ($request->has('date_from') && $request->has('date_to')) {
             $query->whereBetween('violation_datetime', [$request->date_from, $request->date_to]);
         }
@@ -621,6 +582,18 @@ class TicketController extends Controller
             $paidTickets      = (clone $base)->where('status', 'paid')->count();
             $issuedTickets    = (clone $base)->where('status', 'issued')->count();
             $dismissedTickets = (clone $base)->where('status', 'dismissed')->count();
+
+            $overdueTickets = (clone $base)
+                ->where('status', 'issued')
+                ->whereNotNull('payment_due_at')
+                ->where('payment_due_at', '<', now())
+                ->count();
+
+            $dueSoonTickets = (clone $base)
+                ->where('status', 'issued')
+                ->whereNotNull('payment_due_at')
+                ->whereDate('payment_due_at', now()->addDay()->toDateString())
+                ->count();
 
             $totalFines = DB::table('ticket_violations')
                 ->join('tickets', 'ticket_violations.ticket_id', '=', 'tickets.ticket_id')
@@ -655,6 +628,8 @@ class TicketController extends Controller
                 'paid_tickets'      => (int) $paidTickets,
                 'issued_tickets'    => (int) $issuedTickets,
                 'dismissed_tickets' => (int) $dismissedTickets,
+                'overdue_tickets'   => (int) $overdueTickets,
+                'due_soon_tickets'  => (int) $dueSoonTickets,
                 'total_fines'       => (float) $totalFines,
                 'collected_fines'   => (float) $collectedFines,
                 'collection_rate'   => (float) $collectionRate,
@@ -667,6 +642,8 @@ class TicketController extends Controller
                 'paid_tickets'      => Ticket::active()->where('status', 'paid')->count(),
                 'issued_tickets'    => Ticket::active()->where('status', 'issued')->count(),
                 'dismissed_tickets' => Ticket::active()->where('status', 'dismissed')->count(),
+                'overdue_tickets'   => 0,
+                'due_soon_tickets'  => 0,
                 'total_fines'       => 0,
                 'collected_fines'   => 0,
                 'collection_rate'   => 0,
@@ -692,4 +669,98 @@ class TicketController extends Controller
 
         return view('tickets.public', compact('ticket'));
     }
+
+    /**
+ * Fire "due tomorrow" and "overdue" notifications for any tickets
+ * the caller can currently see. Idempotent: at most one notification
+ * of each type per ticket per calendar day.
+ */
+private function fireDueNotifications($tickets): void
+{
+    if (empty($tickets) || $tickets->isEmpty()) {
+        return;
+    }
+
+    $ticketIds = $tickets->pluck('ticket_id')->all();
+
+    // Which of these tickets already got a due-soon / overdue
+    // notification today?
+    $already = Notification::query()
+        ->whereIn('type', [
+            Notification::TYPE_TICKET_DUE_SOON,
+            Notification::TYPE_TICKET_OVERDUE,
+        ])
+        ->where('related_entity_type', 'ticket')
+        ->whereIn('related_entity_id', $ticketIds)
+        ->whereDate('created_at', now()->toDateString())
+        ->get(['type', 'related_entity_id'])
+        ->groupBy('type')
+        ->map(fn($rows) => $rows->pluck('related_entity_id')->all());
+
+    $dueSoonAlready = $already[Notification::TYPE_TICKET_DUE_SOON] ?? [];
+    $overdueAlready = $already[Notification::TYPE_TICKET_OVERDUE] ?? [];
+
+    foreach ($tickets as $ticket) {
+        if ($ticket->status !== 'issued' || !$ticket->payment_due_at) {
+            continue;
+        }
+
+        $violatorName = $ticket->violator
+            ? trim("{$ticket->violator->firstname} {$ticket->violator->lastname}")
+            : 'Unknown';
+        $due = $ticket->payment_due_at->format('M d, Y');
+        $days = $ticket->days_until_due;
+
+        // ── Overdue ─────────────────────────────────────────────
+        if ($ticket->payment_due_at->isPast() && !in_array($ticket->ticket_id, $overdueAlready, true)) {
+            try {
+                if ($ticket->enforcer_id) {
+                    NotificationService::notifyUser(
+                        $ticket->enforcer_id,
+                        'Ticket Overdue',
+                        "Ticket {$ticket->ticket_number} ({$violatorName}) was due on {$due} and is now overdue.",
+                        Notification::TYPE_TICKET_OVERDUE,
+                        'ticket',
+                        $ticket->ticket_id
+                    );
+                }
+                NotificationService::notifyAdminStaff(
+                    'Ticket Overdue',
+                    "{$ticket->ticket_number} ({$violatorName}) was due on {$due} and is now overdue.",
+                    Notification::TYPE_TICKET_OVERDUE,
+                    'ticket',
+                    $ticket->ticket_id
+                );
+            } catch (\Throwable $e) {
+                Log::warning("Overdue notification failed for ticket {$ticket->ticket_id}: " . $e->getMessage());
+            }
+            continue;
+        }
+
+        // ── Due tomorrow (1 day left) ──────────────────────────
+        if ($days === 1 && !in_array($ticket->ticket_id, $dueSoonAlready, true)) {
+            try {
+                if ($ticket->enforcer_id) {
+                    NotificationService::notifyUser(
+                        $ticket->enforcer_id,
+                        'Payment Due Tomorrow',
+                        "Ticket {$ticket->ticket_number} ({$violatorName}) is due tomorrow ({$due}).",
+                        Notification::TYPE_TICKET_DUE_SOON,
+                        'ticket',
+                        $ticket->ticket_id
+                    );
+                }
+                NotificationService::notifyAdminStaff(
+                    'Ticket Due Tomorrow',
+                    "{$ticket->ticket_number} ({$violatorName}) is due tomorrow ({$due}).",
+                    Notification::TYPE_TICKET_DUE_SOON,
+                    'ticket',
+                    $ticket->ticket_id
+                );
+            } catch (\Throwable $e) {
+                Log::warning("Due-soon notification failed for ticket {$ticket->ticket_id}: " . $e->getMessage());
+            }
+        }
+    }
+}
 }

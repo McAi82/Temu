@@ -11,14 +11,9 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class ReportController extends Controller
 {
-    /* ==================================================================
-     |  UNIFIED REPORT
-     ================================================================== */
-
     public function report(Request $request)
     {
         try {
@@ -70,10 +65,6 @@ class ReportController extends Controller
         return response()->json($payload);
     }
 
-    /* ==================================================================
-     |  TODAY
-     ================================================================== */
-
     public function todayReport(Request $request)
     {
         $today = now()->startOfDay();
@@ -84,10 +75,6 @@ class ReportController extends Controller
             'recent_tickets' => $payload['recent_tickets'],
         ]));
     }
-
-    /* ==================================================================
-     |  WEEKLY / RANGE
-     ================================================================== */
 
     public function weeklyReport(Request $request)
     {
@@ -107,10 +94,6 @@ class ReportController extends Controller
         ]));
     }
 
-    /* ==================================================================
-     |  EXPORT (CSV)
-     ================================================================== */
-
     public function exportReport(Request $request)
     {
         $startDate = $request->get('start_date', now()->startOfWeek()->toDateString());
@@ -128,7 +111,7 @@ class ReportController extends Controller
         $tickets = $query->get();
 
         $csvData   = [];
-        $csvData[] = ['Ticket #', 'Violator', 'License', 'Plate #', 'Violations', 'Total Fine', 'Location', 'Date', 'Status', 'Enforcer', 'Archived'];
+        $csvData[] = ['Ticket #', 'Violator', 'License', 'Plate #', 'Violations', 'Total Fine', 'Location', 'Date', 'Status', 'Enforcer', 'Due Date', 'Archived'];
 
         foreach ($tickets as $ticket) {
             $violationsList = $ticket->violations->map(function ($v) {
@@ -146,6 +129,7 @@ class ReportController extends Controller
                 date('Y-m-d H:i', strtotime($ticket->violation_datetime)),
                 strtoupper($ticket->status),
                 $ticket->enforcer->firstname . ' ' . $ticket->enforcer->lastname,
+                $ticket->payment_due_at ? $ticket->payment_due_at->toDateString() : '',
                 $ticket->is_archived ? 'YES' : 'NO',
             ];
         }
@@ -159,10 +143,6 @@ class ReportController extends Controller
             ->header('Content-Type', 'text/csv')
             ->header('Content-Disposition', 'attachment; filename="report_' . $startDate . '_to_' . $endDate . '.csv"');
     }
-
-    /* ==================================================================
-     |  PERIOD RESOLUTION
-     ================================================================== */
 
     private function resolvePeriod(Request $request): array
     {
@@ -179,7 +159,6 @@ class ReportController extends Controller
                         'Daily — ' . $date->format('M d, Y'),
                     ];
                 }
-
             case 'weekly': {
                     if ($request->filled('week')) {
                         try {
@@ -200,7 +179,6 @@ class ReportController extends Controller
                         'Weekly — ' . $start->format('M d') . ' to ' . $start->copy()->endOfWeek()->format('M d, Y'),
                     ];
                 }
-
             case 'monthly': {
                     $month = $request->filled('month')
                         ? Carbon::parse($request->month . '-01')
@@ -212,7 +190,6 @@ class ReportController extends Controller
                         'Monthly — ' . $month->format('F Y'),
                     ];
                 }
-
             case 'yearly': {
                     $year = $request->filled('year') ? (int) $request->year : now()->year;
                     $start = Carbon::create($year, 1, 1)->startOfDay();
@@ -222,7 +199,6 @@ class ReportController extends Controller
                         'Yearly — ' . $year,
                     ];
                 }
-
             case 'custom':
             default: {
                     if (!$request->filled('start_date') || !$request->filled('end_date')) {
@@ -243,20 +219,6 @@ class ReportController extends Controller
                 }
         }
     }
-
-    private function previousPeriod(Carbon $start, Carbon $end): array
-    {
-        $days = $start->diffInDays($end) + 1;
-
-        return [
-            $start->copy()->subDays($days)->startOfDay(),
-            $end->copy()->subDays($days)->endOfDay(),
-        ];
-    }
-
-    /* ==================================================================
-     |  REPORT BUILDER
-     ================================================================== */
 
     private function buildReport(Carbon $start, Carbon $end, bool $includeArchived): array
     {
@@ -279,7 +241,6 @@ class ReportController extends Controller
         $paidTickets      = $tickets->where('status', 'paid')->count();
         $issuedTickets    = $tickets->where('status', 'issued')->count();
         $dismissedTickets = $tickets->where('status', 'dismissed')->count();
-        $partialTickets   = $tickets->where('status', 'partial_paid')->count();
 
         $daysInRange = max(1, $start->diffInDays($end) + 1);
         $averageDailyTickets = round($totalTickets / $daysInRange, 2);
@@ -359,7 +320,6 @@ class ReportController extends Controller
                 'paid_tickets'          => $paidTickets,
                 'issued_tickets'        => $issuedTickets,
                 'dismissed_tickets'     => $dismissedTickets,
-                'partial_tickets'       => $partialTickets,
                 'average_daily_tickets' => $averageDailyTickets,
                 'collection_rate'       => $collectionRate,
             ],

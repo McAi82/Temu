@@ -18,8 +18,9 @@ return new class extends Migration {
             $table->decimal('latitude', 10, 8)->nullable()->comment('GPS latitude');
             $table->decimal('longitude', 11, 8)->nullable()->comment('GPS longitude');
             $table->datetime('violation_datetime');
+            $table->timestamp('payment_due_at')->nullable()->after('violation_datetime');
             $table->text('remarks')->nullable();
-            $table->enum('status', ['issued', 'paid', 'dismissed', 'partial_paid'])->default('issued');
+            $table->enum('status', ['issued', 'paid', 'dismissed'])->default('issued');
             $table->string('qr_code', 255)->nullable();
             $table->string('pdf_path', 255)->nullable();
             $table->timestamps();
@@ -27,6 +28,7 @@ return new class extends Migration {
             $table->index('ticket_number');
             $table->index('status');
             $table->index('violation_datetime');
+            $table->index('payment_due_at');
             $table->index('enforcer_id');
             $table->index('violator_id');
         });
