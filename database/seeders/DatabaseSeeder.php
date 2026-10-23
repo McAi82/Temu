@@ -10,35 +10,15 @@ use Carbon\Carbon;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Number of tickets to generate.
-     */
     private const TICKET_COUNT = 120;
-
-    /** Days of history for tickets and payments. */
     private const TICKET_HISTORY_DAYS = 120;
-
-    /** Days of attendance history to generate (weekends skipped). */
     private const ATTENDANCE_HISTORY_DAYS = 60;
-
-    /** Repeat-offender threshold — matches `settings.repeat_offender_threshold`. */
     private const REPEAT_OFFENDER_THRESHOLD = 3;
-
-    /**
-     * Official start-of-day and end-of-day for attendance.
-     */
     private const WORK_START_HOUR = 8;
     private const WORK_END_HOUR = 17;
-
-    /** Grace period (minutes) before a time-in counts as "late". */
     private const GRACE_MINUTES = 15;
-
-    /**
-     * Skip these fixed dates when generating attendance.
-     */
-    private const HOLIDAYS = [
-        // Add 'YYYY-MM-DD' => 'Holiday name' entries here
-    ];
+    private const PAYMENT_DUE_DAYS = 3;
+    private const HOLIDAYS = [];
 
     public function run(): void
     {
@@ -46,7 +26,6 @@ class DatabaseSeeder extends Seeder
         $this->truncateTables();
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
 
-        // Seed order matters: parents first, then children.
         $this->seedSettings();
         $this->seedUsers();
         $this->seedVehicles();
@@ -71,7 +50,6 @@ class DatabaseSeeder extends Seeder
 
     private function truncateTables(): void
     {
-        // Order: leaf tables first, then roots.
         $tables = [
             'notifications',
             'appeals',
@@ -126,90 +104,18 @@ class DatabaseSeeder extends Seeder
     private function seedSettings(): void
     {
         $settings = [
-            [
-                'setting_key' => 'company_name',
-                'setting_value' => 'TEMU Traffic System',
-                'setting_type' => 'text',
-                'description' => 'Company name',
-                'group_name' => 'general',
-            ],
-            [
-                'setting_key' => 'company_address',
-                'setting_value' => 'El Salvador City, Misamis Oriental, Philippines',
-                'setting_type' => 'text',
-                'description' => 'Company address',
-                'group_name' => 'general',
-            ],
-            [
-                'setting_key' => 'time_in_start',
-                'setting_value' => '08:00:00',
-                'setting_type' => 'text',
-                'description' => 'Official time-in start',
-                'group_name' => 'attendance',
-            ],
-            [
-                'setting_key' => 'time_out_end',
-                'setting_value' => '17:00:00',
-                'setting_type' => 'text',
-                'description' => 'Official time-out end',
-                'group_name' => 'attendance',
-            ],
-            [
-                'setting_key' => 'grace_period_minutes',
-                'setting_value' => (string) self::GRACE_MINUTES,
-                'setting_type' => 'number',
-                'description' => 'Grace period before marking late',
-                'group_name' => 'attendance',
-            ],
-            [
-                'setting_key' => 'repeat_offender_threshold',
-                'setting_value' => (string) self::REPEAT_OFFENDER_THRESHOLD,
-                'setting_type' => 'number',
-                'description' => 'Number of violations to flag as repeat offender',
-                'group_name' => 'enforcement',
-            ],
-            [
-                'setting_key' => 'demerit_suspension_points',
-                'setting_value' => '12',
-                'setting_type' => 'number',
-                'description' => 'Demerit points that trigger license suspension',
-                'group_name' => 'enforcement',
-            ],
-            [
-                'setting_key' => 'fine_payment_due_days',
-                'setting_value' => '15',
-                'setting_type' => 'number',
-                'description' => 'Days to pay a fine before it becomes overdue',
-                'group_name' => 'payments',
-            ],
-            [
-                'setting_key' => 'enable_notifications',
-                'setting_value' => 'true',
-                'setting_type' => 'boolean',
-                'description' => 'Enable push notifications',
-                'group_name' => 'notifications',
-            ],
-            [
-                'setting_key' => 'maintenance_mode',
-                'setting_value' => 'false',
-                'setting_type' => 'boolean',
-                'description' => 'System maintenance mode',
-                'group_name' => 'system',
-            ],
-            [
-                'setting_key' => 'max_ticket_appeal_days',
-                'setting_value' => '30',
-                'setting_type' => 'number',
-                'description' => 'Maximum days to file an appeal',
-                'group_name' => 'enforcement',
-            ],
-            [
-                'setting_key' => 'attendance_required_hours',
-                'setting_value' => '8',
-                'setting_type' => 'number',
-                'description' => 'Required working hours per day',
-                'group_name' => 'attendance',
-            ],
+            ['setting_key' => 'company_name', 'setting_value' => 'TEMU Traffic System', 'setting_type' => 'text', 'description' => 'Company name', 'group_name' => 'general'],
+            ['setting_key' => 'company_address', 'setting_value' => 'El Salvador City, Misamis Oriental, Philippines', 'setting_type' => 'text', 'description' => 'Company address', 'group_name' => 'general'],
+            ['setting_key' => 'time_in_start', 'setting_value' => '08:00:00', 'setting_type' => 'text', 'description' => 'Official time-in start', 'group_name' => 'attendance'],
+            ['setting_key' => 'time_out_end', 'setting_value' => '17:00:00', 'setting_type' => 'text', 'description' => 'Official time-out end', 'group_name' => 'attendance'],
+            ['setting_key' => 'grace_period_minutes', 'setting_value' => (string) self::GRACE_MINUTES, 'setting_type' => 'number', 'description' => 'Grace period before marking late', 'group_name' => 'attendance'],
+            ['setting_key' => 'repeat_offender_threshold', 'setting_value' => (string) self::REPEAT_OFFENDER_THRESHOLD, 'setting_type' => 'number', 'description' => 'Number of violations to flag as repeat offender', 'group_name' => 'enforcement'],
+            ['setting_key' => 'demerit_suspension_points', 'setting_value' => '12', 'setting_type' => 'number', 'description' => 'Demerit points that trigger license suspension', 'group_name' => 'enforcement'],
+            ['setting_key' => 'fine_payment_due_days', 'setting_value' => (string) self::PAYMENT_DUE_DAYS, 'setting_type' => 'number', 'description' => 'Days to pay a fine', 'group_name' => 'payments'],
+            ['setting_key' => 'enable_notifications', 'setting_value' => 'true', 'setting_type' => 'boolean', 'description' => 'Enable push notifications', 'group_name' => 'notifications'],
+            ['setting_key' => 'maintenance_mode', 'setting_value' => 'false', 'setting_type' => 'boolean', 'description' => 'System maintenance mode', 'group_name' => 'system'],
+            ['setting_key' => 'max_ticket_appeal_days', 'setting_value' => '30', 'setting_type' => 'number', 'description' => 'Maximum days to file an appeal', 'group_name' => 'enforcement'],
+            ['setting_key' => 'attendance_required_hours', 'setting_value' => '8', 'setting_type' => 'number', 'description' => 'Required working hours per day', 'group_name' => 'attendance'],
         ];
 
         $now = now();
@@ -229,43 +135,10 @@ class DatabaseSeeder extends Seeder
     private function seedUsers(): void
     {
         $users = [
-            /* ---------------- Admins ---------------- */
-            [
-                'email' => 'occ.balasabas.johnpaul@gmail.com',
-                'firstname' => 'Johnpaul',
-                'middlename' => 'Alonzo',
-                'lastname' => 'Balasabas',
-                'role' => 'admin',
-                'contact_number' => '09171234501',
-            ],
-
-            /* ---------------- Staff ---------------- */
-            [
-                'email' => 'luiskarlcons@gmail.com',
-                'firstname' => 'Luis Karl',
-                'middlename' => 'Bautista',
-                'lastname' => 'Consolacion',
-                'role' => 'staff',
-                'contact_number' => '09171234503',
-            ],
-
-            /* ---------------- Enforcers ---------------- */
-            [
-                'email' => 'occ.detchos.juliane@gmail.com',
-                'firstname' => 'Juliane',
-                'middlename' => 'Gonzales',
-                'lastname' => 'Detchos',
-                'role' => 'enforcer',
-                'contact_number' => '09171234510',
-            ],
-            [
-                'email' => 'occ.villanueva.jessamae@gmail.com',
-                'firstname' => 'Jessamae',
-                'middlename' => 'Bautista',
-                'lastname' => 'Villanueva',
-                'role' => 'enforcer',
-                'contact_number' => '09171234511',
-            ],
+            ['email' => 'occ.balasabas.johnpaul@gmail.com', 'firstname' => 'Johnpaul', 'middlename' => 'Alonzo', 'lastname' => 'Balasabas', 'role' => 'admin', 'contact_number' => '09171234501'],
+            ['email' => 'luiskarlcons@gmail.com', 'firstname' => 'Luis Karl', 'middlename' => 'Bautista', 'lastname' => 'Consolacion', 'role' => 'staff', 'contact_number' => '09171234503'],
+            ['email' => 'occ.detchos.juliane@gmail.com', 'firstname' => 'Juliane', 'middlename' => 'Gonzales', 'lastname' => 'Detchos', 'role' => 'enforcer', 'contact_number' => '09171234510'],
+            ['email' => 'occ.villanueva.jessamae@gmail.com', 'firstname' => 'Jessamae', 'middlename' => 'Bautista', 'lastname' => 'Villanueva', 'role' => 'enforcer', 'contact_number' => '09171234511'],
         ];
 
         $now = now();
@@ -473,11 +346,9 @@ class DatabaseSeeder extends Seeder
         $rows = [];
 
         foreach ($violatorIds as $i => $violatorId) {
-            $vehicleId = $vehicleIds[$i % count($vehicleIds)];
-
             $rows[] = [
                 'violator_id' => $violatorId,
-                'vehicle_id' => $vehicleId,
+                'vehicle_id' => $vehicleIds[$i % count($vehicleIds)],
                 'is_primary' => true,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -490,19 +361,15 @@ class DatabaseSeeder extends Seeder
 
     /* ==================================================================
      |  TICKETS + TICKET VIOLATIONS
-     |  NOTE: 'contested' is no longer a valid status — only
-     |  issued / paid / partial_paid / dismissed are produced here.
+     |  Statuses: issued / paid / dismissed only (no contested, no partial).
+     |  Each ticket gets a 3-day payment window from its violation date.
      ================================================================== */
 
     private function seedTicketsAndViolations(): void
     {
-        $enforcerIds = DB::table('users')
-            ->where('role', 'enforcer')
-            ->pluck('user_id')
-            ->toArray();
-
+        $enforcerIds = DB::table('users')->where('role', 'enforcer')->pluck('user_id')->toArray();
         $violatorIds = DB::table('violators')->pluck('violator_id')->toArray();
-        $vehicleIds = DB::table('vehicles')->pluck('vehicle_id')->toArray();
+        $vehicleIds  = DB::table('vehicles')->pluck('vehicle_id')->toArray();
         $violationTypes = DB::table('violation_types')
             ->select('violation_id', 'fine_amount', 'demerit_points')
             ->get()
@@ -519,33 +386,19 @@ class DatabaseSeeder extends Seeder
             'Zone 5, National Highway, Barangay Sta. Cruz',
         ];
 
-        // ✅ No 'contested' — removed.
-        $statuses = [
-            'issued',
-            'issued',
-            'issued',
-            'paid',
-            'paid',
-            'partial_paid',
-            'dismissed',
-        ];
+        $statuses = ['issued', 'issued', 'issued', 'paid', 'paid', 'dismissed'];
 
         $tickets = [];
         $ticketViolations = [];
-        $ticketSequence = []; // "Ymd" => next number
+        $ticketSequence = [];
         $now = Carbon::now();
 
         for ($i = 0; $i < self::TICKET_COUNT; $i++) {
-            // Spread tickets across the history window, biased toward
-            // recent days so the dashboard has a lot of "today" data.
             $daysAgo = (int) floor(
-                pow($i / max(1, self::TICKET_COUNT - 1), 0.7) *
-                    self::TICKET_HISTORY_DAYS,
+                pow($i / max(1, self::TICKET_COUNT - 1), 0.7) * self::TICKET_HISTORY_DAYS,
             );
             $date = $now->copy()->subDays($daysAgo);
-
-            // Spread tickets through the working day.
-            $hour = 7 + ($i * 3) % 11; // 7..17
+            $hour = 7 + ($i * 3) % 11;
             $minute = ($i * 7) % 60;
             $date->setTime($hour, $minute, 0);
 
@@ -555,13 +408,9 @@ class DatabaseSeeder extends Seeder
             }
             $ticketSequence[$dateKey]++;
 
-            $ticketNumber = sprintf(
-                'TKT-%s-%04d',
-                $dateKey,
-                $ticketSequence[$dateKey],
-            );
-
+            $ticketNumber = sprintf('TKT-%s-%04d', $dateKey, $ticketSequence[$dateKey]);
             $status = $statuses[$i % count($statuses)];
+            $paymentDueAt = $date->copy()->addDays(self::PAYMENT_DUE_DAYS);
 
             $tickets[] = [
                 'ticket_number' => $ticketNumber,
@@ -573,6 +422,7 @@ class DatabaseSeeder extends Seeder
                 'latitude' => 8.558 + (($i % 20) - 10) / 1000,
                 'longitude' => 124.524 + (($i % 20) - 10) / 1000,
                 'violation_datetime' => $date->format('Y-m-d H:i:s'),
+                'payment_due_at' => $paymentDueAt->format('Y-m-d H:i:s'),
                 'remarks' => $i % 3 === 0 ? 'Driver verbally warned.' : null,
                 'status' => $status,
                 'qr_code' => null,
@@ -584,22 +434,15 @@ class DatabaseSeeder extends Seeder
 
         DB::table('tickets')->insert($tickets);
 
-        // Re-fetch with their server-assigned IDs so we can attach
-        // violations precisely.
         $insertedTickets = DB::table('tickets')
             ->orderBy('ticket_id')
             ->get(['ticket_id', 'created_at']);
 
         foreach ($insertedTickets as $index => $ticket) {
-            // 1–3 violations, deterministic by index.
             $count = 1 + ($index % 3);
-
-            // Pick a distinct set of violations by walking the
-            // violation_types list from a per-ticket offset.
             $used = [];
             for ($k = 0; $k < $count; $k++) {
                 $vi = ($index * 3 + $k * 7) % count($violationTypes);
-                // Guard against duplicates within the same ticket.
                 $guard = 0;
                 while (in_array($vi, $used, true) && $guard < 20) {
                     $vi = ($vi + 1) % count($violationTypes);
@@ -627,14 +470,13 @@ class DatabaseSeeder extends Seeder
 
     /* ==================================================================
      |  PAYMENTS
+     |  Only 'paid' tickets get a single full payment row.
      ================================================================== */
 
     private function seedPayments(): void
     {
-        // Only seed payments for tickets whose status is 'paid' or
-        // 'partial_paid'. The rest are unpaid / dismissed.
         $tickets = DB::table('tickets')
-            ->whereIn('status', ['paid', 'partial_paid'])
+            ->where('status', 'paid')
             ->orderBy('ticket_id')
             ->get(['ticket_id', 'status', 'created_at']);
 
@@ -644,7 +486,6 @@ class DatabaseSeeder extends Seeder
         $counter = 0;
 
         foreach ($tickets as $ticket) {
-            // Sum of violations for this ticket.
             $totalFine = (float) DB::table('ticket_violations')
                 ->where('ticket_id', $ticket->ticket_id)
                 ->sum('fine_amount');
@@ -653,66 +494,34 @@ class DatabaseSeeder extends Seeder
                 continue;
             }
 
-            // Payment lands 0–14 days after the ticket.
             $paymentDate = Carbon::parse($ticket->created_at)
                 ->addDays(($counter * 3) % 15)
                 ->setTime(9 + ($counter % 8), ($counter * 11) % 60, 0);
 
-            // Don't let a payment land in the future.
             if ($paymentDate->isAfter($now)) {
                 $paymentDate = $now->copy()->subHours(1);
             }
 
             $counter++;
 
-            $reference = sprintf(
-                'PAY-%s-%s',
-                $paymentDate->format('Ymd'),
-                strtoupper(Str::random(6)),
-            );
-            $receipt = sprintf(
-                'RCP-%s-%04d',
-                $paymentDate->format('Ymd'),
-                $counter,
-            );
+            $reference = sprintf('PAY-%s-%s', $paymentDate->format('Ymd'), strtoupper(Str::random(6)));
+            $receipt   = sprintf('RCP-%s-%04d', $paymentDate->format('Ymd'), $counter);
 
-            if ($ticket->status === 'paid') {
-                // Full payment.
-                $rows[] = [
-                    'ticket_id' => $ticket->ticket_id,
-                    'payment_reference' => $reference,
-                    'amount_paid' => $totalFine,
-                    'payment_date' => $paymentDate,
-                    'payment_method' => $methods[$counter % count($methods)],
-                    'payment_status' => 'completed',
-                    'transaction_id' => null,
-                    'receipt_number' => $receipt,
-                    'receipt_path' => null,
-                    'paid_by' => null,
-                    'notes' => null,
-                    'created_at' => $paymentDate,
-                    'updated_at' => $paymentDate,
-                ];
-            } else {
-                // Partial payment — pay roughly half, rounded to the
-                // nearest peso, but never less than ₱100.
-                $partial = max(100, round($totalFine * 0.5));
-                $rows[] = [
-                    'ticket_id' => $ticket->ticket_id,
-                    'payment_reference' => $reference,
-                    'amount_paid' => $partial,
-                    'payment_date' => $paymentDate,
-                    'payment_method' => $methods[$counter % count($methods)],
-                    'payment_status' => 'completed',
-                    'transaction_id' => null,
-                    'receipt_number' => $receipt,
-                    'receipt_path' => null,
-                    'paid_by' => null,
-                    'notes' => 'Partial payment received at counter.',
-                    'created_at' => $paymentDate,
-                    'updated_at' => $paymentDate,
-                ];
-            }
+            $rows[] = [
+                'ticket_id' => $ticket->ticket_id,
+                'payment_reference' => $reference,
+                'amount_paid' => $totalFine,
+                'payment_date' => $paymentDate,
+                'payment_method' => $methods[$counter % count($methods)],
+                'payment_status' => 'completed',
+                'transaction_id' => null,
+                'receipt_number' => $receipt,
+                'receipt_path' => null,
+                'paid_by' => null,
+                'notes' => null,
+                'created_at' => $paymentDate,
+                'updated_at' => $paymentDate,
+            ];
         }
 
         if (!empty($rows)) {
@@ -728,7 +537,6 @@ class DatabaseSeeder extends Seeder
 
     private function seedRepeatOffenders(): void
     {
-        // Aggregate ticket counts per violator.
         $aggregates = DB::table('tickets')
             ->join('ticket_violations', 'tickets.ticket_id', '=', 'ticket_violations.ticket_id')
             ->select(
@@ -755,10 +563,7 @@ class DatabaseSeeder extends Seeder
                 'last_violation_date' => $agg->last_violation_date,
                 'is_flagged' => $isFlagged,
                 'flag_reason' => $isFlagged
-                    ? sprintf(
-                        'Exceeded %d violation(s)',
-                        self::REPEAT_OFFENDER_THRESHOLD,
-                    )
+                    ? sprintf('Exceeded %d violation(s)', self::REPEAT_OFFENDER_THRESHOLD)
                     : null,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -778,38 +583,27 @@ class DatabaseSeeder extends Seeder
 
     private function seedEnforcerAttendance(): void
     {
-        $enforcerIds = DB::table('users')
-            ->where('role', 'enforcer')
-            ->pluck('user_id')
-            ->toArray();
+        $enforcerIds = DB::table('users')->where('role', 'enforcer')->pluck('user_id')->toArray();
 
         $today = Carbon::today();
-        $now = now();
         $rows = [];
 
         foreach ($enforcerIds as $enforcerIndex => $enforcerId) {
             for ($daysAgo = 0; $daysAgo < self::ATTENDANCE_HISTORY_DAYS; $daysAgo++) {
                 $date = $today->copy()->subDays($daysAgo);
 
-                // Skip weekends — enforcers don't work Sat/Sun in this
-                // dataset.
                 if ($date->isWeekend()) {
                     continue;
                 }
 
-                // Skip configured holidays.
                 if (array_key_exists($date->format('Y-m-d'), self::HOLIDAYS)) {
                     continue;
                 }
 
-                // Don't seed today's attendance — let the mobile app do
-                // that through the real flow so we have real photos.
                 if ($daysAgo === 0) {
                     continue;
                 }
 
-                // Deterministic status roll: ~80% present, ~10% late,
-                // ~5% half-day, ~5% on-leave.
                 $roll = ($enforcerIndex * 7 + $daysAgo * 3) % 20;
 
                 $status = 'present';
@@ -845,17 +639,8 @@ class DatabaseSeeder extends Seeder
                     continue;
                 }
 
-                $timeIn = $date->copy()->setTime(
-                    self::WORK_START_HOUR,
-                    0,
-                    0,
-                )->addMinutes($lateMinutes);
-
-                $timeOut = $date->copy()->setTime(
-                    self::WORK_END_HOUR,
-                    0,
-                    0,
-                );
+                $timeIn = $date->copy()->setTime(self::WORK_START_HOUR, 0, 0)->addMinutes($lateMinutes);
+                $timeOut = $date->copy()->setTime(self::WORK_END_HOUR, 0, 0);
 
                 if ($status === 'half_day') {
                     $timeOut = $date->copy()->setTime(12, 0, 0);
@@ -892,9 +677,6 @@ class DatabaseSeeder extends Seeder
         $this->command->info('  ✓ Attendance records: ' . count($rows));
     }
 
-    /**
-     * Fake but consistent coordinates around El Salvador City.
-     */
     private function fakeLocation(int $enforcerIndex, int $offset): string
     {
         $lat = 8.5580 + (($enforcerIndex * 3 + $offset * 7) % 40 - 20) / 10000;
@@ -904,8 +686,7 @@ class DatabaseSeeder extends Seeder
 
     /* ==================================================================
      |  APPEALS
-     |  NOTE: appeals now attach to 'issued' tickets, since 'contested'
-     |  is no longer a valid status.
+     |  Seeded against 'issued' tickets so the table is populated.
      ================================================================== */
 
     private function seedAppeals(): void
@@ -921,13 +702,8 @@ class DatabaseSeeder extends Seeder
             return;
         }
 
-        $reviewers = DB::table('users')
-            ->whereIn('role', ['admin', 'staff'])
-            ->pluck('user_id')
-            ->toArray();
-
+        $reviewers = DB::table('users')->whereIn('role', ['admin', 'staff'])->pluck('user_id')->toArray();
         $statuses = ['pending', 'under_review', 'approved', 'rejected'];
-        $now = now();
         $rows = [];
 
         foreach ($appealedTickets as $i => $ticket) {
@@ -942,9 +718,7 @@ class DatabaseSeeder extends Seeder
                 'supporting_documents' => null,
                 'status' => $status,
                 'reviewed_by' => $decided ? $reviewers[$i % count($reviewers)] : null,
-                'review_notes' => $decided
-                    ? 'Reviewed by the traffic adjudication board.'
-                    : null,
+                'review_notes' => $decided ? 'Reviewed by the traffic adjudication board.' : null,
                 'decision_date' => $decided ? $createdAt->copy()->addDays(5) : null,
                 'created_at' => $createdAt,
                 'updated_at' => $decided ? $createdAt->copy()->addDays(5) : $createdAt,
@@ -961,31 +735,16 @@ class DatabaseSeeder extends Seeder
 
     private function seedNotifications(): void
     {
-        $enforcers = DB::table('users')
-            ->where('role', 'enforcer')
-            ->get(['user_id', 'firstname', 'lastname']);
-
-        $admins = DB::table('users')
-            ->where('role', 'admin')
-            ->pluck('user_id')
-            ->toArray();
-
-        // The 15 most recent tickets — a small, focused set of
-        // notifications that reflects real activity.
-        $recentTickets = DB::table('tickets')
-            ->orderBy('created_at', 'desc')
-            ->limit(15)
-            ->get();
+        $enforcers = DB::table('users')->where('role', 'enforcer')->get(['user_id', 'firstname', 'lastname']);
+        $admins = DB::table('users')->where('role', 'admin')->pluck('user_id')->toArray();
+        $recentTickets = DB::table('tickets')->orderBy('created_at', 'desc')->limit(15)->get();
 
         $now = now();
         $rows = [];
 
         foreach ($recentTickets as $i => $ticket) {
-            $enforcerId = $ticket->enforcer_id;
-
-            // Ticket-created notification → the issuing enforcer.
             $rows[] = [
-                'user_id' => $enforcerId,
+                'user_id' => $ticket->enforcer_id,
                 'title' => 'Ticket Issued',
                 'message' => "Ticket {$ticket->ticket_number} issued successfully.",
                 'type' => 'ticket_created',
@@ -996,8 +755,6 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => $ticket->created_at,
             ];
 
-            // Also notify admins about the new ticket, but only for a
-            // handful so the admin bell doesn't get flooded.
             if ($i < 5) {
                 foreach ($admins as $adminId) {
                     $rows[] = [
@@ -1015,7 +772,6 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        // A couple of system announcements to every enforcer.
         foreach ($enforcers as $enforcer) {
             $rows[] = [
                 'user_id' => $enforcer->user_id,
