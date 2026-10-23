@@ -11,8 +11,7 @@ use Carbon\Carbon;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Number of tickets to generate. Sized for a demo dataset that's big
-     * enough to page through but small enough to insert quickly.
+     * Number of tickets to generate.
      */
     private const TICKET_COUNT = 120;
 
@@ -27,7 +26,6 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Official start-of-day and end-of-day for attendance.
-     * Matches `settings.time_in_start` / `settings.time_out_end`.
      */
     private const WORK_START_HOUR = 8;
     private const WORK_END_HOUR = 17;
@@ -37,7 +35,6 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Skip these fixed dates when generating attendance.
-     * Extend as needed for real holidays.
      */
     private const HOLIDAYS = [
         // Add 'YYYY-MM-DD' => 'Holiday name' entries here
@@ -88,6 +85,8 @@ class DatabaseSeeder extends Seeder
             'duty_locations',
             'enforcer_locations',
             'faces',
+            'face_registrations',
+            'face_takeover_requests',
             'biometric_requests',
             'otp_codes',
             'personal_access_tokens',
@@ -474,8 +473,6 @@ class DatabaseSeeder extends Seeder
         $rows = [];
 
         foreach ($violatorIds as $i => $violatorId) {
-            // Each violator owns one vehicle, indexed mod so vehicle and
-            // violator lists stay aligned even if sizes differ.
             $vehicleId = $vehicleIds[$i % count($vehicleIds)];
 
             $rows[] = [
@@ -493,6 +490,8 @@ class DatabaseSeeder extends Seeder
 
     /* ==================================================================
      |  TICKETS + TICKET VIOLATIONS
+     |  NOTE: 'contested' is no longer a valid status — only
+     |  issued / paid / partial_paid / dismissed are produced here.
      ================================================================== */
 
     private function seedTicketsAndViolations(): void
@@ -520,7 +519,16 @@ class DatabaseSeeder extends Seeder
             'Zone 5, National Highway, Barangay Sta. Cruz',
         ];
 
-        $statuses = ['issued', 'issued', 'issued', 'paid', 'paid', 'partial_paid', 'dismissed'];
+        // ✅ No 'contested' — removed.
+        $statuses = [
+            'issued',
+            'issued',
+            'issued',
+            'paid',
+            'paid',
+            'partial_paid',
+            'dismissed',
+        ];
 
         $tickets = [];
         $ticketViolations = [];
@@ -624,13 +632,13 @@ class DatabaseSeeder extends Seeder
     private function seedPayments(): void
     {
         // Only seed payments for tickets whose status is 'paid' or
-        // 'partial_paid'. The rest are unpaid/ dismissed.
+        // 'partial_paid'. The rest are unpaid / dismissed.
         $tickets = DB::table('tickets')
             ->whereIn('status', ['paid', 'partial_paid'])
             ->orderBy('ticket_id')
             ->get(['ticket_id', 'status', 'created_at']);
 
-        $methods = ['cash',];
+        $methods = ['cash'];
         $now = Carbon::now();
         $rows = [];
         $counter = 0;
@@ -850,10 +858,8 @@ class DatabaseSeeder extends Seeder
                 );
 
                 if ($status === 'half_day') {
-                    // Half day = leave at noon.
                     $timeOut = $date->copy()->setTime(12, 0, 0);
                 } else {
-                    // Occasionally add overtime.
                     if (($enforcerIndex + $daysAgo) % 8 === 0) {
                         $overtimeMinutes = 30 + (($enforcerIndex * 5 + $daysAgo) % 90);
                         $timeOut->addMinutes($overtimeMinutes);
@@ -879,7 +885,6 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        // Insert in chunks to keep the parameter count below SQL limits.
         foreach (array_chunk($rows, 200) as $chunk) {
             DB::table('enforcer_attendance')->insert($chunk);
         }
@@ -899,54 +904,56 @@ class DatabaseSeeder extends Seeder
 
     /* ==================================================================
      |  APPEALS
+     |  NOTE: appeals now attach to 'issued' tickets, since 'contested'
+     |  is no longer a valid status.
      ================================================================== */
 
     private function seedAppeals(): void
-{
-    $appealedTickets = DB::table('tickets')
-        ->whereIn('status', ['issued'])
-        ->inRandomOrder()
-        ->limit(5)
-        ->get(['ticket_id', 'violator_id', 'created_at']);
+    {
+        $appealedTickets = DB::table('tickets')
+            ->whereIn('status', ['issued'])
+            ->inRandomOrder()
+            ->limit(5)
+            ->get(['ticket_id', 'violator_id', 'created_at']);
 
-    if ($appealedTickets->isEmpty()) {
-        $this->command->info('  ✓ Appeals: 0');
-        return;
+        if ($appealedTickets->isEmpty()) {
+            $this->command->info('  ✓ Appeals: 0');
+            return;
+        }
+
+        $reviewers = DB::table('users')
+            ->whereIn('role', ['admin', 'staff'])
+            ->pluck('user_id')
+            ->toArray();
+
+        $statuses = ['pending', 'under_review', 'approved', 'rejected'];
+        $now = now();
+        $rows = [];
+
+        foreach ($appealedTickets as $i => $ticket) {
+            $status = $statuses[$i % count($statuses)];
+            $createdAt = Carbon::parse($ticket->created_at)->addDays(1);
+            $decided = $status === 'approved' || $status === 'rejected';
+
+            $rows[] = [
+                'ticket_id' => $ticket->ticket_id,
+                'violator_id' => $ticket->violator_id,
+                'appeal_reason' => 'I believe this ticket was issued in error. Requesting adjudication.',
+                'supporting_documents' => null,
+                'status' => $status,
+                'reviewed_by' => $decided ? $reviewers[$i % count($reviewers)] : null,
+                'review_notes' => $decided
+                    ? 'Reviewed by the traffic adjudication board.'
+                    : null,
+                'decision_date' => $decided ? $createdAt->copy()->addDays(5) : null,
+                'created_at' => $createdAt,
+                'updated_at' => $decided ? $createdAt->copy()->addDays(5) : $createdAt,
+            ];
+        }
+
+        DB::table('appeals')->insert($rows);
+        $this->command->info('  ✓ Appeals: ' . count($rows));
     }
-
-    $reviewers = DB::table('users')
-        ->whereIn('role', ['admin', 'staff'])
-        ->pluck('user_id')
-        ->toArray();
-
-    $statuses = ['pending', 'under_review', 'approved', 'rejected'];
-    $now = now();
-    $rows = [];
-
-    foreach ($appealedTickets as $i => $ticket) {
-        $status = $statuses[$i % count($statuses)];
-        $createdAt = Carbon::parse($ticket->created_at)->addDays(1);
-        $decided = $status === 'approved' || $status === 'rejected';
-
-        $rows[] = [
-            'ticket_id' => $ticket->ticket_id,
-            'violator_id' => $ticket->violator_id,
-            'appeal_reason' => 'I believe this ticket was issued in error. Requesting adjudication.',
-            'supporting_documents' => null,
-            'status' => $status,
-            'reviewed_by' => $decided ? $reviewers[$i % count($reviewers)] : null,
-            'review_notes' => $decided
-                ? 'Reviewed by the traffic adjudication board.'
-                : null,
-            'decision_date' => $decided ? $createdAt->copy()->addDays(5) : null,
-            'created_at' => $createdAt,
-            'updated_at' => $decided ? $createdAt->copy()->addDays(5) : $createdAt,
-        ];
-    }
-
-    DB::table('appeals')->insert($rows);
-    $this->command->info('  ✓ Appeals: ' . count($rows));
-}
 
     /* ==================================================================
      |  NOTIFICATIONS
