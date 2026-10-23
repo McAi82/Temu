@@ -18,7 +18,8 @@ return new class extends Migration {
             $table->decimal('latitude', 10, 8)->nullable()->comment('GPS latitude');
             $table->decimal('longitude', 11, 8)->nullable()->comment('GPS longitude');
             $table->datetime('violation_datetime');
-            $table->timestamp('payment_due_at')->nullable()->after('violation_datetime');
+            $table->timestamp('payment_due_at')->nullable();
+
             $table->text('remarks')->nullable();
             $table->enum('status', ['issued', 'paid', 'dismissed'])->default('issued');
             $table->string('qr_code', 255)->nullable();
