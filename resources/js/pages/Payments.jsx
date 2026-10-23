@@ -113,14 +113,6 @@ const STATUS_OPTIONS = Object.keys(STATUS_META).map((key) => ({
 
 const METHOD_OPTIONS = [{ value: 'cash', label: 'Cash' }];
 
-const handleRefresh = () => {
-    // Always refetch the pending list (that's the active default tab).
-    refetchPending();
-    if (tab === 'history') {
-        refetchHistory();
-    }
-};
-
 const PRESETS = [
     { label: 'Today', days: 0 },
     { label: 'Last 7d', days: 6 },
@@ -376,6 +368,11 @@ const Payments = () => {
     const notify = useAlert();
     const [tab, setTab] = useState('pending');
 
+    // Visible-spinner state for the header Refresh button.
+    // Stays true for a minimum window so the spin animation is
+    // always seen, even when the network round-trip is instant.
+    const [refreshing, setRefreshing] = useState(false);
+
     /* ---------- Pending tab ---------- */
     const [pendingView, setPendingView] = useState('list');
     const [pendingPage, setPendingPage] = useState(1);
@@ -421,12 +418,12 @@ const Payments = () => {
 
     /* ---------- Queries ---------- */
     const {
-    data: pendingResponse,
-    isLoading: pendingLoading,
-    isFetching: pendingFetching,
-    refetch: refetchPending,
-    error: pendingError,
-} = useQuery({
+        data: pendingResponse,
+        isLoading: pendingLoading,
+        isFetching: pendingFetching,
+        refetch: refetchPending,
+        error: pendingError,
+    } = useQuery({
         queryKey: ['payments-pending', pendingPage, pendingSearch],
         queryFn: () =>
             getPendingPayments(pendingPage, ITEMS_PER_PAGE, {
@@ -437,12 +434,12 @@ const Payments = () => {
     });
 
     const {
-    data: historyResponse,
-    isLoading: historyLoading,
-    isFetching: historyFetching,
-    refetch: refetchHistory,
-    error: historyError,
-} = useQuery({
+        data: historyResponse,
+        isLoading: historyLoading,
+        isFetching: historyFetching,
+        refetch: refetchHistory,
+        error: historyError,
+    } = useQuery({
         queryKey: ['payments-history', historyPage, historySearch, historyFilters],
         queryFn: () =>
             getPayments(historyPage, ITEMS_PER_PAGE, {
@@ -554,6 +551,26 @@ const Payments = () => {
         if (historyFilters.min_amount || historyFilters.max_amount) c++;
         return c;
     }, [historySearch, historyFilters]);
+
+    /* ---------- Refresh handler ---------- */
+    const handleRefresh = async () => {
+        if (refreshing) return;
+
+        setRefreshing(true);
+
+        try {
+            const jobs = [refetchPending({ cancelRefetch: true })];
+            if (tab === 'history') {
+                jobs.push(refetchHistory({ cancelRefetch: true }));
+            }
+            await Promise.all(jobs);
+        } catch (e) {
+            console.warn('Refresh failed:', e);
+        } finally {
+            // Hold the spinner for a visible minimum.
+            setTimeout(() => setRefreshing(false), 600);
+        }
+    };
 
     /* ---------- Mutations ---------- */
     const createMutation = useMutation({
@@ -1014,17 +1031,17 @@ const Payments = () => {
                     </p>
                 </div>
                 <Button
-    onClick={handleRefresh}
-    variant="outline"
-    disabled={pendingFetching || historyFetching}
-    className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
->
-    <RefreshCw
-        className={`w-4 h-4 mr-2 ${pendingFetching || historyFetching ? 'animate-spin' : ''
-            }`}
-    />
-    Refresh
-</Button>
+                    onClick={handleRefresh}
+                    variant="outline"
+                    disabled={refreshing}
+                    className="relative bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-70"
+                >
+                    <RefreshCw
+                        className={`w-4 h-4 mr-2 transition-transform ${refreshing ? 'animate-spin' : ''
+                            }`}
+                    />
+                    {refreshing ? 'Refreshing…' : 'Refresh'}
+                </Button>
             </header>
 
             <Tabs value={tab} onValueChange={setTab} className="space-y-6">
@@ -1722,7 +1739,7 @@ const Payments = () => {
                 </TabsContent>
             </Tabs>
 
-            {/* ---------------- Payment dialog (redesigned, 70% width) ---------------- */}
+            {/* ---------------- Payment dialog ---------------- */}
             <Dialog
                 open={isDialogOpen}
                 onOpenChange={(open) => {
@@ -1731,7 +1748,6 @@ const Payments = () => {
                 }}
             >
                 <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
-                    {/* -------- Header -------- */}
                     <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
                         <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
                             <span className="w-10 h-10 rounded-lg bg-[#E5F2EA] flex items-center justify-center flex-shrink-0">
@@ -1758,7 +1774,6 @@ const Payments = () => {
                     >
                         <div className="flex-1 overflow-y-auto">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-                                {/* ============ LEFT: FORM FIELDS ============ */}
                                 <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
                                     {formError && (
                                         <div className="bg-[#FBE7E9] text-[#C8202F] p-3.5 rounded-md flex items-start gap-2.5 text-sm border-l-4 border-[#C8202F]">
@@ -1769,7 +1784,6 @@ const Payments = () => {
                                         </div>
                                     )}
 
-                                    {/* ──── RECEIPT ──── */}
                                     <section>
                                         <div className="flex items-center gap-2 mb-4">
                                             <Receipt className="w-4 h-4 text-[#F0B429]" />
@@ -1821,7 +1835,6 @@ const Payments = () => {
                                         </div>
                                     </section>
 
-                                    {/* ──── AMOUNT ──── */}
                                     <section>
                                         <div className="flex items-center gap-2 mb-4">
                                             <PhilippinePeso className="w-4 h-4 text-[#F0B429]" />
@@ -1887,7 +1900,6 @@ const Payments = () => {
                                         </div>
                                     </section>
 
-                                    {/* ──── PAYMENT INFO ──── */}
                                     <section>
                                         <div className="flex items-center gap-2 mb-4">
                                             <Calendar className="w-4 h-4 text-[#F0B429]" />
@@ -1933,7 +1945,6 @@ const Payments = () => {
                                         </div>
                                     </section>
 
-                                    {/* ──── NOTES ──── */}
                                     <section>
                                         <div className="flex items-center gap-2 mb-4">
                                             <FileText className="w-4 h-4 text-[#F0B429]" />
@@ -1957,7 +1968,6 @@ const Payments = () => {
                                     </section>
                                 </div>
 
-                                {/* ============ RIGHT: SUMMARY ============ */}
                                 <div className="p-7 space-y-6 bg-[#F8F9FA]">
                                     {selectedTicket && (
                                         <section>
@@ -2126,7 +2136,6 @@ const Payments = () => {
                             </div>
                         </div>
 
-                        {/* ============ STICKY FOOTER ============ */}
                         <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
                             <div className="text-xs text-[#64748B] flex items-center gap-2">
                                 <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
@@ -2182,7 +2191,7 @@ const Payments = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* ---------------- History / View dialog (redesigned, 70% width) ---------------- */}
+            {/* ---------------- History / View dialog ---------------- */}
             <Dialog
                 open={isHistoryDialogOpen}
                 onOpenChange={(open) => {
@@ -2191,7 +2200,6 @@ const Payments = () => {
                 }}
             >
                 <DialogContent className="w-[70vw] max-w-[1100px] max-h-[90vh] overflow-hidden p-0 gap-0">
-                    {/* -------- Header -------- */}
                     <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
                         <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
                             <span className="w-10 h-10 rounded-lg bg-[#E9ECF2] flex items-center justify-center flex-shrink-0">
@@ -2202,7 +2210,7 @@ const Payments = () => {
                                 <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
                                     {ticketHistory
                                         ? `Ticket ${ticketHistory.ticket_number} · ${ticketHistory.violator?.firstname || ''
-                                            } ${ticketHistory.violator?.lastname || ''}`.trim()
+                                        } ${ticketHistory.violator?.lastname || ''}`.trim()
                                         : 'Loading payment records…'}
                                 </div>
                             </div>
@@ -2223,9 +2231,7 @@ const Payments = () => {
                         <div className="flex flex-col max-h-[calc(90vh-100px)]">
                             <div className="flex-1 overflow-y-auto">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-                                    {/* ============ LEFT: TICKET + PAYMENT LIST ============ */}
                                     <div className="lg:col-span-2 p-7 space-y-7 border-r border-dashed border-[#CBD5E1]">
-                                        {/* ──── TICKET SUMMARY ──── */}
                                         <section>
                                             <div className="flex items-center gap-2 mb-4">
                                                 <TicketIcon className="w-4 h-4 text-[#F0B429]" />
@@ -2314,7 +2320,6 @@ const Payments = () => {
                                             </div>
                                         </section>
 
-                                        {/* ──── PAYMENT RECORDS ──── */}
                                         <section>
                                             <div className="flex items-center gap-2 mb-4">
                                                 <Receipt className="w-4 h-4 text-[#F0B429]" />
@@ -2419,9 +2424,7 @@ const Payments = () => {
                                         </section>
                                     </div>
 
-                                    {/* ============ RIGHT: SUMMARY ============ */}
                                     <div className="p-7 space-y-6 bg-[#F8F9FA]">
-                                        {/* Breakdown card */}
                                         <section>
                                             <div className="flex items-center gap-2 mb-3">
                                                 <PhilippinePeso className="w-4 h-4 text-[#1E8449]" />
@@ -2477,7 +2480,6 @@ const Payments = () => {
                                             </div>
                                         </section>
 
-                                        {/* Payment progress */}
                                         {ticketPayments.length > 0 &&
                                             parseFloat(ticketHistorySummary?.total_fine) > 0 && (
                                                 <section>
@@ -2523,7 +2525,6 @@ const Payments = () => {
                                                 </section>
                                             )}
 
-                                        {/* Tips */}
                                         <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
                                             <div className="flex items-start gap-2.5">
                                                 <Info className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
@@ -2547,7 +2548,6 @@ const Payments = () => {
                                 </div>
                             </div>
 
-                            {/* ============ STICKY FOOTER ============ */}
                             <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
                                 <div className="text-xs text-[#64748B] flex items-center gap-2">
                                     <Info className="w-3.5 h-3.5 text-[#94A3B8]" />
