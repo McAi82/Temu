@@ -710,6 +710,10 @@ const Users = () => {
         data: formDataToSend,
       });
     } else {
+      if (formData.role === 'admin') {
+        notify.error('Admin accounts cannot be created from this page.');
+        return;
+      }
       createMutation.mutate(formDataToSend);
     }
   };
@@ -1336,7 +1340,7 @@ const Users = () => {
                             <span className="h-px flex-1 bg-[#E3E7EE]" />
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {[
                               {
                                 value: 'admin',
@@ -1362,7 +1366,11 @@ const Users = () => {
                                 tint: '#E5F2EA',
                                 accent: '#1E8449',
                               },
-                            ].map((opt) => {
+                            ]
+                              // Admin accounts can't be created from here; the Admin
+                              // option only shows when editing an existing admin.
+                              .filter((opt) => opt.value !== 'admin' || editingUser?.role === 'admin')
+                              .map((opt) => {
                               const active = formData.role === opt.value;
                               const Icon = opt.Icon;
                               return (
