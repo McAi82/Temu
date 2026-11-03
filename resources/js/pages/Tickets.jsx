@@ -1,0 +1,1500 @@
+// web/src/pages/Tickets.jsx
+import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+import { Pagination } from '../components/ui/Pagination';
+import ActionButton from '../components/ui/ActionButton';
+import { byFields } from '../lib/sortBy';
+import {
+  getTickets,
+  getTicket,
+  updateTicketStatus,
+  deleteTicket,
+  getUsers,
+  getViolations,
+} from '../services/api';
+import {
+  Search,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Archive,
+  RefreshCw,
+  Loader2,
+  Filter,
+  X,
+  Calendar,
+  Eye,
+  LayoutGrid,
+  List as ListIcon,
+  Ticket as TicketIcon,
+  Clock,
+  AlertTriangle,
+  User as UserIcon,
+  Car,
+  MapPin,
+  FileText,
+  Shield,
+  Banknote,
+  Copy,
+  Check,
+  PhilippinePeso,
+} from 'lucide-react';
+import { useAlert } from '../components/ui/AlertProvider';
+
+const ITEMS_PER_PAGE = 20;
+
+const STATUS_META = {
+  issued: {
+    label: 'Issued',
+    color: '#F0B429',
+    soft: '#FBF1DC',
+    text: '#92600A',
+    chip: 'bg-[#FBF1DC] text-[#92600A]',
+    icon: AlertCircle,
+  },
+  paid: {
+    label: 'Paid',
+    color: '#1E8449',
+    soft: '#E5F2EA',
+    text: '#1E8449',
+    chip: 'bg-[#E5F2EA] text-[#1E8449]',
+    icon: CheckCircle,
+  },
+  dismissed: {
+    label: 'Dismissed',
+    color: '#C8202F',
+    soft: '#FBE7E9',
+    text: '#C8202F',
+    chip: 'bg-[#FBE7E9] text-[#C8202F]',
+    icon: XCircle,
+  },
+};
+
+const STATUS_OPTIONS = Object.keys(STATUS_META).map((key) => ({
+  value: key,
+  label: STATUS_META[key].label,
+}));
+
+const PRESETS = [
+  { label: 'Today', days: 0 },
+  { label: 'Last 7d', days: 6 },
+  { label: 'Last 30d', days: 29 },
+  { label: 'Last 90d', days: 89 },
+];
+
+const toISODate = (d) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const daysAgoISO = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return toISODate(d);
+};
+
+function useDebouncedValue(value, delay = 350) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+const getDataArray = (response) => {
+  if (!response) return [];
+  if (Array.isArray(response)) return response;
+  if (response.data && Array.isArray(response.data)) return response.data;
+  if (response.data?.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  return [];
+};
+
+const getMeta = (response) => {
+  if (!response) return { current_page: 1, last_page: 1, total: 0 };
+  if (response.meta) return response.meta;
+  if (response.data?.meta) return response.data.meta;
+  if (response.data && response.data.current_page !== undefined) {
+    return {
+      current_page: response.data.current_page,
+      last_page: response.data.last_page,
+      total: response.data.total,
+    };
+  }
+  return { current_page: 1, last_page: 1, total: 0 };
+};
+
+const formatDate = (v) => {
+  if (!v) return '—';
+  try {
+    return new Date(v).toLocaleDateString('en-PH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return '—';
+  }
+};
+
+const formatDateTime = (v) => {
+  if (!v) return '—';
+  try {
+    return new Date(v).toLocaleString('en-PH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '—';
+  }
+};
+
+const formatPeso = (n) =>
+  `₱${(parseFloat(n) || 0).toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const copyText = async (text) => {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy */
+  }
+  try {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.position = 'fixed';
+    el.style.left = '-9999px';
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
+const Chip = ({ label, onClear }) => (
+  <span className="inline-flex items-center gap-1 bg-[#E9ECF2] text-[#16233F] px-2.5 py-1 rounded-md text-xs">
+    {label}
+    <button onClick={onClear} className="hover:text-[#C8202F]">
+      <X className="w-3 h-3" />
+    </button>
+  </span>
+);
+
+const L = ({ icon: I, children }) => (
+  <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
+    {I && <I className="w-3.5 h-3.5 text-[#92600A]" />}
+    {children}
+  </label>
+);
+
+const Mini = ({ children }) => (
+  <i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">
+    {children}
+  </i>
+);
+
+const ViewToggle = ({ view, setView }) => (
+  <div
+    className="ml-auto flex bg-[#E9ECF2] rounded-full p-1 text-xs"
+    role="group"
+    aria-label="Choose layout"
+  >
+    {[['list', 'List', ListIcon], ['cards', 'Cards', LayoutGrid]].map(
+      ([v, label, I]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => setView(v)}
+          aria-pressed={view === v}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
+              ? 'bg-[#16233F] text-white'
+              : 'text-[#64748B] hover:text-[#16233F]'
+            }`}
+        >
+          <I className="w-3.5 h-3.5" />
+          {label}
+        </button>
+      ),
+    )}
+  </div>
+);
+
+const FilterShell = ({ title, onClose, onReset, children }) => (
+  <aside className="self-start rounded-xl bg-[#FBF1DC] border-t-4 border-[#F0B429] p-5 space-y-5 lg:sticky lg:top-4">
+    <div className="flex justify-between items-center">
+      <h3 className="text-base font-['Oswald'] font-medium text-[#16233F]">
+        {title}
+      </h3>
+      <button
+        onClick={onClose}
+        className="p-1 rounded hover:bg-[#F0B429]/25"
+      >
+        <X className="w-4 h-4 text-[#92600A]" />
+      </button>
+    </div>
+    {children}
+    <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
+      <Button onClick={onClose} className="bg-[#1E8449] hover:bg-[#186B3B]">
+        Apply Filters
+      </Button>
+      <Button
+        onClick={onReset}
+        variant="ghost"
+        className="text-[#64748B] hover:text-[#C8202F]"
+      >
+        <X className="w-4 h-4 mr-1" />
+        Reset
+      </Button>
+    </div>
+  </aside>
+);
+
+const Spec = ({ label, children, mono, danger }) => (
+  <div className="min-w-0">
+    <dt className="text-[10px] text-[#94A3B8]">{label}</dt>
+    <dd
+      className={`text-sm truncate ${mono ? 'font-mono text-[#16233F]' : 'text-[#1F2937]'
+        } ${danger ? 'text-[#C8202F] font-medium' : ''}`}
+    >
+      {children}
+    </dd>
+  </div>
+);
+
+/* ============================================================
+ *  Due / Overdue badge
+ * ============================================================ */
+const DueBadge = ({ ticket, compact = false }) => {
+  if (!ticket?.payment_due_at) {
+    return <span className="text-sm text-[#94A3B8]">—</span>;
+  }
+
+  const dueDate = new Date(ticket.payment_due_at);
+  const dueLabel = dueDate.toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  if (ticket.status === 'paid' || ticket.status === 'dismissed') {
+    return <span className="text-sm text-[#64748B]">{dueLabel}</span>;
+  }
+
+  const days = ticket.days_until_due ?? 0;
+  const isOverdue = ticket.is_overdue === true || days < 0;
+  const isDueSoon = !isOverdue && days <= 1;
+
+  const base = `inline-flex items-center gap-1 rounded-full font-semibold whitespace-nowrap ${
+    compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs'
+  }`;
+
+  if (isOverdue) {
+    const overdueDays = Math.abs(days);
+    return (
+      <span
+        className={`${base} bg-[#FBE7E9] text-[#C8202F]`}
+        title={`Overdue by ${overdueDays} day${overdueDays === 1 ? '' : 's'} (due ${dueLabel})`}
+      >
+        <AlertTriangle className="w-3 h-3" />
+        Overdue · {dueLabel}
+      </span>
+    );
+  }
+
+  if (isDueSoon) {
+    return (
+      <span
+        className={`${base} bg-[#FBEAE2] text-[#C2541F]`}
+        title={`Due in ${days} day${days === 1 ? '' : 's'} (${dueLabel})`}
+      >
+        <Clock className="w-3 h-3" />
+        Due in {days}d · {dueLabel}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`${base} bg-[#F1F5F9] text-[#475569]`}
+      title={`Due ${dueLabel}`}
+    >
+      Due {dueLabel}
+    </span>
+  );
+};
+
+const PreviewRow = ({ icon: Icon, label, value, mono, danger }) => (
+  <div className="flex items-start gap-2.5">
+    <div className="w-7 h-7 rounded-md bg-[#F5F6F8] flex items-center justify-center flex-shrink-0">
+      <Icon className="w-3.5 h-3.5 text-[#64748B]" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">
+        {label}
+      </p>
+      <p
+        className={`text-sm truncate ${mono ? 'font-mono text-[#16233F]' : 'text-[#1F2937]'
+          } ${danger ? 'text-[#C8202F] font-medium' : ''}`}
+      >
+        {value}
+      </p>
+    </div>
+  </div>
+);
+
+/* ============================================================
+ *  Ticket Details Modal — read-only
+ * ============================================================ */
+const TicketDetailsModal = ({ ticketId, open, onClose }) => {
+  const [copied, setCopied] = useState(null);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['ticket', ticketId],
+    queryFn: () => getTicket(ticketId),
+    enabled: !!ticketId && open,
+    staleTime: 1000 * 30,
+  });
+
+  const t = data?.data || data;
+
+  const handleCopy = async (label, value) => {
+    const ok = await copyText(value);
+    if (ok) {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    }
+  };
+
+  const meta = t ? STATUS_META[t.status] || STATUS_META.issued : STATUS_META.issued;
+  const totalFine = (t?.violations || []).reduce(
+    (s, v) => s + (parseFloat(v.fine_amount) || 0),
+    0,
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[85vw] max-w-[1100px] max-h-[92vh] overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-7 pt-6 pb-5 border-b border-dashed border-[#CBD5E1] bg-white">
+          <DialogTitle className="font-['Oswald'] text-2xl text-[#16233F] flex items-center gap-3">
+            <span className="w-10 h-10 rounded-lg bg-[#E9ECF2] flex items-center justify-center flex-shrink-0">
+              <TicketIcon className="w-5 h-5 text-[#16233F]" />
+            </span>
+            <div>
+              <div className="leading-tight">Ticket Details</div>
+              <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
+                {isLoading
+                  ? 'Loading…'
+                  : t
+                  ? `${t.ticket_number} · ${t.violator?.firstname || ''} ${t.violator?.lastname || ''}`.trim()
+                  : '—'}
+              </div>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-[#16233F]" />
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-[#C8202F]">
+            <AlertCircle className="w-10 h-10 mx-auto mb-2" />
+            <p>Failed to load ticket: {error.message}</p>
+          </div>
+        ) : !t ? (
+          <div className="p-8 text-center text-[#64748B]">
+            <AlertCircle className="w-10 h-10 mx-auto mb-2 text-[#94A3B8]" />
+            <p>No record found.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col max-h-[calc(92vh-100px)]">
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                {/* ─── LEFT: Summary ─── */}
+                <div className="lg:col-span-1 p-7 space-y-6 border-r border-dashed border-[#CBD5E1] bg-[#F8F9FA]">
+                  <div className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden">
+                    <div
+                      className="h-1.5"
+                      style={{
+                        background:
+                          t.status === 'issued' && t.is_overdue
+                            ? '#C8202F'
+                            : meta.color,
+                      }}
+                    />
+                    <div className="p-4 text-center">
+                      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                        Ticket Number
+                      </p>
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="font-mono text-lg font-bold text-[#16233F]">
+                          {t.ticket_number}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('ticket', t.ticket_number)}
+                          className="p-1 rounded text-[#94A3B8] hover:text-[#16233F] hover:bg-[#F1F5F9]"
+                          title="Copy"
+                        >
+                          {copied === 'ticket' ? (
+                            <Check className="w-3.5 h-3.5 text-[#1E8449]" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-1.5 mt-3">
+                        {t.status === 'issued' && t.is_overdue && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#C8202F] text-white">
+                            <AlertTriangle className="w-3 h-3" />
+                            Overdue
+                          </span>
+                        )}
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${meta.chip}`}
+                        >
+                          {meta.label}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
+                      Total Fine
+                    </p>
+                    <p className="font-['Oswald'] text-3xl font-semibold text-[#C8202F] tabular-nums">
+                      {formatPeso(totalFine)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                      Payment due
+                    </p>
+                    <DueBadge ticket={t} />
+                  </div>
+
+                  <div className="space-y-3 pt-4 border-t border-dashed border-[#CBD5E1]">
+                    <PreviewRow
+                      icon={Calendar}
+                      label="Violation Date"
+                      value={formatDateTime(t.violation_datetime)}
+                    />
+                    <PreviewRow
+                      icon={Calendar}
+                      label="Payment Due Date"
+                      value={formatDateTime(t.payment_due_at)}
+                    />
+                    <PreviewRow
+                      icon={MapPin}
+                      label="Location"
+                      value={t.location || '—'}
+                    />
+                  </div>
+                </div>
+
+                {/* ─── RIGHT: Details ─── */}
+                <div className="lg:col-span-2 p-7 space-y-6">
+                  {/* Violator */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <UserIcon className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Violator
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+                    <div className="rounded-xl border border-[#E3E7EE] bg-white p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <Spec label="Name">
+                        {t.violator?.firstname} {t.violator?.lastname}
+                      </Spec>
+                      <Spec label="License" mono>
+                        {t.violator?.license || '—'}
+                      </Spec>
+                      <Spec label="License Expiry">
+                        {formatDate(t.violator?.expiry)}
+                      </Spec>
+                      <Spec label="Gender">{t.violator?.gender || '—'}</Spec>
+                      <Spec label="Contact" mono>
+                        {t.violator?.contact_number || '—'}
+                      </Spec>
+                      <Spec label="Nationality">
+                        {t.violator?.nationality || '—'}
+                      </Spec>
+                    </div>
+                  </section>
+
+                  {/* Vehicle */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Car className="w-4 h-4 text-[#1E8449]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Vehicle
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+                    <div className="rounded-xl border border-[#E3E7EE] bg-white p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <Spec label="Plate" mono>
+                        {t.vehicle?.platenumber || '—'}
+                      </Spec>
+                      <Spec label="Make">{t.vehicle?.make || '—'}</Spec>
+                      <Spec label="Model">{t.vehicle?.model || '—'}</Spec>
+                      <Spec label="Color">{t.vehicle?.color || '—'}</Spec>
+                      <Spec label="Owner">{t.vehicle?.owner || '—'}</Spec>
+                      <Spec label="Body Type">
+                        {t.vehicle?.body_type || '—'}
+                      </Spec>
+                    </div>
+                  </section>
+
+                  {/* Violations */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <AlertCircle className="w-4 h-4 text-[#C2541F]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Violations
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                      <span className="text-xs text-[#64748B] tabular-nums">
+                        {t.violations?.length || 0}{' '}
+                        {t.violations?.length === 1 ? 'item' : 'items'}
+                      </span>
+                    </div>
+
+                    {t.violations?.length ? (
+                      <ul className="space-y-2">
+                        {t.violations.map((v, i) => (
+                          <li
+                            key={i}
+                            className="rounded-lg border border-[#E3E7EE] bg-white p-3 flex items-start gap-3"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-[#FBEAE2] flex items-center justify-center flex-shrink-0">
+                              <AlertCircle className="w-4 h-4 text-[#C2541F]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-[#1F2937] truncate">
+                                {v.violation_type?.violation_name ||
+                                  v.violation_name ||
+                                  'Violation'}
+                              </p>
+                              {v.violation_type?.description && (
+                                <p className="text-xs text-[#64748B] mt-0.5 line-clamp-2">
+                                  {v.violation_type.description}
+                                </p>
+                              )}
+                              {v.violation_type?.category && (
+                                <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mt-1">
+                                  {v.violation_type.category}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-sm font-semibold text-[#C8202F] tabular-nums">
+                                {formatPeso(v.fine_amount)}
+                              </p>
+                              {v.demerit_points > 0 && (
+                                <p className="text-[10px] text-[#94A3B8]">
+                                  {v.demerit_points} pts
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8F9FA] p-8 text-center">
+                        <p className="text-sm text-[#64748B]">
+                          No violations on record for this ticket.
+                        </p>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Enforcer */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Shield className="w-4 h-4 text-[#16233F]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                        Issued By
+                      </h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+                    <div className="rounded-xl border border-[#E3E7EE] bg-white p-4 grid grid-cols-2 gap-3">
+                      <Spec label="Enforcer">
+                        {t.enforcer?.firstname} {t.enforcer?.lastname}
+                      </Spec>
+                      <Spec label="Email" mono>
+                        {t.enforcer?.email || '—'}
+                      </Spec>
+                    </div>
+                  </section>
+
+                  {t.remarks && (
+                    <section>
+                      <div className="flex items-center gap-2 mb-4">
+                        <FileText className="w-4 h-4 text-[#92600A]" />
+                        <h3 className="font-['Oswald'] text-lg text-[#16233F]">
+                          Remarks
+                        </h3>
+                        <span className="h-px flex-1 bg-[#E3E7EE]" />
+                      </div>
+                      <div className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4 text-sm text-[#92600A]">
+                        {t.remarks}
+                      </div>
+                    </section>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ─── Footer ─── */}
+            <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+              <div className="text-xs text-[#64748B] flex items-center gap-2">
+                <Info className="w-3.5 h-3.5 text-[#94A3B8]" />
+                <span>Read-only view. Use Payments page to record settlement.</span>
+              </div>
+              <Button
+                onClick={onClose}
+                className="bg-[#16233F] hover:bg-[#0F1A2E] min-w-[120px]"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+/* Small icon used in footer above; declare inline to avoid extra import */
+const Info = (props) => (
+  <svg
+    {...props}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4M12 8h.01" />
+  </svg>
+);
+
+const ROW_CLASS =
+  'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 cursor-pointer ' +
+  'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,14rem)] md:gap-4';
+
+const Tickets = () => {
+  const queryClient = useQueryClient();
+  const notify = useAlert();
+  const [view, setView] = useState('list');
+  const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState([]);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [enforcerId, setEnforcerId] = useState('');
+  const [violationId, setViolationId] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [overdueOnly, setOverdueOnly] = useState(false);
+
+  const [detailTicketId, setDetailTicketId] = useState(null);
+
+  const debouncedSearch = useDebouncedValue(searchTerm, 350);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    debouncedSearch,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    enforcerId,
+    violationId,
+    overdueOnly,
+  ]);
+
+  const { data: enforcersResponse } = useQuery({
+    queryKey: ['users', 'enforcer'],
+    queryFn: () => getUsers(1, 200, { role: 'enforcer' }),
+    staleTime: 1000 * 60 * 10,
+  });
+  const enforcers = getDataArray(enforcersResponse);
+
+  const { data: violationsResponse } = useQuery({
+    queryKey: ['violations', 'all'],
+    queryFn: () => getViolations({ all: 1 }),
+    staleTime: 1000 * 60 * 10,
+  });
+  const violations = getDataArray(violationsResponse);
+
+  const {
+    data: ticketsResponse,
+    isLoading,
+    isFetching,
+    refetch,
+    error,
+  } = useQuery({
+    queryKey: [
+      'tickets',
+      page,
+      debouncedSearch,
+      statusFilter,
+      dateFrom,
+      dateTo,
+      enforcerId,
+      violationId,
+    ],
+    queryFn: () =>
+      getTickets(page, ITEMS_PER_PAGE, {
+        search: debouncedSearch || undefined,
+        status: statusFilter.length ? statusFilter.join(',') : undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        enforcer_id: enforcerId || undefined,
+        violation_id: violationId || undefined,
+        sort_by: 'created_at',
+        sort_dir: 'desc',
+      }),
+    keepPreviousData: true,
+    staleTime: 1000 * 30,
+  });
+
+  const tickets = getDataArray(ticketsResponse);
+  const meta = getMeta(ticketsResponse);
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }) => updateTicketStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      queryClient.invalidateQueries({ queryKey: ['ticket'] });
+      notify.success('Ticket status updated successfully');
+    },
+    onError: (err) => {
+      notify.error(
+        err.response?.data?.message || 'Failed to update ticket status',
+      );
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: deleteTicket,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      queryClient.invalidateQueries({ queryKey: ['archives'] });
+      notify.success('Ticket archived successfully');
+    },
+    onError: (err) => {
+      notify.error(
+        err.response?.data?.message || 'Failed to archive ticket',
+      );
+    },
+  });
+
+  const handleStatusUpdate = async (id, status) => {
+    const ok = await notify.confirm(
+      `Change ticket status to ${status.toUpperCase().replace('_', ' ')}?`,
+      { confirmText: 'Change' },
+    );
+    if (ok) updateStatusMutation.mutate({ id, status });
+  };
+
+  const handleArchive = async (id) => {
+    const ok = await notify.confirm(
+      'Archive this ticket? You can restore it later from the Archives page.',
+      { confirmText: 'Archive', destructive: true },
+    );
+    if (ok) archiveMutation.mutate(id);
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refetch({ cancelRefetch: true });
+    } catch (e) {
+      console.warn('Refresh failed:', e);
+    } finally {
+      setTimeout(() => setRefreshing(false), 600);
+    }
+  };
+
+  const toggleStatus = (value) => {
+    setStatusFilter((prev) =>
+      prev.includes(value)
+        ? prev.filter((v) => v !== value)
+        : [...prev, value],
+    );
+  };
+
+  const applyPreset = (days) => {
+    setDateFrom(daysAgoISO(days));
+    setDateTo(daysAgoISO(0));
+  };
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setStatusFilter([]);
+    setDateFrom('');
+    setDateTo('');
+    setEnforcerId('');
+    setViolationId('');
+    setOverdueOnly(false);
+  };
+
+  const activeFilterCount = useMemo(() => {
+    let c = 0;
+    if (searchTerm) c++;
+    if (statusFilter.length) c++;
+    if (dateFrom || dateTo) c++;
+    if (enforcerId) c++;
+    if (violationId) c++;
+    if (overdueOnly) c++;
+    return c;
+  }, [
+    searchTerm,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    enforcerId,
+    violationId,
+    overdueOnly,
+  ]);
+
+  const filteredTickets = useMemo(() => {
+    let list = tickets;
+
+    if (overdueOnly) {
+      list = list.filter(
+        (t) => t.status === 'issued' && t.is_overdue === true,
+      );
+    }
+
+    return [...list].sort((a, b) => {
+      const cmp = byFields('lastname', 'firstname')(
+        a.violator || {},
+        b.violator || {},
+      );
+      if (cmp !== 0) return cmp;
+      return (a.ticket_number || '').localeCompare(b.ticket_number || '');
+    });
+  }, [tickets, overdueOnly]);
+
+  const overdueCount = useMemo(
+    () =>
+      tickets.filter((t) => t.status === 'issued' && t.is_overdue === true)
+        .length,
+    [tickets],
+  );
+
+  const getTotalFine = (ticket) => {
+    if (!ticket) return 0;
+    if (Array.isArray(ticket.violations) && ticket.violations.length > 0) {
+      return ticket.violations.reduce(
+        (s, v) => s + (parseFloat(v.fine_amount) || 0),
+        0,
+      );
+    }
+    return parseFloat(ticket.total_fine) || 0;
+  };
+
+  const chips = [
+    searchTerm && [`Search: ${searchTerm}`, () => setSearchTerm('')],
+    statusFilter.length > 0 && [
+      `Status: ${statusFilter.join(', ')}`,
+      () => setStatusFilter([]),
+    ],
+    (dateFrom || dateTo) && [
+      `Date: ${dateFrom || '…'} → ${dateTo || '…'}`,
+      () => {
+        setDateFrom('');
+        setDateTo('');
+      },
+    ],
+    enforcerId && [
+      `Enforcer: ${
+        enforcers.find((u) => String(u.user_id) === String(enforcerId))
+          ?.firstname || enforcerId
+      }`,
+      () => setEnforcerId(''),
+    ],
+    violationId && [
+      `Violation: ${
+        violations.find(
+          (v) => String(v.violation_id) === String(violationId),
+        )?.violation_name || violationId
+      }`,
+      () => setViolationId(''),
+    ],
+    overdueOnly && ['Overdue only', () => setOverdueOnly(false)],
+  ].filter(Boolean);
+
+  const statusBadge = (status) => {
+    const meta = STATUS_META[status] || STATUS_META.issued;
+    const Icon = meta.icon;
+    return (
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${meta.chip}`}
+      >
+        <Icon className="w-3 h-3" />
+        {meta.label.toUpperCase()}
+      </span>
+    );
+  };
+
+  /* Only Dismiss + Archive remain — Mark Paid is gone. */
+  const rowActions = (ticket) => (
+    <div className="flex flex-wrap gap-2">
+      {ticket.status === 'paid' && (
+        <ActionButton
+          icon={XCircle}
+          variant="danger"
+          onClick={() => handleStatusUpdate(ticket.ticket_id, 'dismissed')}
+        >
+          Dismiss
+        </ActionButton>
+      )}
+      <ActionButton
+        icon={Archive}
+        variant="danger"
+        onClick={() => handleArchive(ticket.ticket_id)}
+        disabled={archiveMutation.isPending}
+      >
+        Archive
+      </ActionButton>
+    </div>
+  );
+
+  const openDetails = (ticketId) => setDetailTicketId(ticketId);
+
+  const panel = (
+    <FilterShell
+      title="Filter Tickets"
+      onClose={() => setShowFilters(false)}
+      onReset={clearAllFilters}
+    >
+      <div>
+        <L icon={Calendar}>Date range</L>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-36 focus-visible:ring-[#F0B429]"
+          />
+          <span className="text-[#64748B] text-sm">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-36 focus-visible:ring-[#F0B429]"
+          />
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+          <span className="text-xs text-[#92600A]/70 mr-1">Quick:</span>
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => applyPreset(p.days)}
+              className="text-xs px-2.5 py-1 rounded-full bg-white text-[#16233F] hover:bg-[#16233F] hover:text-white transition-colors font-medium"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <L>Status</L>
+        <div className="flex flex-wrap gap-2">
+          {STATUS_OPTIONS.map((opt) => {
+            const active = statusFilter.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => toggleStatus(opt.value)}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
+                  active
+                    ? 'bg-[#16233F] text-white border-[#16233F]'
+                    : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <L icon={AlertTriangle}>Overdue</L>
+        <label className="flex items-center gap-2 text-sm text-[#C8202F] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={overdueOnly}
+            onChange={(e) => setOverdueOnly(e.target.checked)}
+            className="w-4 h-4 accent-[#C8202F]"
+          />
+          Show overdue tickets only
+        </label>
+      </div>
+
+      <div>
+        <L>Enforcer</L>
+        <select
+          className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-[#1F2937] focus-visible:ring-[#F0B429]"
+          value={enforcerId}
+          onChange={(e) => setEnforcerId(e.target.value)}
+        >
+          <option value="">All Enforcers</option>
+          {enforcers.map((u) => (
+            <option key={u.user_id} value={u.user_id}>
+              {u.firstname} {u.lastname}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <L>Violation type</L>
+        <select
+          className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-[#1F2937] focus-visible:ring-[#F0B429]"
+          value={violationId}
+          onChange={(e) => setViolationId(e.target.value)}
+        >
+          <option value="">All Violations</option>
+          {violations.map((v) => (
+            <option key={v.violation_id} value={v.violation_id}>
+              {v.violation_name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </FilterShell>
+  );
+
+  if (isLoading && !ticketsResponse) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-[#16233F]" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64">
+        <p className="text-[#C8202F] mb-4">
+          Error loading tickets: {error.message}
+        </p>
+        <Button
+          onClick={handleRefresh}
+          variant="outline"
+          className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 font-['Inter']">
+      <header className="relative overflow-hidden rounded-2xl bg-[#16233F] text-white px-6 py-7 flex flex-wrap items-center justify-between gap-4">
+        <div
+          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(115deg, transparent 0 40px, #F0B429 40px 42px)',
+          }}
+        />
+        <div className="relative">
+          <h1 className="text-4xl font-['Oswald'] font-semibold tracking-tight">
+            Tickets Management
+          </h1>
+          <p className="text-[#C7CEDB] text-sm mt-1">
+            Click any ticket to see details. Record payments from the Payments
+            page.
+          </p>
+        </div>
+        <div className="relative flex items-center gap-3">
+          {overdueCount > 0 && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#C8202F] text-white text-xs font-semibold shadow">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {overdueCount} overdue
+            </div>
+          )}
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            disabled={refreshing}
+            className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-70"
+          >
+            <RefreshCw
+              className={`w-4 h-4 mr-2 transition-transform ${
+                refreshing ? 'animate-spin' : ''
+              }`}
+            />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        </div>
+      </header>
+
+      <div
+        className={`grid gap-6 ${
+          showFilters ? 'lg:grid-cols-[300px_minmax(0,1fr)]' : ''
+        }`}
+      >
+        {showFilters && panel}
+
+        <div className="space-y-4 min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters((v) => !v)}
+              className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="ml-2 bg-[#16233F] text-white text-xs rounded-full px-2 py-0.5">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => setOverdueOnly((v) => !v)}
+              aria-pressed={overdueOnly}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium transition-colors ${
+                overdueOnly
+                  ? 'bg-[#C8202F] text-white border-[#C8202F] hover:bg-[#A01622]'
+                  : 'bg-white text-[#C8202F] border-[#C8202F]/30 hover:bg-[#FBE7E9]'
+              }`}
+            >
+              <AlertTriangle className="w-4 h-4" />
+              Overdue
+              {overdueCount > 0 && (
+                <span
+                  className={`ml-1 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${
+                    overdueOnly
+                      ? 'bg-white/20 text-white'
+                      : 'bg-[#FBE7E9] text-[#C8202F]'
+                  }`}
+                >
+                  {overdueCount}
+                </span>
+              )}
+            </button>
+
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+              <Input
+                placeholder="Search by ticket #, violator, or plate..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-10 rounded-full focus-visible:ring-[#F0B429]"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  title="Clear"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <ViewToggle view={view} setView={setView} />
+          </div>
+
+          {chips.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {chips.map(([label, clear]) => (
+                <Chip key={label} label={label} onClear={clear} />
+              ))}
+            </div>
+          )}
+
+          <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
+            <TicketIcon className="w-5 h-5 text-[#F0B429]" />
+            Tickets List
+            <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+              (click a row for details)
+            </span>
+          </h2>
+
+          {isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
+            </div>
+          ) : filteredTickets.length === 0 ? (
+            <div className="text-center py-14">
+              <Eye className="w-12 h-12 text-[#CBD5E1] mx-auto mb-3" />
+              <p className="text-sm text-[#64748B]">
+                {overdueOnly
+                  ? 'No overdue tickets on this page. 🎉'
+                  : activeFilterCount > 0
+                  ? 'No tickets match the current filters.'
+                  : 'No tickets found.'}
+              </p>
+              {(activeFilterCount > 0 || overdueOnly) && (
+                <button
+                  onClick={clearAllFilters}
+                  className="text-xs text-[#1E8449] hover:underline mt-2"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          ) : view === 'cards' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredTickets.map((ticket) => {
+                const meta =
+                  STATUS_META[ticket.status] || STATUS_META.issued;
+                const isOverdue =
+                  ticket.status === 'issued' && ticket.is_overdue === true;
+                return (
+                  <article
+                    key={ticket.ticket_id}
+                    onClick={(e) => {
+                      if (e.target.closest('button')) return;
+                      openDetails(ticket.ticket_id);
+                    }}
+                    className={`rounded-xl bg-white border overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer ${
+                      isOverdue
+                        ? 'border-[#C8202F]/40 ring-1 ring-[#C8202F]/20'
+                        : 'border-[#E3E7EE]'
+                    }`}
+                  >
+                    <div
+                      className="h-2"
+                      style={{
+                        background: isOverdue ? '#C8202F' : meta.color,
+                      }}
+                    />
+                    <div className="p-4">
+                      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                        <span className="font-mono text-sm font-semibold text-[#16233F]">
+                          {ticket.ticket_number}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {isOverdue && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#C8202F] text-white">
+                              <AlertTriangle className="w-3 h-3" />
+                              Overdue
+                            </span>
+                          )}
+                          {statusBadge(ticket.status)}
+                        </div>
+                      </div>
+                      <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
+                        {ticket.violator?.firstname}{' '}
+                        {ticket.violator?.lastname}
+                      </p>
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3">
+                        <Spec label="Plate" mono>
+                          {ticket.vehicle?.platenumber || '—'}
+                        </Spec>
+                        <Spec label="License" mono>
+                          {ticket.violator?.license || '—'}
+                        </Spec>
+                        <Spec label="Date">
+                          {ticket.violation_datetime
+                            ? new Date(
+                                ticket.violation_datetime,
+                              ).toLocaleDateString()
+                            : '—'}
+                        </Spec>
+                        <Spec label="Total fine" danger>
+                          ₱{getTotalFine(ticket).toLocaleString()}
+                        </Spec>
+                      </dl>
+                      <div className="mt-3">
+                        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1.5">
+                          Payment due
+                        </p>
+                        <DueBadge ticket={ticket} />
+                      </div>
+                      <div className="mt-3 text-xs text-[#64748B] line-clamp-2">
+                        {ticket.violations
+                          ?.slice(0, 2)
+                          .map((v) => v.violation_type?.violation_name)
+                          .filter(Boolean)
+                          .join(' · ')}
+                        {ticket.violations?.length > 2 &&
+                          ` +${ticket.violations.length - 2} more`}
+                      </div>
+                      <div className="mt-4 pt-4 border-t border-dashed border-[#CBD5E1]">
+                        {rowActions(ticket)}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
+              <div
+                className={`hidden ${ROW_CLASS} bg-[#16233F] text-white text-xs font-semibold`}
+              >
+                {[
+                  'Ticket #',
+                  'Violator',
+                  'Vehicle',
+                  'Violations',
+                  'Fine',
+                  'Status',
+                  'Due',
+                  'Actions',
+                ].map((c) => (
+                  <span key={c}>{c}</span>
+                ))}
+              </div>
+              <ul className="divide-y divide-[#EEF0F4]">
+                {filteredTickets.map((ticket) => {
+                  const meta =
+                    STATUS_META[ticket.status] || STATUS_META.issued;
+                  const isOverdue =
+                    ticket.status === 'issued' &&
+                    ticket.is_overdue === true;
+                  return (
+                    <li
+                      key={ticket.ticket_id}
+                      onClick={(e) => {
+                        if (e.target.closest('button')) return;
+                        openDetails(ticket.ticket_id);
+                      }}
+                      className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0 ${
+                        isOverdue ? 'bg-[#FEF6F7]' : ''
+                      }`}
+                      style={{
+                        borderLeftColor: isOverdue
+                          ? '#C8202F'
+                          : meta.color,
+                      }}
+                    >
+                      <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate flex items-center gap-1.5">
+                        <Mini>Ticket</Mini>
+                        {isOverdue && (
+                          <AlertTriangle
+                            className="w-3.5 h-3.5 text-[#C8202F] flex-shrink-0"
+                            title="Overdue"
+                          />
+                        )}
+                        <span className="truncate">
+                          {ticket.ticket_number}
+                        </span>
+                      </span>
+
+                      <div className="min-w-0">
+                        <div className="text-sm text-[#1F2937] truncate">
+                          {ticket.violator?.firstname}{' '}
+                          {ticket.violator?.lastname}
+                        </div>
+                        <div className="text-xs text-[#64748B] font-mono truncate">
+                          {ticket.violator?.license}
+                        </div>
+                      </div>
+
+                      <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
+                        <Mini>Plate</Mini>
+                        {ticket.vehicle?.platenumber || '—'}
+                      </span>
+
+                      <div className="space-y-0.5 min-w-0">
+                        {ticket.violations
+                          ?.slice(0, 2)
+                          .map((v, i) => (
+                            <div
+                              key={i}
+                              className="text-xs text-[#1F2937] truncate"
+                            >
+                              {v.violation_type?.violation_name}
+                            </div>
+                          ))}
+                        {ticket.violations?.length > 2 && (
+                          <div className="text-xs text-[#94A3B8]">
+                            +{ticket.violations.length - 2} more
+                          </div>
+                        )}
+                      </div>
+
+                      <span className="font-bold text-[#C8202F] tabular-nums whitespace-nowrap">
+                        <Mini>Fine</Mini>₱
+                        {getTotalFine(ticket).toLocaleString()}
+                      </span>
+
+                      <span className="justify-self-start">
+                        {statusBadge(ticket.status)}
+                      </span>
+
+                      <span className="justify-self-start min-w-0">
+                        <Mini>Due</Mini>
+                        <DueBadge ticket={ticket} />
+                      </span>
+
+                      <div className="justify-self-end md:justify-self-start">
+                        {rowActions(ticket)}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {!isLoading && filteredTickets.length > 0 && (
+            <Pagination
+              currentPage={meta.current_page}
+              totalPages={meta.last_page}
+              onPageChange={setPage}
+              totalItems={meta.total}
+              itemsPerPage={ITEMS_PER_PAGE}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ── Details modal ── */}
+      <TicketDetailsModal
+        ticketId={detailTicketId}
+        open={!!detailTicketId}
+        onClose={() => setDetailTicketId(null)}
+      />
+    </div>
+  );
+};
+
+export default Tickets;
