@@ -1343,14 +1343,6 @@ const Users = () => {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {[
                               {
-                                value: 'admin',
-                                label: 'Admin',
-                                sub: 'Full access — manage users, archives, and settings',
-                                Icon: ShieldCheck,
-                                tint: '#E9ECF2',
-                                accent: '#16233F',
-                              },
-                              {
                                 value: 'staff',
                                 label: 'Staff',
                                 sub: 'Records payments, views users and reports',
@@ -1366,11 +1358,7 @@ const Users = () => {
                                 tint: '#E5F2EA',
                                 accent: '#1E8449',
                               },
-                            ]
-                              // Admin accounts can't be created from here; the Admin
-                              // option only shows when editing an existing admin.
-                              .filter((opt) => opt.value !== 'admin' || editingUser?.role === 'admin')
-                              .map((opt) => {
+                            ].map((opt) => {
                               const active = formData.role === opt.value;
                               const Icon = opt.Icon;
                               return (
