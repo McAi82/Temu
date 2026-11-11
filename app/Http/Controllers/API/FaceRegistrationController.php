@@ -24,116 +24,116 @@ class FaceRegistrationController extends Controller
      ================================================================== */
 
     public function register(Request $request)
-{
-    $len = self::EXPECTED_EMBEDDING_LENGTH;
+    {
+        $len = self::EXPECTED_EMBEDDING_LENGTH;
 
-    $validator = Validator::make($request->all(), [
-        'front_encoding'   => "required|array|size:{$len}",
-        'front_encoding.*' => 'numeric',
-        'left_encoding'    => "required|array|size:{$len}",
-        'left_encoding.*'  => 'numeric',
-        'right_encoding'   => "required|array|size:{$len}",
-        'right_encoding.*' => 'numeric',
-        'front_image'      => 'required|string',
-        'left_image'       => 'required|string',
-        'right_image'      => 'required|string',
-        'device_id'        => 'required|string|max:64',
-        'app_version'      => 'nullable|string|max:32',
-        'threshold_used'   => 'nullable|numeric|between:0,1',
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json([
-            'message' => 'Validation failed',
-            'errors'  => $validator->errors(),
-        ], 422);
-    }
-
-    $user = $request->user();
-
-    // ── REGISTER-ONCE GUARD ──
-    // If the user already has an active face registration, block.
-    $alreadyRegistered = \App\Models\FaceRegistration::where('user_id', $user->user_id)
-        ->where('is_active', true)
-        ->exists();
-
-    if ($alreadyRegistered) {
-        return response()->json([
-            'message' => 'You have already registered your face. Only one face registration per account is allowed. Please contact an administrator if you need to reset it.',
-            'code'    => 'FACE_ALREADY_REGISTERED',
-        ], 409);
-    }
-
-    DB::beginTransaction();
-    try {
-        // Mark any stale rows inactive (they shouldn't exist, but be safe)
-        \App\Models\FaceRegistration::where('user_id', $user->user_id)
-            ->where('is_active', true)
-            ->update([
-                'is_active'   => false,
-                'replaced_at' => now(),
-            ]);
-
-        $frontPath = $this->saveBase64Image(
-            $request->front_image,
-            "faces/{$user->user_id}/front",
-        );
-        $leftPath = $this->saveBase64Image(
-            $request->left_image,
-            "faces/{$user->user_id}/left",
-        );
-        $rightPath = $this->saveBase64Image(
-            $request->right_image,
-            "faces/{$user->user_id}/right",
-        );
-
-        $registration = FaceRegistration::create([
-            'user_id'        => $user->user_id,
-            'front_encoding' => $request->front_encoding,
-            'left_encoding'  => $request->left_encoding,
-            'right_encoding' => $request->right_encoding,
-            'front_image'    => $frontPath,
-            'left_image'     => $leftPath,
-            'right_image'    => $rightPath,
-            'device_id'      => $request->device_id,
-            'app_version'    => $request->app_version,
-            'threshold_used' => $request->threshold_used ?? 0.88,
-            'is_active'      => true,
+        $validator = Validator::make($request->all(), [
+            'front_encoding'   => "required|array|size:{$len}",
+            'front_encoding.*' => 'numeric',
+            'left_encoding'    => "required|array|size:{$len}",
+            'left_encoding.*'  => 'numeric',
+            'right_encoding'   => "required|array|size:{$len}",
+            'right_encoding.*' => 'numeric',
+            'front_image'      => 'required|string',
+            'left_image'       => 'required|string',
+            'right_image'      => 'required|string',
+            'device_id'        => 'required|string|max:64',
+            'app_version'      => 'nullable|string|max:32',
+            'threshold_used'   => 'nullable|numeric|between:0,1',
         ]);
 
-        $wasRegistered = (bool) $user->has_face_registered;
-        $user->has_face_registered = true;
-        $user->save();
-
-        DB::commit();
-
-        if (!$wasRegistered) {
-            try {
-                NotificationService::notifyAdmins(
-                    'Face Registered',
-                    "{$user->firstname} {$user->lastname} registered their face on device {$request->device_id}",
-                    Notification::TYPE_FACE_REGISTERED,
-                    'user',
-                    $user->user_id,
-                );
-            } catch (\Throwable $ne) {
-                Log::warning('Face register notification failed: ' . $ne->getMessage());
-            }
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors'  => $validator->errors(),
+            ], 422);
         }
 
-        return response()->json([
-            'message'              => 'Face registered successfully',
-            'face_registration_id' => $registration->face_registration_id,
-            'has_face_registered'  => true,
-        ], 201);
-    } catch (\Throwable $e) {
-        DB::rollBack();
-        Log::error('Face registration failed: ' . $e->getMessage());
-        return response()->json([
-            'message' => 'Failed to register face: ' . $e->getMessage(),
-        ], 500);
+        $user = $request->user();
+
+        // ── REGISTER-ONCE GUARD ──
+        // If the user already has an active face registration, block.
+        $alreadyRegistered = \App\Models\FaceRegistration::where('user_id', $user->user_id)
+            ->where('is_active', true)
+            ->exists();
+
+        if ($alreadyRegistered) {
+            return response()->json([
+                'message' => 'You have already registered your face. Only one face registration per account is allowed. Please contact an administrator if you need to reset it.',
+                'code'    => 'FACE_ALREADY_REGISTERED',
+            ], 409);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Mark any stale rows inactive (they shouldn't exist, but be safe)
+            \App\Models\FaceRegistration::where('user_id', $user->user_id)
+                ->where('is_active', true)
+                ->update([
+                    'is_active'   => false,
+                    'replaced_at' => now(),
+                ]);
+
+            $frontPath = $this->saveBase64Image(
+                $request->front_image,
+                "faces/{$user->user_id}/front",
+            );
+            $leftPath = $this->saveBase64Image(
+                $request->left_image,
+                "faces/{$user->user_id}/left",
+            );
+            $rightPath = $this->saveBase64Image(
+                $request->right_image,
+                "faces/{$user->user_id}/right",
+            );
+
+            $registration = FaceRegistration::create([
+                'user_id'        => $user->user_id,
+                'front_encoding' => $request->front_encoding,
+                'left_encoding'  => $request->left_encoding,
+                'right_encoding' => $request->right_encoding,
+                'front_image'    => $frontPath,
+                'left_image'     => $leftPath,
+                'right_image'    => $rightPath,
+                'device_id'      => $request->device_id,
+                'app_version'    => $request->app_version,
+                'threshold_used' => $request->threshold_used ?? 0.88,
+                'is_active'      => true,
+            ]);
+
+            $wasRegistered = (bool) $user->has_face_registered;
+            $user->has_face_registered = true;
+            $user->save();
+
+            DB::commit();
+
+            if (!$wasRegistered) {
+                try {
+                    NotificationService::notifyAdmins(
+                        'Face Registered',
+                        "{$user->firstname} {$user->lastname} registered their face on device {$request->device_id}",
+                        Notification::TYPE_FACE_REGISTERED,
+                        'user',
+                        $user->user_id,
+                    );
+                } catch (\Throwable $ne) {
+                    Log::warning('Face register notification failed: ' . $ne->getMessage());
+                }
+            }
+
+            return response()->json([
+                'message'              => 'Face registered successfully',
+                'face_registration_id' => $registration->face_registration_id,
+                'has_face_registered'  => true,
+            ], 201);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Face registration failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Failed to register face: ' . $e->getMessage(),
+            ], 500);
+        }
     }
-}
 
     /* ==================================================================
      |  MOBILE — TAKEOVER REQUEST
@@ -384,6 +384,10 @@ class FaceRegistrationController extends Controller
                 'right_image_url' => Storage::url($r->right_image),
                 'registered_at'   => $r->created_at,
                 'replaced_at'     => $r->replaced_at,
+                // Only registrations archived by an admin can be restored;
+                // ones replaced by a transfer/takeover cannot.
+                'can_restore'     => !$r->is_active
+                    && $r->replaced_by_registration_id === null,
             ];
         });
 
@@ -718,6 +722,152 @@ class FaceRegistrationController extends Controller
             Log::error('Face transfer failed: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Could not transfer face: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /* ==================================================================
+     |  ADMIN — ARCHIVE
+     ================================================================== */
+
+    /**
+     * Archive a face registration (DELETE /faces/{id}).
+     *
+     * Archiving = is_active=false + replaced_at=now(), the same state the
+     * "Archived" filter in index() looks for. Images/encodings are kept.
+     * The owner's has_face_registered flag is cleared (unless they still
+     * have another active registration) so they can register again.
+     */
+    public function destroy(Request $request, $id)
+    {
+        $registration = FaceRegistration::with('user')->findOrFail($id);
+
+        if (!$registration->is_active) {
+            return response()->json([
+                'message' => 'This face registration is already archived.',
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $registration->is_active   = false;
+            $registration->replaced_at = now();
+            $registration->save();
+
+            $owner = $registration->user;
+            if ($owner) {
+                $stillHasActive = FaceRegistration::where('user_id', $owner->user_id)
+                    ->where('is_active', true)
+                    ->exists();
+
+                if (!$stillHasActive) {
+                    $owner->has_face_registered = false;
+                    $owner->save();
+                }
+            }
+
+            DB::commit();
+
+            try {
+                if ($owner) {
+                    NotificationService::notifyUser(
+                        $owner->user_id,
+                        'Face Registration Archived',
+                        'Your face registration was archived by an administrator. You will need to register your face again.',
+                        Notification::TYPE_FACE_TRANSFERRED,
+                        'user',
+                        $owner->user_id,
+                    );
+                }
+            } catch (\Throwable $ne) {
+                Log::warning('Face archive notification failed: ' . $ne->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Face registration archived successfully.',
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Face archive failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Could not archive face registration: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Restore an archived face registration (PUT /faces/{id}/restore).
+     */
+    public function restore(Request $request, $id)
+    {
+        $registration = FaceRegistration::with('user')->findOrFail($id);
+
+        if ($registration->is_active) {
+            return response()->json([
+                'message' => 'This face registration is already active.',
+            ], 422);
+        }
+
+        // Replaced by a transfer/takeover: the face now belongs to
+        // someone else, so restoring it would duplicate ownership.
+        if ($registration->replaced_by_registration_id !== null) {
+            return response()->json([
+                'message' => 'This registration was transferred to another user and cannot be restored.',
+                'code'    => 'REGISTRATION_REPLACED',
+            ], 422);
+        }
+
+        $owner = $registration->user;
+        if (!$owner) {
+            return response()->json([
+                'message' => 'The owner of this registration no longer exists.',
+            ], 422);
+        }
+
+        // One active face per account.
+        $hasActive = FaceRegistration::where('user_id', $owner->user_id)
+            ->where('is_active', true)
+            ->exists();
+
+        if ($hasActive) {
+            return response()->json([
+                'message' => 'This user already has an active face registration. Archive it first before restoring this one.',
+                'code'    => 'FACE_ALREADY_REGISTERED',
+            ], 409);
+        }
+
+        DB::beginTransaction();
+        try {
+            $registration->is_active   = true;
+            $registration->replaced_at = null;
+            $registration->save();
+
+            $owner->has_face_registered = true;
+            $owner->save();
+
+            DB::commit();
+
+            try {
+                NotificationService::notifyUser(
+                    $owner->user_id,
+                    'Face Registration Restored',
+                    'Your face registration was restored by an administrator. You can use face verification again.',
+                    Notification::TYPE_FACE_TRANSFERRED,
+                    'user',
+                    $owner->user_id,
+                );
+            } catch (\Throwable $ne) {
+                Log::warning('Face restore notification failed: ' . $ne->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Face registration restored successfully.',
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Face restore failed: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Could not restore face registration: ' . $e->getMessage(),
             ], 500);
         }
     }

@@ -764,7 +764,7 @@ const Info = (props) => (
 
 const ROW_CLASS =
     "flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 cursor-pointer " +
-    "md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,14rem)] md:gap-4";
+    "md:grid md:grid-cols-[9.5rem_minmax(10rem,1.3fr)_7.5rem_minmax(11rem,1.8fr)_6.5rem_7rem_8.5rem_11rem] md:gap-x-5 md:gap-y-0";
 
 const Tickets = () => {
     const queryClient = useQueryClient();
@@ -1444,125 +1444,146 @@ const Tickets = () => {
                             })}
                         </div>
                     ) : (
-                        <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
-                            <div
-                                className={`hidden ${ROW_CLASS} bg-[#16233F] text-white text-xs font-semibold`}
-                            >
-                                {[
-                                    "Ticket #",
-                                    "Violator",
-                                    "Vehicle",
-                                    "Violations",
-                                    "Fine",
-                                    "Status",
-                                    "Due",
-                                    "Actions",
-                                ].map((c) => (
-                                    <span key={c}>{c}</span>
-                                ))}
-                            </div>
-                            <ul className="divide-y divide-[#EEF0F4]">
-                                {filteredTickets.map((ticket) => {
-                                    const meta =
-                                        STATUS_META[ticket.status] ||
-                                        STATUS_META.issued;
-                                    const isOverdue =
-                                        ticket.status === "issued" &&
-                                        ticket.is_overdue === true;
-                                    return (
-                                        <li
-                                            key={ticket.ticket_id}
-                                            onClick={(e) => {
-                                                if (e.target.closest("button"))
-                                                    return;
-                                                openDetails(ticket.ticket_id);
-                                            }}
-                                            className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0 ${
-                                                isOverdue ? "bg-[#FEF6F7]" : ""
-                                            }`}
-                                            style={{
-                                                borderLeftColor: isOverdue
-                                                    ? "#C8202F"
-                                                    : meta.color,
-                                            }}
-                                        >
-                                            <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate flex items-center gap-1.5">
-                                                <Mini>Ticket</Mini>
-                                                {isOverdue && (
-                                                    <AlertTriangle
-                                                        className="w-3.5 h-3.5 text-[#C8202F] flex-shrink-0"
-                                                        title="Overdue"
-                                                    />
-                                                )}
-                                                <span className="truncate">
-                                                    {ticket.ticket_number}
+                        <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-x-auto">
+                            <div className="md:min-w-[68rem]">
+                                <div
+                                    className={`hidden ${ROW_CLASS} cursor-default border-l-4 border-transparent bg-[#16233F] text-white text-xs font-semibold uppercase tracking-wide`}
+                                >
+                                    {[
+                                        "Ticket #",
+                                        "Violator",
+                                        "Vehicle",
+                                        "Violations",
+                                        "Fine",
+                                        "Status",
+                                        "Due",
+                                        "Actions",
+                                    ].map((c) => (
+                                        <span key={c}>{c}</span>
+                                    ))}
+                                </div>
+                                <ul className="divide-y divide-[#EEF0F4]">
+                                    {filteredTickets.map((ticket) => {
+                                        const meta =
+                                            STATUS_META[ticket.status] ||
+                                            STATUS_META.issued;
+                                        const isOverdue =
+                                            ticket.status === "issued" &&
+                                            ticket.is_overdue === true;
+                                        return (
+                                            <li
+                                                key={ticket.ticket_id}
+                                                onClick={(e) => {
+                                                    if (
+                                                        e.target.closest(
+                                                            "button",
+                                                        )
+                                                    )
+                                                        return;
+                                                    openDetails(
+                                                        ticket.ticket_id,
+                                                    );
+                                                }}
+                                                className={`${ROW_CLASS} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0 ${
+                                                    isOverdue
+                                                        ? "bg-[#FEF6F7]"
+                                                        : ""
+                                                }`}
+                                                style={{
+                                                    borderLeftColor: isOverdue
+                                                        ? "#C8202F"
+                                                        : meta.color,
+                                                }}
+                                            >
+                                                <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate flex items-center gap-1.5">
+                                                    <Mini>Ticket</Mini>
+                                                    {isOverdue && (
+                                                        <AlertTriangle
+                                                            className="w-3.5 h-3.5 text-[#C8202F] flex-shrink-0"
+                                                            title="Overdue"
+                                                        />
+                                                    )}
+                                                    <span className="truncate">
+                                                        {ticket.ticket_number}
+                                                    </span>
                                                 </span>
-                                            </span>
 
-                                            <div className="min-w-0">
-                                                <div className="text-sm text-[#1F2937] truncate">
-                                                    {ticket.violator?.firstname}{" "}
-                                                    {ticket.violator?.lastname}
-                                                </div>
-                                                <div className="text-xs text-[#64748B] font-mono truncate">
-                                                    {ticket.violator?.license}
-                                                </div>
-                                            </div>
-
-                                            <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
-                                                <Mini>Plate</Mini>
-                                                {ticket.vehicle?.platenumber ||
-                                                    "—"}
-                                            </span>
-
-                                            <div className="space-y-0.5 min-w-0">
-                                                {ticket.violations
-                                                    ?.slice(0, 2)
-                                                    .map((v, i) => (
-                                                        <div
-                                                            key={i}
-                                                            className="text-xs text-[#1F2937] truncate"
-                                                        >
-                                                            {
-                                                                v.violation_type
-                                                                    ?.violation_name
-                                                            }
-                                                        </div>
-                                                    ))}
-                                                {ticket.violations?.length >
-                                                    2 && (
-                                                    <div className="text-xs text-[#94A3B8]">
-                                                        +
-                                                        {ticket.violations
-                                                            .length - 2}{" "}
-                                                        more
+                                                <div className="min-w-0">
+                                                    <div className="text-sm text-[#1F2937] truncate">
+                                                        {
+                                                            ticket.violator
+                                                                ?.firstname
+                                                        }{" "}
+                                                        {
+                                                            ticket.violator
+                                                                ?.lastname
+                                                        }
                                                     </div>
-                                                )}
-                                            </div>
+                                                    <div className="text-xs text-[#64748B] font-mono truncate">
+                                                        {
+                                                            ticket.violator
+                                                                ?.license
+                                                        }
+                                                    </div>
+                                                </div>
 
-                                            <span className="font-bold text-[#C8202F] tabular-nums whitespace-nowrap">
-                                                <Mini>Fine</Mini>₱
-                                                {getTotalFine(
-                                                    ticket,
-                                                ).toLocaleString()}
-                                            </span>
+                                                <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
+                                                    <Mini>Plate</Mini>
+                                                    {ticket.vehicle
+                                                        ?.platenumber || "—"}
+                                                </span>
 
-                                            <span className="justify-self-start">
-                                                {statusBadge(ticket.status)}
-                                            </span>
+                                                <div className="space-y-0.5 min-w-0">
+                                                    {ticket.violations
+                                                        ?.slice(0, 2)
+                                                        .map((v, i) => (
+                                                            <div
+                                                                key={i}
+                                                                className="text-xs text-[#1F2937] truncate"
+                                                            >
+                                                                {
+                                                                    v
+                                                                        .violation_type
+                                                                        ?.violation_name
+                                                                }
+                                                            </div>
+                                                        ))}
+                                                    {ticket.violations?.length >
+                                                        2 && (
+                                                        <div className="text-xs text-[#94A3B8]">
+                                                            +
+                                                            {ticket.violations
+                                                                .length -
+                                                                2}{" "}
+                                                            more
+                                                        </div>
+                                                    )}
+                                                </div>
 
-                                            <span className="justify-self-start min-w-0">
-                                                <Mini>Due</Mini>
-                                                <DueBadge ticket={ticket} />
-                                            </span>
+                                                <span className="font-bold text-[#C8202F] tabular-nums whitespace-nowrap">
+                                                    <Mini>Fine</Mini>₱
+                                                    {getTotalFine(
+                                                        ticket,
+                                                    ).toLocaleString()}
+                                                </span>
 
-                                            <div className="justify-self-end md:justify-self-start">
-                                                {rowActions(ticket)}
-                                            </div>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
+                                                <span className="justify-self-start">
+                                                    {statusBadge(ticket.status)}
+                                                </span>
+
+                                                <span className="justify-self-start min-w-0">
+                                                    <Mini>Due</Mini>
+                                                    <DueBadge ticket={ticket} />
+                                                </span>
+
+                                                <div className="justify-self-end md:justify-self-start">
+                                                    {rowActions(ticket)}
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
                         </div>
                     )}
 

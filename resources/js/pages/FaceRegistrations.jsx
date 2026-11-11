@@ -1,10 +1,16 @@
 // web/src/pages/FaceRegistrations.jsx
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Pagination } from '../components/ui/Pagination';
-import { getFaceRegistrations } from '../services/api';
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Pagination } from "../components/ui/Pagination";
+import ActionButton from "../components/ui/ActionButton";
+import { useAlert } from "../components/ui/AlertProvider";
+import {
+    getFaceRegistrations,
+    deleteFaceRegistration,
+    restoreFaceRegistration,
+} from "../services/api";
 import {
     Search,
     RefreshCw,
@@ -12,7 +18,9 @@ import {
     X,
     ScanFace,
     Info,
-} from 'lucide-react';
+    Archive,
+    ArchiveRestore,
+} from "lucide-react";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -22,15 +30,15 @@ const ITEMS_PER_PAGE = 20;
 
 const API_BASE_URL =
     import.meta.env.VITE_API_URL ||
-    'https://ivory-gerbil-502781.hostingersite.com';
+    "https://ivory-gerbil-502781.hostingersite.com";
 
 const getImageUrl = (path) => {
     if (!path) return null;
-    if (typeof path !== 'string') return null;
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    if (typeof path !== "string") return null;
+    if (path.startsWith("http://") || path.startsWith("https://")) return path;
 
-    const cleaned = path.startsWith('/') ? path.slice(1) : path;
-    if (cleaned.startsWith('storage/')) return `${API_BASE_URL}/${cleaned}`;
+    const cleaned = path.startsWith("/") ? path.slice(1) : path;
+    if (cleaned.startsWith("storage/")) return `${API_BASE_URL}/${cleaned}`;
     return `${API_BASE_URL}/storage/${cleaned}`;
 };
 
@@ -60,26 +68,22 @@ const getMeta = (r) => {
 
 const RoleBadge = ({ role }) => {
     const map = {
-        admin: 'bg-[#16233F] text-white',
-        staff: 'bg-[#EEF1F5] text-[#3B5170]',
-        enforcer: 'bg-[#E5F2EA] text-[#1E8449]',
+        admin: "bg-[#16233F] text-white",
+        staff: "bg-[#EEF1F5] text-[#3B5170]",
+        enforcer: "bg-[#E5F2EA] text-[#1E8449]",
     };
     return (
         <span
-            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${map[role] || 'bg-gray-100 text-gray-700'
-                }`}
+            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+                map[role] || "bg-gray-100 text-gray-700"
+            }`}
         >
-            {role || '—'}
+            {role || "—"}
         </span>
     );
 };
 
-const FaceImage = ({
-    rawUrl,
-    alt = '',
-    className = '',
-    fallback = null,
-}) => {
+const FaceImage = ({ rawUrl, alt = "", className = "", fallback = null }) => {
     const url = getImageUrl(rawUrl);
     if (!url) return fallback;
     return (
@@ -88,7 +92,7 @@ const FaceImage = ({
             alt={alt}
             className={className}
             onError={(e) => {
-                e.target.style.display = 'none';
+                e.target.style.display = "none";
             }}
         />
     );
@@ -99,9 +103,11 @@ const FaceImage = ({
 /* ------------------------------------------------------------------ */
 
 const FaceRegistrations = () => {
+    const queryClient = useQueryClient();
+    const notify = useAlert();
     const [regPage, setRegPage] = useState(1);
-    const [regStatus, setRegStatus] = useState('active');
-    const [regSearch, setRegSearch] = useState('');
+    const [regStatus, setRegStatus] = useState("active");
+    const [regSearch, setRegSearch] = useState("");
 
     /* --- Queries --- */
 
@@ -110,7 +116,7 @@ const FaceRegistrations = () => {
         isLoading: registrationsLoading,
         refetch: refetchRegistrations,
     } = useQuery({
-        queryKey: ['face-registrations', regPage, regStatus, regSearch],
+        queryKey: ["face-registrations", regPage, regStatus, regSearch],
         queryFn: () =>
             getFaceRegistrations(regPage, ITEMS_PER_PAGE, {
                 status: regStatus,
@@ -119,6 +125,53 @@ const FaceRegistrations = () => {
         keepPreviousData: true,
         staleTime: 1000 * 60,
     });
+
+    /* --- Archive --- */
+
+    const archiveMutation = useMutation({
+        mutationFn: deleteFaceRegistration,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["face-registrations"] });
+            queryClient.invalidateQueries({ queryKey: ["archives"] });
+            notify.success("Face registration archived successfully");
+        },
+        onError: (err) => {
+            notify.error(
+                err.response?.data?.message ||
+                    "Failed to archive face registration",
+            );
+        },
+    });
+
+    const restoreMutation = useMutation({
+        mutationFn: restoreFaceRegistration,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["face-registrations"] });
+            notify.success("Face registration restored successfully");
+        },
+        onError: (err) => {
+            notify.error(
+                err.response?.data?.message ||
+                    "Failed to restore face registration",
+            );
+        },
+    });
+
+    const handleRestore = async (id) => {
+        const ok = await notify.confirm(
+            "Restore this face registration? The user will be able to use face verification again.",
+            { confirmText: "Restore" },
+        );
+        if (ok) restoreMutation.mutate(id);
+    };
+
+    const handleArchive = async (id) => {
+        const ok = await notify.confirm("Archive this face registration?", {
+            confirmText: "Archive",
+            destructive: true,
+        });
+        if (ok) archiveMutation.mutate(id);
+    };
 
     const registrations = getDataArray(registrationsRes);
     const registrationsMeta = getMeta(registrationsRes);
@@ -133,7 +186,7 @@ const FaceRegistrations = () => {
                     className="absolute inset-0 opacity-[0.07] pointer-events-none"
                     style={{
                         backgroundImage:
-                            'repeating-linear-gradient(115deg, transparent 0 40px, #F0B429 40px 42px)',
+                            "repeating-linear-gradient(115deg, transparent 0 40px, #F0B429 40px 42px)",
                     }}
                 />
                 <div className="relative">
@@ -153,8 +206,9 @@ const FaceRegistrations = () => {
                         className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
                     >
                         <RefreshCw
-                            className={`w-4 h-4 mr-2 ${registrationsLoading ? 'animate-spin' : ''
-                                }`}
+                            className={`w-4 h-4 mr-2 ${
+                                registrationsLoading ? "animate-spin" : ""
+                            }`}
                         />
                         Refresh
                     </Button>
@@ -177,7 +231,7 @@ const FaceRegistrations = () => {
                         />
                         {regSearch && (
                             <button
-                                onClick={() => setRegSearch('')}
+                                onClick={() => setRegSearch("")}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
                             >
                                 <X className="w-4 h-4" />
@@ -241,7 +295,7 @@ const FaceRegistrations = () => {
                                     <div className="p-4">
                                         <div className="flex items-center gap-2 mb-1">
                                             <p className="font-['Oswald'] text-base leading-tight text-[#1F2937] truncate">
-                                                {r.user?.firstname}{' '}
+                                                {r.user?.firstname}{" "}
                                                 {r.user?.lastname}
                                             </p>
                                             {r.user?.role && (
@@ -253,15 +307,59 @@ const FaceRegistrations = () => {
                                         </p>
                                         <div className="mt-2 flex items-center gap-2 text-[10px] text-[#94A3B8]">
                                             <span className="font-mono truncate">
-                                                {r.device_id || '—'}
+                                                {r.device_id || "—"}
                                             </span>
                                         </div>
                                         <p className="text-[10px] text-[#94A3B8] mt-1">
-                                            Registered{' '}
+                                            Registered{" "}
                                             {new Date(
                                                 r.registered_at,
                                             ).toLocaleDateString()}
                                         </p>
+
+                                        <div className="mt-3 pt-3 border-t border-dashed border-[#CBD5E1] flex items-center justify-between gap-2">
+                                            {r.is_active === false ? (
+                                                <>
+                                                    <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-[#F1F5F9] text-[#64748B]">
+                                                        Archived
+                                                    </span>
+                                                    {r.can_restore !==
+                                                        false && (
+                                                        <ActionButton
+                                                            icon={
+                                                                ArchiveRestore
+                                                            }
+                                                            variant="primary"
+                                                            onClick={() =>
+                                                                handleRestore(
+                                                                    r.face_registration_id,
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                restoreMutation.isPending
+                                                            }
+                                                        >
+                                                            Restore
+                                                        </ActionButton>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <ActionButton
+                                                    icon={Archive}
+                                                    variant="danger"
+                                                    onClick={() =>
+                                                        handleArchive(
+                                                            r.face_registration_id,
+                                                        )
+                                                    }
+                                                    disabled={
+                                                        archiveMutation.isPending
+                                                    }
+                                                >
+                                                    Archive
+                                                </ActionButton>
+                                            )}
+                                        </div>
                                     </div>
                                 </article>
                             ))}

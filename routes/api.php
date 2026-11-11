@@ -121,6 +121,20 @@ Route::middleware('auth:sanctum')->group(function () {
                 [FaceRegistrationController::class, 'transferOwnership']
             )
                 ->where('id', '[0-9]+');
+
+            // Archive a face registration
+            Route::delete(
+                '/faces/{id}',
+                [FaceRegistrationController::class, 'destroy']
+            )
+                ->where('id', '[0-9]+');
+
+            // Restore an archived face registration
+            Route::put(
+                '/faces/{id}/restore',
+                [FaceRegistrationController::class, 'restore']
+            )
+                ->where('id', '[0-9]+');
         });
     });
 
