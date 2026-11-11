@@ -26,7 +26,12 @@ import {
 import { Pagination } from "../components/ui/Pagination";
 import ActionButton from "../components/ui/ActionButton";
 import { byFields } from "../lib/sortBy";
-import { getArchived, restoreArchived } from "../services/api";
+import {
+    getArchived,
+    restoreArchived,
+    getFaceRegistrations,
+    restoreFaceRegistration,
+} from "../services/api";
 import {
     Archive,
     ArchiveRestore,
@@ -39,6 +44,7 @@ import {
     AlertTriangle,
     Ticket,
     UserCog,
+    ScanFace,
     Inbox,
     Filter,
     Calendar,
@@ -91,6 +97,14 @@ const RESOURCES = [
         sortKeys: ["lastname", "firstname"],
         columns: ["Name", "Email", "Role", "Contact"],
     },
+    {
+        key: "faces",
+        label: "Face Registrations",
+        icon: ScanFace,
+        accent: "#7C3AED",
+        sortKeys: [],
+        columns: ["Name", "Email", "Role", "Device"],
+    },
 ];
 
 const PRESETS = [
@@ -113,6 +127,9 @@ const ROW_CLASS_BY_RESOURCE = {
         "flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 " +
         "md:grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,8rem)] md:gap-4",
     users:
+        "flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 " +
+        "md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,8rem)] md:gap-4",
+    faces:
         "flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 " +
         "md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_minmax(0,8rem)] md:gap-4",
 };
@@ -300,12 +317,20 @@ const renderUserCells = (row) => [
     row.contact_number || "—",
 ];
 
+const renderFaceCells = (row) => [
+    `${row.user?.firstname || ""} ${row.user?.lastname || ""}`.trim() || "—",
+    row.user?.email || "—",
+    row.user?.role?.toUpperCase() || "—",
+    row.device_id || "—",
+];
+
 const ROW_RENDERERS = {
     violators: renderViolatorCells,
     vehicles: renderVehicleCells,
     violations: renderViolationCells,
     tickets: renderTicketCells,
     users: renderUserCells,
+    faces: renderFaceCells,
 };
 
 const Archives = () => {
@@ -334,6 +359,7 @@ const Archives = () => {
         violations: emptyFilters(),
         tickets: emptyFilters(),
         users: emptyFilters(),
+        faces: emptyFilters(),
     });
 
     const currentFilters = filters[tab] || emptyFilters();
@@ -351,17 +377,25 @@ const Archives = () => {
     } = useQuery({
         queryKey: ["archives", tab, page, searchTerm, currentFilters],
         queryFn: () =>
-            getArchived(tab, page, ITEMS_PER_PAGE, {
-                search: searchTerm || undefined,
-                date_from: currentFilters.date_from || undefined,
-                date_to: currentFilters.date_to || undefined,
-            }),
+            tab === "faces"
+                ? getFaceRegistrations(page, ITEMS_PER_PAGE, {
+                      status: "archived",
+                      search: searchTerm || undefined,
+                  })
+                : getArchived(tab, page, ITEMS_PER_PAGE, {
+                      search: searchTerm || undefined,
+                      date_from: currentFilters.date_from || undefined,
+                      date_to: currentFilters.date_to || undefined,
+                  }),
         keepPreviousData: true,
         staleTime: 1000 * 30,
     });
 
     const restoreMutation = useMutation({
-        mutationFn: ({ resource, id }) => restoreArchived(resource, id),
+        mutationFn: ({ resource, id }) =>
+            resource === "faces"
+                ? restoreFaceRegistration(id)
+                : restoreArchived(resource, id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["archives"] });
             queryClient.invalidateQueries({ queryKey: ["tickets"] });
@@ -369,6 +403,7 @@ const Archives = () => {
             queryClient.invalidateQueries({ queryKey: ["vehicles"] });
             queryClient.invalidateQueries({ queryKey: ["violations"] });
             queryClient.invalidateQueries({ queryKey: ["users"] });
+            queryClient.invalidateQueries({ queryKey: ["face-registrations"] });
             notify.success("Record restored successfully");
         },
         onError: (err) => {
@@ -378,7 +413,19 @@ const Archives = () => {
         },
     });
 
-    const rows = getDataArray(response);
+    const rows = useMemo(() => {
+        const list = getDataArray(response);
+        if (tab !== "faces") return list;
+        // Face registrations come from /faces — map to the archive row shape.
+        return list.map((r) => ({
+            ...r,
+            archived_at: r.replaced_at,
+            archived_by_name: null,
+            resource_label:
+                `${r.user?.firstname || ""} ${r.user?.lastname || ""}`.trim() ||
+                `#${r.face_registration_id}`,
+        }));
+    }, [response, tab]);
     const meta = getMeta(response);
 
     const refinedRows = useMemo(() => {
@@ -399,8 +446,22 @@ const Archives = () => {
             list = list.filter((r) => r.gender === currentFilters.gender);
         }
 
+        if (tab === "faces") {
+            // /faces has no date filter, so apply the archived-date range here
+            const from = currentFilters.date_from;
+            const to = currentFilters.date_to;
+            if (from || to) {
+                list = list.filter((r) => {
+                    const d = r.archived_at
+                        ? toISODate(new Date(r.archived_at))
+                        : "";
+                    return (!from || d >= from) && (!to || d <= to);
+                });
+            }
+        }
+
         const resource = RESOURCES.find((r) => r.key === tab);
-        if (!resource) return list;
+        if (!resource || !resource.sortKeys.length) return list;
         return [...list].sort(byFields(...resource.sortKeys));
     }, [rows, tab, currentFilters]);
 
@@ -448,7 +509,11 @@ const Archives = () => {
         violations: "violation_id",
         tickets: "ticket_id",
         users: "user_id",
+        faces: "face_registration_id",
     }[tab];
+
+    // Face registrations replaced by a transfer/takeover can't be restored.
+    const canRestoreRow = (row) => tab !== "faces" || row.can_restore !== false;
 
     const chips = [
         searchTerm && [`Search: ${searchTerm}`, () => setSearchTerm("")],
@@ -797,7 +862,11 @@ const Archives = () => {
                                                     </p>
                                                 </div>
                                                 <div className="mt-4 pt-4 border-t border-dashed border-[#CBD5E1]">
-                                                    {isAdmin() ? (
+                                                    {!canRestoreRow(row) ? (
+                                                        <span className="text-xs text-[#94A3B8]">
+                                                            Transferred
+                                                        </span>
+                                                    ) : isAdmin() ? (
                                                         <ActionButton
                                                             icon={
                                                                 ArchiveRestore
@@ -890,7 +959,11 @@ const Archives = () => {
                                                         "—"}
                                                 </span>
                                                 <div className="justify-self-end md:justify-self-start">
-                                                    {isAdmin() ? (
+                                                    {!canRestoreRow(row) ? (
+                                                        <span className="text-xs text-[#94A3B8]">
+                                                            Transferred
+                                                        </span>
+                                                    ) : isAdmin() ? (
                                                         <ActionButton
                                                             icon={
                                                                 ArchiveRestore

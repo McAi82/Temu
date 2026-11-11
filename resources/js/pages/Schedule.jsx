@@ -668,11 +668,23 @@ const Schedule = () => {
             return;
         }
 
-        if (!editingSchedule) {
+        {
             const minDate = tomorrowISO();
-            if (!formData.schedule_date || formData.schedule_date < minDate) {
+            const dateChanged =
+                !editingSchedule ||
+                formData.schedule_date !== editingSchedule.schedule_date;
+
+            // New schedules, or an edit that moves the date, must land on
+            // tomorrow or later. (Editing a schedule without changing its
+            // date is not blocked by this check.)
+            if (
+                dateChanged &&
+                (!formData.schedule_date || formData.schedule_date < minDate)
+            ) {
                 notify.warning(
-                    "You cannot schedule for today or a past date. Please choose tomorrow or a later date.",
+                    editingSchedule
+                        ? "You cannot move a schedule to today or a past date. Please choose tomorrow or a later date."
+                        : "You cannot schedule for today or a past date. Please choose tomorrow or a later date.",
                     { title: "Invalid Date" },
                 );
                 return;
@@ -1424,10 +1436,11 @@ const Schedule = () => {
                                                             value={
                                                                 formData.schedule_date
                                                             }
-                                                            min={
-                                                                editingSchedule
-                                                                    ? undefined
-                                                                    : tomorrowISO()
+                                                            min={tomorrowISO()}
+                                                            disabled={
+                                                                !!editingSchedule &&
+                                                                editingSchedule.schedule_date <
+                                                                    tomorrowISO()
                                                             }
                                                             onChange={(e) =>
                                                                 handleDateChange(
@@ -1440,9 +1453,11 @@ const Schedule = () => {
                                                         />
                                                         <p className="mt-1.5 flex items-center gap-1 text-xs text-[#64748B]">
                                                             <AlertCircle className="h-3 w-3" />
-                                                            Schedules must be
-                                                            created at least one
-                                                            day in advance.
+                                                            {editingSchedule &&
+                                                            editingSchedule.schedule_date <
+                                                                tomorrowISO()
+                                                                ? "This schedule is today or in the past, so its date can no longer be changed."
+                                                                : "Schedules must be set at least one day in advance."}
                                                         </p>
                                                     </div>
                                                     <div>
