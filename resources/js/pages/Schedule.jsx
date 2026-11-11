@@ -132,6 +132,16 @@ const toISODate = (d) => {
 
 const todayISO = () => toISODate(new Date());
 
+// The API may return schedule_date as a full timestamp
+// (e.g. "2026-11-11T16:00:00.000000Z"). Convert it to a local YYYY-MM-DD
+// string so it works with <input type="date"> and date comparisons.
+const toDateOnly = (v) => {
+    if (!v) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? String(v).slice(0, 10) : toISODate(d);
+};
+
 const tomorrowISO = () => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -672,7 +682,8 @@ const Schedule = () => {
             const minDate = tomorrowISO();
             const dateChanged =
                 !editingSchedule ||
-                formData.schedule_date !== editingSchedule.schedule_date;
+                formData.schedule_date !==
+                    toDateOnly(editingSchedule.schedule_date);
 
             // New schedules, or an edit that moves the date, must land on
             // tomorrow or later. (Editing a schedule without changing its
@@ -707,7 +718,7 @@ const Schedule = () => {
             schedules.some(
                 (s) =>
                     s.enforcer_id === id &&
-                    s.schedule_date === formData.schedule_date &&
+                    toDateOnly(s.schedule_date) === formData.schedule_date &&
                     (!editingSchedule ||
                         s.schedule_id !== editingSchedule.schedule_id),
             ),
@@ -803,7 +814,7 @@ const Schedule = () => {
         setEditingSchedule(first);
         setFormData({
             duty_location_id: group.duty_location_id || "",
-            schedule_date: group.date,
+            schedule_date: toDateOnly(group.date),
             shift_type: shiftType,
             start_time: defaults.start,
             end_time: defaults.end,
@@ -1439,7 +1450,9 @@ const Schedule = () => {
                                                             min={tomorrowISO()}
                                                             disabled={
                                                                 !!editingSchedule &&
-                                                                editingSchedule.schedule_date <
+                                                                toDateOnly(
+                                                                    editingSchedule.schedule_date,
+                                                                ) <
                                                                     tomorrowISO()
                                                             }
                                                             onChange={(e) =>
@@ -1454,8 +1467,9 @@ const Schedule = () => {
                                                         <p className="mt-1.5 flex items-center gap-1 text-xs text-[#64748B]">
                                                             <AlertCircle className="h-3 w-3" />
                                                             {editingSchedule &&
-                                                            editingSchedule.schedule_date <
-                                                                tomorrowISO()
+                                                            toDateOnly(
+                                                                editingSchedule.schedule_date,
+                                                            ) < tomorrowISO()
                                                                 ? "This schedule is today or in the past, so its date can no longer be changed."
                                                                 : "Schedules must be set at least one day in advance."}
                                                         </p>
