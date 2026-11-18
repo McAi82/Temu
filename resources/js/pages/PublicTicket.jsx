@@ -296,6 +296,22 @@ const PublicTicket = () => {
                     {ticket.violator?.contact_number || "N/A"}
                   </p>
                 </div>
+                <div>
+                  <p className="text-xs text-[#64748B] font-['Inter']">
+                    Email
+                  </p>
+                  <p className="text-[#1F2937] font-['Inter'] break-all">
+                    {ticket.violator?.email || "N/A"}
+                  </p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs text-[#64748B] font-['Inter']">
+                    Address
+                  </p>
+                  <p className="text-[#1F2937] font-['Inter']">
+                    {ticket.violator?.address || "N/A"}
+                  </p>
+                </div>
               </div>
             </div>
 

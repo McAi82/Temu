@@ -208,6 +208,9 @@ class ViolatorController extends Controller
             'license' => 'required|string',
             'expiry' => 'required|date',
             'birthday' => 'required|date',
+            'email' => 'nullable|email|max:100',
+            'contact_number' => ['required', 'string', 'max:20', 'regex:/^(09|\+639)\d{9}$/'],
+            'address' => 'required|string|min:5|max:500',
             'profile_photo' => 'nullable',
         ]);
 
@@ -277,6 +280,9 @@ class ViolatorController extends Controller
 
         $validator = Validator::make($request->all(), [
             'license' => 'sometimes|string|unique:violators,license,' . $id . ',violator_id',
+            'email' => 'sometimes|nullable|email|max:100',
+            'contact_number' => ['sometimes', 'required', 'string', 'max:20', 'regex:/^(09|\+639)\d{9}$/'],
+            'address' => 'sometimes|required|string|min:5|max:500',
             'profile_photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 

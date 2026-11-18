@@ -56,6 +56,8 @@ import {
   Shield,
   MapPin,
   FileText,
+  Phone,
+  Mail,
 } from "lucide-react";
 import { useAlert } from "../components/ui/AlertProvider";
 
@@ -449,8 +451,8 @@ const ViolatorDetailsModal = ({ violatorId, open, onClose }) => {
                       danger={isExpiringSoon(v.expiry)}
                     />
                     <PreviewRow icon={CalendarDays} label="Birthday" value={formatDate(v.birthday)} />
-                    {v.email && <PreviewRow icon={FileText} label="Email" value={v.email} mono />}
-                    {v.contact_number && <PreviewRow icon={Info} label="Contact" value={v.contact_number} mono />}
+                    {v.email && <PreviewRow icon={Mail} label="Email" value={v.email} mono />}
+                    {v.contact_number && <PreviewRow icon={Phone} label="Contact" value={v.contact_number} mono />}
                     {v.address && <PreviewRow icon={MapPin} label="Address" value={v.address} />}
                   </dl>
 
@@ -667,6 +669,9 @@ const VehiclesViolators = () => {
     birthday: "",
     gender: "Male",
     nationality: "Filipino",
+    email: "",
+    contact_number: "",
+    address: "",
     profile_photo: null,
   });
   const [violatorPhotoPreview, setViolatorPhotoPreview] = useState(null);
@@ -905,6 +910,9 @@ const VehiclesViolators = () => {
       birthday: violator.birthday ? String(violator.birthday).slice(0, 10) : "",
       gender: violator.gender || "Male",
       nationality: violator.nationality || "Filipino",
+      email: violator.email || "",
+      contact_number: violator.contact_number || "",
+      address: violator.address || "",
       profile_photo: null,
     });
     setViolatorPhotoPreview(getImageUrl(violator.profile_photo));
@@ -922,6 +930,9 @@ const VehiclesViolators = () => {
       birthday: "",
       gender: "Male",
       nationality: "Filipino",
+      email: "",
+      contact_number: "",
+      address: "",
       profile_photo: null,
     });
     setViolatorPhotoPreview(null);
@@ -1055,6 +1066,8 @@ const VehiclesViolators = () => {
           v.lastname,
           v.license,
           v.nationality,
+          v.email,
+          v.contact_number,
           v.gender,
           v.ticketed_by,
           ...(v.violation_names || []),
@@ -1252,7 +1265,14 @@ const VehiclesViolators = () => {
                     ) : (
                       <div className="w-10 h-10 shrink-0 rounded-full bg-[#E9ECF2] flex items-center justify-center text-[#16233F] text-xs font-bold">{v.firstname?.[0]}{v.lastname?.[0]}</div>
                     )}
-                    <span className="font-medium text-[#1F2937] truncate">{v.lastname}, {v.firstname}{v.middlename ? ` ${v.middlename[0]}.` : ""}</span>
+                    <div className="min-w-0">
+                      <span className="block font-medium text-[#1F2937] truncate">{v.lastname}, {v.firstname}{v.middlename ? ` ${v.middlename[0]}.` : ""}</span>
+                      {(v.contact_number || v.email) && (
+                        <span className="block text-xs text-[#64748B] truncate" title={[v.contact_number, v.email].filter(Boolean).join(" · ")}>
+                          {[v.contact_number, v.email].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <span className="font-mono text-sm text-[#16233F]"><i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">License #</i>{v.license}</span>
                   <span className={`text-sm ${soon ? "text-[#C8202F] font-medium" : "text-[#1F2937]"}`}><i className="md:hidden not-italic text-[10px] text-[#94A3B8] mr-1">Expiry</i>{new Date(v.expiry).toLocaleDateString()}{soon && <span className="ml-1 text-[10px]">⚠</span>}</span>
@@ -1307,6 +1327,13 @@ const VehiclesViolators = () => {
                         <Spec label="Gender">{v.gender}</Spec>
                         <Spec label="Nationality">{v.nationality}</Spec>
                         <Spec label="Ticketed By">{v.ticketed_by || <span className="text-[#94A3B8]">—</span>}</Spec>
+                        <Spec label="Contact" mono>{v.contact_number || <span className="text-[#94A3B8]">—</span>}</Spec>
+                        <div className="col-span-2 min-w-0">
+                          <Spec label="Email">{v.email ? <span title={v.email}>{v.email}</span> : <span className="text-[#94A3B8]">—</span>}</Spec>
+                        </div>
+                        <div className="col-span-2 min-w-0">
+                          <Spec label="Address">{v.address ? <span title={v.address}>{v.address}</span> : <span className="text-[#94A3B8]">—</span>}</Spec>
+                        </div>
                       </dl>
                       <div className="mt-3">
                         <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1.5">
@@ -1477,6 +1504,54 @@ const VehiclesViolators = () => {
 
                   <section>
                     <div className="flex items-center gap-2 mb-4">
+                      <Phone className="w-4 h-4 text-[#F0B429]" />
+                      <h3 className="font-['Oswald'] text-lg text-[#16233F]">Contact</h3>
+                      <span className="h-px flex-1 bg-[#E3E7EE]" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Contact Number <span className="text-[#C8202F]">*</span></label>
+                        <Input
+                          type="tel"
+                          inputMode="tel"
+                          placeholder="09123456789"
+                          value={violatorFormData.contact_number}
+                          onChange={(e) => setViolatorFormData({ ...violatorFormData, contact_number: e.target.value.replace(/[\s-]/g, "") })}
+                          required
+                          pattern="^(09|\+639)\d{9}$"
+                          title="Use a mobile number like 09123456789 or +639123456789"
+                          maxLength={20}
+                          className="focus-visible:ring-[#F0B429] h-11 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Email <span className="text-[#94A3B8] font-normal">(optional)</span></label>
+                        <Input
+                          type="email"
+                          placeholder="juan@email.com"
+                          value={violatorFormData.email}
+                          onChange={(e) => setViolatorFormData({ ...violatorFormData, email: e.target.value })}
+                          maxLength={100}
+                          className="focus-visible:ring-[#F0B429] h-11"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">Address <span className="text-[#C8202F]">*</span></label>
+                      <Input
+                        placeholder="Street, Barangay, City"
+                        value={violatorFormData.address}
+                        onChange={(e) => setViolatorFormData({ ...violatorFormData, address: e.target.value })}
+                        required
+                        minLength={5}
+                        maxLength={500}
+                        className="focus-visible:ring-[#F0B429] h-11"
+                      />
+                    </div>
+                  </section>
+
+                  <section>
+                    <div className="flex items-center gap-2 mb-4">
                       <CreditCard className="w-4 h-4 text-[#F0B429]" />
                       <h3 className="font-['Oswald'] text-lg text-[#16233F]">License</h3>
                       <span className="h-px flex-1 bg-[#E3E7EE]" />
@@ -1533,6 +1608,9 @@ const VehiclesViolators = () => {
                           <PreviewRow icon={CreditCard} label="License" value={violatorFormData.license || '—'} mono />
                           <PreviewRow icon={CalendarDays} label="Expiry" value={violatorFormData.expiry ? new Date(violatorFormData.expiry).toLocaleDateString() : '—'} danger={violatorFormData.expiry && new Date(violatorFormData.expiry) <= new Date()} />
                           <PreviewRow icon={CalendarDays} label="Birthday" value={violatorFormData.birthday ? new Date(violatorFormData.birthday).toLocaleDateString() : '—'} />
+                          <PreviewRow icon={Phone} label="Contact" value={violatorFormData.contact_number || '—'} mono />
+                          <PreviewRow icon={Mail} label="Email" value={violatorFormData.email || '—'} mono />
+                          <PreviewRow icon={MapPin} label="Address" value={violatorFormData.address || '—'} />
                         </dl>
                       </div>
                     </div>
@@ -1562,6 +1640,8 @@ const VehiclesViolators = () => {
                   <span>First and last name are required.</span>
                 ) : !violatorFormData.license ? (
                   <span>Enter the license number to continue.</span>
+                ) : !violatorFormData.contact_number || !violatorFormData.address ? (
+                  <span>Contact number and address are required.</span>
                 ) : (
                   <span>
                     Ready to {editingViolator ? 'save changes to' : 'register'}{' '}
