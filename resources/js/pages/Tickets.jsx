@@ -543,6 +543,17 @@ const TicketDetailsModal = ({ ticketId, open, onClose }) => {
                       <Spec label="Nationality">
                         {t.violator?.nationality || '—'}
                       </Spec>
+                      <Spec label="Email">
+                        <span title={t.violator?.email || undefined}>
+                          {t.violator?.email || '—'}
+                        </span>
+                      </Spec>
+                      <div className="col-span-2 min-w-0">
+                        <dt className="text-[10px] text-[#94A3B8]">Address</dt>
+                        <dd className="text-sm text-[#1F2937] break-words">
+                          {t.violator?.address || '—'}
+                        </dd>
+                      </div>
                     </div>
                   </section>
 
@@ -1340,6 +1351,14 @@ const Tickets = () => {
                         <Spec label="Total fine" danger>
                           ₱{getTotalFine(ticket).toLocaleString()}
                         </Spec>
+                        <Spec label="Contact" mono>
+                          {ticket.violator?.contact_number || '—'}
+                        </Spec>
+                        <Spec label="Email">
+                          <span title={ticket.violator?.email || undefined}>
+                            {ticket.violator?.email || '—'}
+                          </span>
+                        </Spec>
                       </dl>
                       <div className="mt-3">
                         <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1.5">
@@ -1426,6 +1445,11 @@ const Tickets = () => {
                         <div className="text-xs text-[#64748B] font-mono truncate">
                           {ticket.violator?.license}
                         </div>
+                        {ticket.violator?.contact_number && (
+                          <div className="text-xs text-[#64748B] font-mono truncate">
+                            {ticket.violator.contact_number}
+                          </div>
+                        )}
                       </div>
 
                       <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
