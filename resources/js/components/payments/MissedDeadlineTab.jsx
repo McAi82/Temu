@@ -1,8 +1,9 @@
 // web/src/components/payments/MissedDeadlineTab.jsx
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Mail, Loader2, Home, CheckCircle, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Search, Mail, Loader2, Home, CheckCircle, RotateCcw, AlertTriangle, User as UserIcon, Car, Eye } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Pagination } from '../ui/Pagination';
 import { useAlert } from '../ui/AlertProvider';
@@ -38,6 +39,97 @@ const WarrantCell = ({ t }) => {
     return <span className="text-xs text-[#64748B]">Visit eligible {formatDay(t.warrant_eligible_at)}</span>;
 };
 
+const first = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== '');
+
+const InfoRow = ({ label, value }) =>
+    value ? (
+        <div className="flex justify-between gap-4 py-1.5 text-sm">
+            <span className="text-[#64748B]">{label}</span>
+            <span className="text-right font-medium text-[#1F2937] break-words">{value}</span>
+        </div>
+    ) : null;
+
+const ViolatorModal = ({ ticket, onClose, onWarn, warning }) => {
+    const v = ticket?.violator || {};
+    const veh = ticket?.vehicle || {};
+    const name = `${v.firstname || ''} ${v.middlename || ''} ${v.lastname || ''}`.replace(/\s+/g, ' ').trim();
+    const phone = first(v.contact_number, v.contact_no, v.phone, v.mobile, v.contact);
+    const address = first(
+        v.address,
+        [v.street, v.barangay, v.city, v.province].filter(Boolean).join(', '),
+    );
+    return (
+        <Dialog open={!!ticket} onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
+                {ticket && (
+                    <>
+                        <DialogHeader className="px-6 py-4 border-b border-[#E3E7EE] bg-[#16233F] text-white">
+                            <DialogTitle className="flex items-center gap-2 font-['Oswald']">
+                                <UserIcon className="w-5 h-5" /> Violator Information
+                            </DialogTitle>
+                        </DialogHeader>
+
+                        <div className="px-6 py-4 space-y-5 max-h-[70vh] overflow-y-auto">
+                            <section>
+                                <p className="text-lg font-semibold text-[#16233F]">{name || 'Unknown'}</p>
+                                <div className="divide-y divide-dashed divide-[#E3E7EE] mt-1">
+                                    <InfoRow label="License No." value={v.license} />
+                                    <InfoRow label="Email" value={v.email || 'No email on file'} />
+                                    <InfoRow label="Contact No." value={phone} />
+                                    <InfoRow label="Address" value={address} />
+                                    <InfoRow label="Birthdate" value={v.birthdate || v.date_of_birth} />
+                                </div>
+                            </section>
+
+                            <section>
+                                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
+                                    <Car className="w-3.5 h-3.5" /> Vehicle
+                                </p>
+                                <div className="divide-y divide-dashed divide-[#E3E7EE]">
+                                    <InfoRow label="Plate No." value={veh.platenumber} />
+                                    <InfoRow label="Owner" value={veh.owner} />
+                                </div>
+                            </section>
+
+                            <section className="rounded-lg bg-[#F8F9FA] border border-[#E3E7EE] px-4 py-2">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">Ticket</p>
+                                <div className="divide-y divide-dashed divide-[#E3E7EE]">
+                                    <InfoRow label="Ticket No." value={ticket.ticket_number} />
+                                    <InfoRow label="Balance" value={peso(ticket.balance)} />
+                                    <InfoRow label="Deadline" value={formatDay(ticket.payment_due_at)} />
+                                    <InfoRow
+                                        label="Warnings sent"
+                                        value={ticket.warning_count > 0 ? `${ticket.warning_count}× (last ${formatDay(ticket.warning_sent_at)})` : 'None'}
+                                    />
+                                    <InfoRow
+                                        label="Warrant visit"
+                                        value={
+                                            ticket.warrant_status === 'visited' ? 'Visited'
+                                            : ticket.warrant_status === 'for_visit' ? 'Warrant visit'
+                                            : `Eligible ${formatDay(ticket.warrant_eligible_at)}`
+                                        }
+                                    />
+                                </div>
+                            </section>
+                        </div>
+
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
+                            <Button variant="outline" onClick={onClose}>Close</Button>
+                            <Button
+                                onClick={() => onWarn([ticket.ticket_id])}
+                                disabled={!v.email || warning}
+                                className="bg-[#C8202F] hover:bg-[#A51A27]"
+                            >
+                                <Mail className="w-4 h-4 mr-2" /> Send warning
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+};
+
 const MissedDeadlineTab = () => {
     const qc = useQueryClient();
     const notify = useAlert();
@@ -46,6 +138,7 @@ const MissedDeadlineTab = () => {
     const [warrant, setWarrant] = useState('');
     const [selected, setSelected] = useState(() => new Set());
     const [error, setError] = useState('');
+    const [viewTicket, setViewTicket] = useState(null);
 
     const { data, isLoading, isFetching } = useQuery({
         queryKey: ['payments-overdue', page, search, warrant],
@@ -170,7 +263,13 @@ const MissedDeadlineTab = () => {
                                 </td>
                                 <td className="px-3 py-3 font-mono font-medium text-[#16233F] whitespace-nowrap">{t.ticket_number}</td>
                                 <td className="px-3 py-3 min-w-[190px]">
-                                    <div className="text-[#1F2937]">{t.violator?.firstname} {t.violator?.lastname}</div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setViewTicket(t)}
+                                        className="text-left text-[#16233F] font-medium hover:underline"
+                                    >
+                                        {t.violator?.firstname} {t.violator?.lastname}
+                                    </button>
                                     {t.violator?.email
                                         ? <div className="text-xs text-[#64748B] truncate">{t.violator.email}</div>
                                         : <div className="text-xs text-[#C8202F]">No email on file</div>}
@@ -186,6 +285,9 @@ const MissedDeadlineTab = () => {
                                 <td className="px-3 py-3"><WarrantCell t={t} /></td>
                                 <td className="px-3 py-3 whitespace-nowrap">
                                     <div className="flex gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => setViewTicket(t)}>
+                                            <Eye className="w-3.5 h-3.5 mr-1" /> View
+                                        </Button>
                                         <Button size="sm" variant="outline" disabled={!t.violator?.email || warnMut.isLoading} onClick={() => sendTo([t.ticket_id])}>
                                             <Mail className="w-3.5 h-3.5 mr-1" /> Warn
                                         </Button>
@@ -217,6 +319,13 @@ const MissedDeadlineTab = () => {
                 />
             )}
             {isFetching && !isLoading && <p className="text-xs text-[#94A3B8]">Updating…</p>}
+
+            <ViolatorModal
+                ticket={viewTicket}
+                onClose={() => setViewTicket(null)}
+                onWarn={(ids) => { setViewTicket(null); sendTo(ids); }}
+                warning={warnMut.isLoading}
+            />
         </div>
     );
 };
