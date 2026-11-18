@@ -1929,7 +1929,7 @@ const Payments = () => {
                         <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
                             {overdueCount}
                         </span>
-                    </TabsTrigger>\2
+                    </TabsTrigger>
                     </TabsList>
 
                 {/* ==================== PENDING TAB ==================== */}
