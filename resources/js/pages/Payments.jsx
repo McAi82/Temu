@@ -19,7 +19,11 @@ import {
     createPayment,
     getPaymentsByTicket,
     searchVehicleByPlate,
+    getOverduePayments,
 } from '../services/api';
+import MissedDeadlineTab from '../components/payments/MissedDeadlineTab';
+import { DueBadge, TimeLeft, DUE_META } from '../components/payments/DueStatus';
+import { getDueState } from '../lib/dueTime';
 import {
     Search,
     RefreshCw,
@@ -144,7 +148,7 @@ const formatMonthLabel = (iso) => {
 /* Shared grids */
 const PENDING_ROW =
     'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-    'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,1.2fr)] md:gap-4';
+    'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)] md:gap-4';
 
 const HISTORY_ROW =
     'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
@@ -1391,6 +1395,14 @@ const Payments = () => {
         enabled: tab === 'history',
     });
 
+    const { data: overdueCountResponse } = useQuery({
+        queryKey: ['payments-overdue-count'],
+        queryFn: () => getOverduePayments(1, 1),
+        staleTime: 1000 * 60,
+        refetchInterval: 1000 * 60,
+    });
+    const overdueCount = overdueCountResponse?.data?.total || 0;
+
     const { data: ticketHistoryResponse, isLoading: ticketHistoryLoading } =
         useQuery({
             queryKey: ['payments-by-ticket', historyTicketId],
@@ -1908,7 +1920,17 @@ const Payments = () => {
                         <Receipt className="w-4 h-4" />
                         Payment History
                     </TabsTrigger>
-                </TabsList>
+                    <TabsTrigger
+                        value="overdue"
+                        className="data-[state=active]:bg-[#C8202F] data-[state=active]:text-white flex items-center gap-2"
+                    >
+                        <AlertTriangle className="w-4 h-4" />
+                        Missed Deadline
+                        <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                            {overdueCount}
+                        </span>
+                    </TabsTrigger>\2
+                    </TabsList>
 
                 {/* ==================== PENDING TAB ==================== */}
                 <TabsContent value="pending" className="mt-0">
@@ -2139,6 +2161,8 @@ const Payments = () => {
                                             'Total Fine',
                                             'Paid',
                                             'Balance',
+                                            'Due',
+                                            'Time Left',
                                             'Status',
                                         ].map((c) => (
                                             <span key={c}>{c}</span>
@@ -2172,7 +2196,7 @@ const Payments = () => {
                                                     className={`${PENDING_ROW} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
                                                     style={{
                                                         borderLeftColor:
-                                                            statusMeta.color,
+                                                            (DUE_META[getDueState(ticket).state] || statusMeta).color,
                                                     }}
                                                 >
                                                     <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate">
@@ -2252,6 +2276,10 @@ const Payments = () => {
                                                         {formatPeso(balance)}
                                                     </span>
 
+                                                    <DueBadge ticket={ticket} />
+
+                                                    <TimeLeft ticket={ticket} />
+
                                                     <span className="justify-self-start">
                                                         {ticketStatusBadge(
                                                             ticket.status,
@@ -2275,6 +2303,11 @@ const Payments = () => {
                             )}
                         </div>
                     </div>
+                </TabsContent>
+
+                {/* ==================== MISSED DEADLINE TAB ==================== */}
+                <TabsContent value="overdue" className="mt-0">
+                    {tab === 'overdue' && <MissedDeadlineTab />}
                 </TabsContent>
 
                 {/* ==================== HISTORY TAB ==================== */}

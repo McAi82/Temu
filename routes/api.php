@@ -134,6 +134,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('payments')->middleware('staff')->group(function () {
         Route::get('/',              [PaymentController::class, 'index']);
         Route::get('/pending',       [PaymentController::class, 'pending']);
+        Route::get('/overdue',       [PaymentController::class, 'overdue']);
+        Route::post('/overdue/warn', [PaymentController::class, 'sendWarnings']);
+        Route::put('/overdue/{id}/warrant', [PaymentController::class, 'updateWarrant'])
+            ->where('id', '[0-9]+');
         Route::get('/ticket/{ticketId}', [PaymentController::class, 'byTicket'])
             ->where('ticketId', '[0-9]+');
         Route::get('/{id}',          [PaymentController::class, 'show'])

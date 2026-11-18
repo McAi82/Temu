@@ -248,6 +248,14 @@ export const createPayment = (data) => api.post('/payments', data);
 export const voidPayment = (id, reason) =>
     api.put(`/payments/${id}/void`, { reason });
 
+// ---- Missed 72h deadline ----
+export const getOverduePayments = (page = 1, perPage = 20, filters = {}) =>
+    api.get('/payments/overdue', { params: { page, per_page: perPage, ...filters } });
+export const sendOverdueWarnings = (ticketIds) =>
+    api.post('/payments/overdue/warn', { ticket_ids: ticketIds });
+export const updateWarrantStatus = (ticketId, status) =>
+    api.put(`/payments/overdue/${ticketId}/warrant`, { status });
+
 export const getAvailableEnforcers = (date, excludeId = null, search = '') =>
     api.get('/schedules/available-enforcers', {
         params: {

@@ -22,6 +22,15 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
+        // Non-destructive mode: only fill empty email / contact_number / address
+        // on EXISTING violators. Nothing is truncated or deleted.
+        //   bash:        SEED_VIOLATOR_CONTACTS_ONLY=true php artisan db:seed
+        //   PowerShell:  $env:SEED_VIOLATOR_CONTACTS_ONLY="true"; php artisan db:seed
+        if (filter_var(env('SEED_VIOLATOR_CONTACTS_ONLY', false), FILTER_VALIDATE_BOOLEAN)) {
+            $this->fillMissingViolatorContacts();
+            return;
+        }
+
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
         $this->truncateTables();
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
@@ -283,23 +292,7 @@ class DatabaseSeeder extends Seeder
 
     private function seedViolators(): void
     {
-        $violators = [
-            ['Juan', 'Reyes', 'Dela Cruz', 'L123456789', '2027-12-31', '1985-05-15', 'Male', 'Professional', 'A,B,B1,B2', 'juan.delacruz@example.ph', '09171111111', 'Cagayan de Oro City'],
-            ['Maria', 'Lopez', 'Santos', 'L987654321', '2028-03-20', '1990-08-22', 'Female', 'Non-Professional', 'A,B', 'maria.santos@example.ph', '09171111112', 'El Salvador City'],
-            ['Pedro', 'Cruz', 'Garcia', 'L456789123', '2027-11-10', '1982-03-10', 'Male', 'Professional', 'A,B,B1,B2,C', 'pedro.garcia@example.ph', '09171111113', 'Iligan City'],
-            ['Ana', 'Reyes', 'Lopez', 'L789123456', '2029-07-18', '1995-12-05', 'Female', 'Non-Professional', 'A,B', 'ana.lopez@example.ph', '09171111114', 'Cagayan de Oro City'],
-            ['Ramon', 'Santos', 'Fernandez', 'L321654987', '2026-09-25', '1988-06-30', 'Male', 'Professional', 'A,B,C,D', 'ramon.fernandez@example.ph', '09171111115', 'Gingoog City'],
-            ['Elena', 'Garcia', 'Rivera', 'L654987321', '2030-01-14', '1992-11-18', 'Female', 'Professional', 'A,B', 'elena.rivera@example.ph', '09171111116', 'El Salvador City'],
-            ['Victor', 'Lim', 'Reyes', 'L147258369', '2027-05-08', '1980-09-25', 'Male', 'Professional', 'A,B,C', 'victor.reyes@example.ph', '09171111117', 'Valencia City'],
-            ['Cecilia', 'Tan', 'Cruz', 'L369258147', '2026-12-03', '1998-04-12', 'Female', 'Non-Professional', 'A', 'cecilia.cruz@example.ph', '09171111118', 'Malaybalay City'],
-            ['Benjamin', 'Ong', 'Tan', 'L741852963', '2028-10-22', '1987-07-08', 'Male', 'Professional', 'A,B,B1,B2', 'benjamin.tan@example.ph', '09171111119', 'Cagayan de Oro City'],
-            ['Natalie', 'Go', 'Ong', 'L852963741', '2030-06-17', '1993-02-28', 'Female', 'Professional', 'A,B', 'natalie.ong@example.ph', '09171111120', 'Iligan City'],
-            ['Gregory', 'Sy', 'Ramos', 'L963741852', '2026-08-30', '1984-10-14', 'Male', 'Professional', 'A,B,C', 'gregory.ramos@example.ph', '09171111121', 'El Salvador City'],
-            ['Angela', 'Uy', 'Mercado', 'L159753486', '2028-04-05', '1991-01-20', 'Female', 'Non-Professional', 'A,B', 'angela.mercado@example.ph', '09171111122', 'Valencia City'],
-            ['Roberto', 'Chua', 'Diaz', 'L357159852', '2027-02-11', '1979-08-04', 'Male', 'Professional', 'A,B,B1,B2', 'roberto.diaz@example.ph', '09171111123', 'Cagayan de Oro City'],
-            ['Katrina', 'Villanueva', 'Roxas', 'L258147369', '2029-11-19', '1996-06-22', 'Female', 'Non-Professional', 'A,B', 'katrina.roxas@example.ph', '09171111124', 'El Salvador City'],
-            ['Michael', 'Tan', 'Lim', 'L951753852', '2026-05-28', '1986-03-17', 'Male', 'Professional', 'A,B,C', 'michael.lim@example.ph', '09171111125', 'Malaybalay City'],
-        ];
+        $violators = $this->violatorSeedData();
 
         $now = now();
         $rows = [];
@@ -331,6 +324,84 @@ class DatabaseSeeder extends Seeder
 
         DB::table('violators')->insert($rows);
         $this->command->info('  ✓ Violators: ' . count($rows));
+    }
+
+    /**
+     * Single source of truth for the demo violators.
+     * [first, middle, last, license, expiry, birthday, gender, license type,
+     *  restriction, email, contact_number, address]
+     */
+    private function violatorSeedData(): array
+    {
+        return [
+            ['Juan', 'Reyes', 'Dela Cruz', 'L123456789', '2027-12-31', '1985-05-15', 'Male', 'Professional', 'A,B,B1,B2', 'juan.delacruz@example.ph', '09171111111', 'Purok 3, Barangay Carmen, Cagayan de Oro City, Misamis Oriental'],
+            ['Maria', 'Lopez', 'Santos', 'L987654321', '2028-03-20', '1990-08-22', 'Female', 'Non-Professional', 'A,B', 'maria.santos@example.ph', '09171111112', 'Purok 5, Barangay Poblacion, El Salvador City, Misamis Oriental'],
+            ['Pedro', 'Cruz', 'Garcia', 'L456789123', '2027-11-10', '1982-03-10', 'Male', 'Professional', 'A,B,B1,B2,C', 'pedro.garcia@example.ph', '09171111113', '12 Quezon Avenue, Barangay Pala-o, Iligan City, Lanao del Norte'],
+            ['Ana', 'Reyes', 'Lopez', 'L789123456', '2029-07-18', '1995-12-05', 'Female', 'Non-Professional', 'A,B', 'ana.lopez@example.ph', '09171111114', '45 Velez Street, Barangay Nazareth, Cagayan de Oro City, Misamis Oriental'],
+            ['Ramon', 'Santos', 'Fernandez', 'L321654987', '2026-09-25', '1988-06-30', 'Male', 'Professional', 'A,B,C,D', 'ramon.fernandez@example.ph', '09171111115', 'Purok 2, Barangay Poblacion, Gingoog City, Misamis Oriental'],
+            ['Elena', 'Garcia', 'Rivera', 'L654987321', '2030-01-14', '1992-11-18', 'Female', 'Professional', 'A,B', 'elena.rivera@example.ph', '09171111116', 'Purok 7, Barangay Molugan, El Salvador City, Misamis Oriental'],
+            ['Victor', 'Lim', 'Reyes', 'L147258369', '2027-05-08', '1980-09-25', 'Male', 'Professional', 'A,B,C', 'victor.reyes@example.ph', '09171111117', '8 Sayre Highway, Barangay Poblacion, Valencia City, Bukidnon'],
+            ['Cecilia', 'Tan', 'Cruz', 'L369258147', '2026-12-03', '1998-04-12', 'Female', 'Non-Professional', 'A', 'cecilia.cruz@example.ph', '09171111118', 'Purok 1, Barangay Casisang, Malaybalay City, Bukidnon'],
+            ['Benjamin', 'Ong', 'Tan', 'L741852963', '2028-10-22', '1987-07-08', 'Male', 'Professional', 'A,B,B1,B2', 'benjamin.tan@example.ph', '09171111119', '23 Corrales Avenue, Barangay Gusa, Cagayan de Oro City, Misamis Oriental'],
+            ['Natalie', 'Go', 'Ong', 'L852963741', '2030-06-17', '1993-02-28', 'Female', 'Professional', 'A,B', 'natalie.ong@example.ph', '09171111120', '17 Mahayahay Road, Barangay Mahayahay, Iligan City, Lanao del Norte'],
+            ['Gregory', 'Sy', 'Ramos', 'L963741852', '2026-08-30', '1984-10-14', 'Male', 'Professional', 'A,B,C', 'gregory.ramos@example.ph', '09171111121', 'Purok 4, Barangay Sinaloc, El Salvador City, Misamis Oriental'],
+            ['Angela', 'Uy', 'Mercado', 'L159753486', '2028-04-05', '1991-01-20', 'Female', 'Non-Professional', 'A,B', 'angela.mercado@example.ph', '09171111122', 'Purok 6, Barangay Lurogan, Valencia City, Bukidnon'],
+            ['Roberto', 'Chua', 'Diaz', 'L357159852', '2027-02-11', '1979-08-04', 'Male', 'Professional', 'A,B,B1,B2', 'roberto.diaz@example.ph', '09171111123', '31 Tiano Brothers Street, Barangay Lapasan, Cagayan de Oro City, Misamis Oriental'],
+            ['Katrina', 'Villanueva', 'Roxas', 'L258147369', '2029-11-19', '1996-06-22', 'Female', 'Non-Professional', 'A,B', 'katrina.roxas@example.ph', '09171111124', 'Purok 2, Barangay Hinigdaan, El Salvador City, Misamis Oriental'],
+            ['Michael', 'Tan', 'Lim', 'L951753852', '2026-05-28', '1986-03-17', 'Male', 'Professional', 'A,B,C', 'michael.lim@example.ph', '09171111125', '9 Fortich Street, Barangay Sumpong, Malaybalay City, Bukidnon'],
+        ];
+    }
+
+    /**
+     * Fills email, contact_number and address on EXISTING violators.
+     * Only empty columns are filled; values already entered are kept.
+     * Demo violators (matched by license) get their own data; any other
+     * violator gets generated SAMPLE values.
+     */
+    private function fillMissingViolatorContacts(): void
+    {
+        $known = [];
+        foreach ($this->violatorSeedData() as $v) {
+            $known[$v[3]] = [$v[9], $v[10], $v[11]]; // license => [email, contact, address]
+        }
+
+        $sampleAddresses = [
+            'Purok 1, Barangay Poblacion, El Salvador City, Misamis Oriental',
+            'Purok 3, Barangay Carmen, Cagayan de Oro City, Misamis Oriental',
+            '14 Rizal Street, Barangay Lapasan, Cagayan de Oro City, Misamis Oriental',
+            'Purok 5, Barangay Molugan, El Salvador City, Misamis Oriental',
+            '20 Osmena Street, Barangay Pala-o, Iligan City, Lanao del Norte',
+            'Purok 2, Barangay Poblacion, Gingoog City, Misamis Oriental',
+        ];
+
+        $filled = 0;
+
+        DB::table('violators')->orderBy('violator_id')->get()->each(
+            function ($v) use ($known, $sampleAddresses, &$filled) {
+                if (isset($known[$v->license])) {
+                    [$email, $contact, $address] = $known[$v->license];
+                } else {
+                    $slug = Str::slug(trim("{$v->firstname}.{$v->lastname}"), '.');
+                    $email = ($slug ?: 'violator') . '.' . $v->violator_id . '@example.ph';
+                    // 0917 + 7 digits = 11-digit PH mobile number
+                    $contact = '0917' . str_pad((string) ($v->violator_id % 10000000), 7, '0', STR_PAD_LEFT);
+                    $address = $sampleAddresses[$v->violator_id % count($sampleAddresses)];
+                }
+
+                $update = [];
+                if (blank($v->email))          $update['email'] = $email;
+                if (blank($v->contact_number)) $update['contact_number'] = $contact;
+                if (blank($v->address))        $update['address'] = $address;
+
+                if ($update) {
+                    $update['updated_at'] = now();
+                    DB::table('violators')->where('violator_id', $v->violator_id)->update($update);
+                    $filled++;
+                }
+            }
+        );
+
+        $this->command->info("  ✓ Violators updated with contact info: {$filled}");
     }
 
     /* ==================================================================

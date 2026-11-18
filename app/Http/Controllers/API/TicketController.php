@@ -284,8 +284,9 @@ class TicketController extends Controller
                 'latitude' => $request->latitude,
                 'longitude' => $request->longitude,
                 'violation_datetime' => $request->violation_datetime,
-                'payment_due_at' => \Carbon\Carbon::parse($request->violation_datetime)
-                    ->addDays(Ticket::PAYMENT_DUE_DAYS),
+                'payment_due_at' => Ticket::addBusinessHours(
+                    \Carbon\Carbon::parse($request->violation_datetime)
+                ),
                 'remarks' => $request->remarks,
                 'status' => 'issued',
             ]);

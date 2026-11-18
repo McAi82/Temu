@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\OverdueTicketWarning;
 
 class PaymentController extends Controller
 {
@@ -426,5 +428,164 @@ class PaymentController extends Controller
                 'status' => $ticket->status,
             ],
         ]);
+    }
+
+    /* ==================================================================
+     |  MISSED 72h DEADLINE — overdue(), sendWarnings(), updateWarrant()
+     ================================================================== */
+
+    /** Unpaid for 2+ months after the deadline → flag for a warrant visit. */
+    private function flagWarrantVisits(): void
+    {
+        Ticket::where('status', 'issued')
+            ->where('is_archived', false)
+            ->whereNull('warrant_status')
+            ->whereNotNull('payment_due_at')
+            ->where('payment_due_at', '<=', now()->subMonths(Ticket::WARRANT_AFTER_MONTHS))
+            ->update([
+                'warrant_status'     => 'for_visit',
+                'warrant_flagged_at' => now(),
+            ]);
+    }
+
+    private function ticketBalance(Ticket $ticket): array
+    {
+        $totalFine = (float) $ticket->violations->sum('fine_amount');
+        $totalPaid = (float) $ticket->payments
+            ->where('payment_status', 'completed')
+            ->where('is_archived', false)
+            ->sum('amount_paid');
+
+        return [$totalFine, $totalPaid, max(0, $totalFine - $totalPaid)];
+    }
+
+    public function overdue(Request $request)
+    {
+        $this->flagWarrantVisits();
+
+        $perPage = (int) $request->get('per_page', 20);
+        $page    = (int) $request->get('page', 1);
+
+        $query = Ticket::with(['violator', 'vehicle', 'violations.violationType', 'payments'])
+            ->where('status', 'issued')
+            ->where('is_archived', false)
+            ->whereNotNull('payment_due_at')
+            ->where('payment_due_at', '<', now());
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('ticket_number', 'like', "%{$search}%")
+                    ->orWhereHas('violator', function ($vq) use ($search) {
+                        $vq->where('firstname', 'like', "%{$search}%")
+                            ->orWhere('lastname', 'like', "%{$search}%")
+                            ->orWhere('license', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('vehicle', fn ($vq) => $vq->where('platenumber', 'like', "%{$search}%"));
+            });
+        }
+
+        if ($request->filled('warrant')) {
+            $request->warrant === 'none'
+                ? $query->whereNull('warrant_status')
+                : $query->where('warrant_status', $request->warrant);
+        }
+
+        $tickets = $query->orderBy('payment_due_at', 'asc')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        $tickets->getCollection()->transform(function ($ticket) {
+            [$fine, $paid, $balance] = $this->ticketBalance($ticket);
+            $ticket->setAttribute('total_fine', $fine);
+            $ticket->setAttribute('total_paid', $paid);
+            $ticket->setAttribute('balance', $balance);
+            $ticket->unsetRelation('payments');
+            return $ticket;
+        });
+
+        return response()->json($tickets);
+    }
+
+    /** POST /payments/overdue/warn  { ticket_ids: [1,2,3] }  — email only. */
+    public function sendWarnings(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'ticket_ids'   => 'required|array|min:1|max:100',
+            'ticket_ids.*' => 'integer',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
+        }
+
+        $tickets = Ticket::with(['violator', 'violations', 'payments'])
+            ->whereIn('ticket_id', $request->ticket_ids)
+            ->get();
+
+        $sent = [];
+        $skipped = [];
+
+        foreach ($tickets as $ticket) {
+            $skip = function (string $reason) use (&$skipped, $ticket) {
+                $skipped[] = ['ticket_id' => $ticket->ticket_id, 'ticket_number' => $ticket->ticket_number, 'reason' => $reason];
+            };
+
+            if ($ticket->status !== 'issued' || $ticket->is_archived) { $skip('not unpaid'); continue; }
+            if (!$ticket->payment_due_at || $ticket->payment_due_at->isFuture()) { $skip('deadline not yet missed'); continue; }
+
+            $email = $ticket->violator->email ?? null;
+            if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) { $skip('no valid email'); continue; }
+
+            if ($ticket->warning_sent_at
+                && $ticket->warning_sent_at->gt(now()->subHours(Ticket::WARNING_COOLDOWN_HOURS))) {
+                $skip('already warned in the last ' . Ticket::WARNING_COOLDOWN_HOURS . 'h');
+                continue;
+            }
+
+            [, , $balance] = $this->ticketBalance($ticket);
+
+            try {
+                Mail::to($email)->send(new OverdueTicketWarning($ticket, $balance));
+            } catch (\Throwable $e) {
+                Log::error("Overdue warning mail failed for {$ticket->ticket_number}: " . $e->getMessage());
+                $skip('mail failed');
+                continue;
+            }
+
+            $ticket->forceFill([
+                'warning_sent_at' => now(),
+                'warning_count'   => ($ticket->warning_count ?? 0) + 1,
+            ])->save();
+
+            $sent[] = ['ticket_id' => $ticket->ticket_id, 'ticket_number' => $ticket->ticket_number];
+        }
+
+        return response()->json([
+            'message' => count($sent) . ' warning(s) sent, ' . count($skipped) . ' skipped.',
+            'sent'    => $sent,
+            'skipped' => $skipped,
+        ]);
+    }
+
+    /** PUT /payments/overdue/{id}/warrant  { status: for_visit | visited } */
+    public function updateWarrant(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:for_visit,visited',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $ticket = Ticket::findOrFail($id);
+
+        if ($ticket->warrant_status === null) {
+            return response()->json(['message' => 'Ticket is not yet eligible for a warrant visit.'], 422);
+        }
+
+        $ticket->warrant_status     = $request->status;
+        $ticket->warrant_visited_at = $request->status === 'visited' ? now() : null;
+        $ticket->save();
+
+        return response()->json(['message' => 'Warrant status updated.', 'ticket' => $ticket]);
     }
 }
