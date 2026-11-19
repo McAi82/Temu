@@ -660,15 +660,16 @@ const Schedule = () => {
       return;
     }
 
-    if (!editingSchedule) {
-      const minDate = tomorrowISO();
-      if (!formData.schedule_date || formData.schedule_date < minDate) {
-        notify.warning(
-          'You cannot schedule for today or a past date. Please choose tomorrow or a later date.',
-          { title: 'Invalid Date' },
-        );
-        return;
-      }
+    // ── HARD RULE: same date rule for create AND edit ──
+    const minDate = tomorrowISO();
+    if (!formData.schedule_date || formData.schedule_date < minDate) {
+      notify.warning(
+        editingSchedule
+          ? 'A schedule cannot be moved to today or a past date. Please choose tomorrow or a later date.'
+          : 'You cannot schedule for today or a past date. Please choose tomorrow or a later date.',
+        { title: 'Invalid Date' },
+      );
+      return;
     }
 
     if (selectedEnforcerIds.length === 0) {
@@ -770,6 +771,15 @@ const Schedule = () => {
   };
 
   const handleEditGroup = (group) => {
+    // Strict, like create: only schedules dated tomorrow or later are editable.
+    if (!group.date || group.date < tomorrowISO()) {
+      notify.warning(
+        'Schedules for today or a past date can no longer be edited. Only schedules dated tomorrow or later can be changed.',
+        { title: 'Cannot edit this schedule' },
+      );
+      return;
+    }
+
     const first = group.items[0];
     const shiftType = group.shift_type || 'morning';
     const defaults = SHIFT_DEFAULTS[shiftType] || SHIFT_DEFAULTS.morning;
@@ -1204,7 +1214,11 @@ const Schedule = () => {
     return missing;
   }, [formData.duty_location_id, formData.schedule_date, selectedEnforcerIds]);
 
-  const canSubmit = missingForSubmit.length === 0;
+  // Date must be tomorrow or later (create and edit alike).
+  const dateInvalid =
+    !!formData.schedule_date && formData.schedule_date < tomorrowISO();
+
+  const canSubmit = missingForSubmit.length === 0 && !dateInvalid;
 
   if (isLoadingAny) {
     return (
@@ -1368,9 +1382,7 @@ const Schedule = () => {
                             <Input
                               type="date"
                               value={formData.schedule_date}
-                              min={
-                                editingSchedule ? undefined : tomorrowISO()
-                              }
+                              min={tomorrowISO()}
                               onChange={(e) =>
                                 handleDateChange(e.target.value)
                               }
@@ -1379,8 +1391,8 @@ const Schedule = () => {
                             />
                             <p className="mt-1.5 flex items-center gap-1 text-xs text-[#64748B]">
                               <AlertCircle className="h-3 w-3" />
-                              Schedules must be created at least one day in
-                              advance.
+                              Schedules must be {editingSchedule ? 'dated' : 'created'}{' '}
+                              at least one day in advance.
                             </p>
                           </div>
                           <div>
@@ -1735,6 +1747,13 @@ const Schedule = () => {
                         <AlertTriangle className="w-3.5 h-3.5 text-[#C8202F]" />
                         <span className="text-[#C8202F] font-medium">
                           Select a duty location first.
+                        </span>
+                      </>
+                    ) : dateInvalid ? (
+                      <>
+                        <AlertTriangle className="w-3.5 h-3.5 text-[#C8202F]" />
+                        <span className="text-[#C8202F] font-medium">
+                          Choose tomorrow or a later date.
                         </span>
                       </>
                     ) : selectedEnforcerIds.length === 0 ? (
