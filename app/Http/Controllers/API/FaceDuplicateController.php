@@ -12,7 +12,9 @@ class FaceDuplicateController extends Controller
 {
     /**
      * POST /api/faces/check-duplicate
-     * 200 {duplicate:false} | 409 {code:"FACE_DUPLICATE", matched:{...}}
+     *  200 {duplicate:false}                      no close match
+     *  200 {duplicate:false, review:true}         close match, logged for admin review
+     *  409 {code:"FACE_DUPLICATE", matched:{...}} blocked
      */
     public function check(Request $request, FaceDuplicateService $service): JsonResponse
     {
@@ -34,13 +36,11 @@ class FaceDuplicateController extends Controller
             'right' => $data['right_encoding'],
         ], $user->getKey());
 
-        if ($match) {
-            Log::warning('Duplicate face registration attempt', [
+        if ($match && $match['level'] === 'block') {
+            Log::warning('Duplicate face registration BLOCKED', [
                 'user_id'    => $user->getKey(),
                 'matched_id' => $match['user_id'],
-                'similarity' => $match['similarity'],
-                'pose'       => $match['pose'],
-                'scores'     => $match['scores'] ?? null,
+                'scores'     => $match['scores'],
                 'device_id'  => $data['device_id'] ?? null,
             ]);
 
@@ -52,9 +52,20 @@ class FaceDuplicateController extends Controller
                     'name'       => $match['name'],
                     'similarity' => $match['similarity'],
                     'pose'       => $match['pose'],
-                    'scores'     => $match['scores'] ?? null,
+                    'scores'     => $match['scores'],
                 ],
             ], 409);
+        }
+
+        if ($match && $match['level'] === 'review') {
+            Log::warning('Possible duplicate face registration (REVIEW)', [
+                'user_id'    => $user->getKey(),
+                'matched_id' => $match['user_id'],
+                'scores'     => $match['scores'],
+                'device_id'  => $data['device_id'] ?? null,
+            ]);
+
+            return response()->json(['duplicate' => false, 'review' => true]);
         }
 
         return response()->json(['duplicate' => false]);

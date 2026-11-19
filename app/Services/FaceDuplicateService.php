@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Log;
  * Same-pose cosine similarity on L2-normalised 192-d embeddings.
  * Thresholds live in config/face.php (override with FACE_DUP_* in .env).
  *
- * Duplicate when:
- *   - any pose >= hard, OR
- *   - >= min_poses poses >= soft AND (front >= soft when require_front)
+ * Returns the closest other account when it is at least in the review band:
+ *   level 'block'  : front >= block  OR any pose >= hard  -> reject
+ *   level 'review' : review <= front < block              -> allow + warn
  *
  * ASSUMPTIONS (adjust to your schema):
  *  - Model App\Models\FaceRegistration, one row per user
@@ -26,12 +26,14 @@ class FaceDuplicateService
     public const EMBEDDING_SIZE = 192;
     private const POSES = ['front', 'left', 'right'];
 
+    /**
+     * @return array{level:string,user_id:mixed,name:string,similarity:float,pose:string,scores:array}|null
+     */
     public function findDuplicate(array $encodings, int|string $excludeUserId): ?array
     {
-        $hard = (float) config('face.duplicate.hard', 0.90);
-        $soft = (float) config('face.duplicate.soft', 0.80);
-        $minPoses = (int) config('face.duplicate.min_poses', 2);
-        $requireFront = (bool) config('face.duplicate.require_front', true);
+        $block = (float) config('face.duplicate.block', 0.72);
+        $review = (float) config('face.duplicate.review', 0.65);
+        $hard = (float) config('face.duplicate.hard', 0.95);
 
         $live = [];
         foreach (self::POSES as $pose) {
@@ -60,39 +62,50 @@ class FaceDuplicateService
                 continue;
             }
 
-            arsort($sims);
-            $bestPose = array_key_first($sims);
-            $bestSim = $sims[$bestPose];
-            $softPoses = count(array_filter($sims, fn ($s) => $s >= $soft));
-            $frontOk = isset($sims['front']) && $sims['front'] >= $soft;
+            $front = $sims['front'] ?? null;
+            $maxPose = array_search(max($sims), $sims, true);
+            $maxSim = $sims[$maxPose];
 
-            $isDuplicate = $bestSim >= $hard
-                || ($softPoses >= $minPoses && (!$requireFront || $frontOk));
+            $level = null;
+            if ($maxSim >= $hard || ($front !== null && $front >= $block)) {
+                $level = 'block';
+            } elseif ($front !== null && $front >= $review) {
+                $level = 'review';
+            }
+
+            // Rank candidates by front score (fall back to best pose).
+            $rank = $front ?? $maxSim;
 
             $candidates[] = [
                 'user_id' => $reg->user_id,
                 'sims' => $sims,
-                'best' => $bestSim,
-                'dup' => $isDuplicate,
+                'level' => $level,
             ];
 
-            if ($isDuplicate && ($best === null || $bestSim > $best['similarity'])) {
-                $best = [
-                    'user_id' => $reg->user_id,
-                    'similarity' => $bestSim,
-                    'pose' => $bestPose,
-                    'matching_poses' => $softPoses,
-                    'scores' => $sims,
-                ];
+            if ($level !== null) {
+                $better = $best === null
+                    || ($level === 'block' && $best['level'] !== 'block')
+                    || ($level === $best['level'] && $rank > $best['similarity']);
+                if ($better) {
+                    $best = [
+                        'level' => $level,
+                        'user_id' => $reg->user_id,
+                        'similarity' => $rank,
+                        'pose' => $front !== null ? 'front' : $maxPose,
+                        'scores' => $sims,
+                    ];
+                }
             }
         }
 
-        // Log the closest 3 candidates so thresholds can be tuned from real data.
-        usort($candidates, fn ($a, $b) => $b['best'] <=> $a['best']);
+        usort(
+            $candidates,
+            fn ($a, $b) => ($b['sims']['front'] ?? 0) <=> ($a['sims']['front'] ?? 0)
+        );
         Log::info('face-duplicate check', [
             'checking_user_id' => $excludeUserId,
             'compared' => count($candidates),
-            'thresholds' => compact('hard', 'soft', 'minPoses', 'requireFront'),
+            'thresholds' => compact('block', 'review', 'hard'),
             'top' => array_slice($candidates, 0, 3),
         ]);
 
