@@ -4,36 +4,35 @@ namespace App\Services;
 
 use App\Models\FaceRegistration;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 
 /**
- * Cross-account face duplicate detection.
+ * Cross-account face duplicate detection (server database only).
  *
- * Mirrors the mobile app (faceStore.ts): same-pose cosine similarity on
- * L2-normalised 192-d MobileFaceNet embeddings. A registration is a
- * duplicate when ONE pose >= HARD_THRESHOLD, or at least SOFT_MIN_POSES
- * poses >= SOFT_THRESHOLD.
+ * Same-pose cosine similarity on L2-normalised 192-d embeddings.
+ * Thresholds live in config/face.php (override with FACE_DUP_* in .env).
+ *
+ * Duplicate when:
+ *   - any pose >= hard, OR
+ *   - >= min_poses poses >= soft AND (front >= soft when require_front)
  *
  * ASSUMPTIONS (adjust to your schema):
  *  - Model App\Models\FaceRegistration, one row per user
  *  - Columns: user_id, front_encoding, left_encoding, right_encoding
  *    (JSON arrays of 192 floats; array-cast or raw JSON string both work)
- *  - If you keep inactive/rejected rows, filter them in registrationsQuery().
  */
 class FaceDuplicateService
 {
-    public const HARD_THRESHOLD = 0.80;
-    public const SOFT_THRESHOLD = 0.68;
-    public const SOFT_MIN_POSES = 2;
     public const EMBEDDING_SIZE = 192;
-
     private const POSES = ['front', 'left', 'right'];
 
-    /**
-     * @param  array{front?:array,left?:array,right?:array}  $encodings
-     * @return array{user_id:mixed,name:string,similarity:float,pose:string,matching_poses:int}|null
-     */
     public function findDuplicate(array $encodings, int|string $excludeUserId): ?array
     {
+        $hard = (float) config('face.duplicate.hard', 0.90);
+        $soft = (float) config('face.duplicate.soft', 0.80);
+        $minPoses = (int) config('face.duplicate.min_poses', 2);
+        $requireFront = (bool) config('face.duplicate.require_front', true);
+
         $live = [];
         foreach (self::POSES as $pose) {
             $v = $encodings[$pose] ?? null;
@@ -46,43 +45,56 @@ class FaceDuplicateService
         }
 
         $best = null;
+        $candidates = []; // for tuning logs
 
         foreach ($this->registrationsQuery($excludeUserId)->cursor() as $reg) {
-            $bestSim = -1.0;
-            $bestPose = null;
-            $softPoses = 0;
-
+            $sims = [];
             foreach ($live as $pose => $vec) {
                 $stored = $this->decode($reg->{$pose . '_encoding'} ?? null);
                 if ($stored === null) {
                     continue;
                 }
-                $sim = $this->cosine($vec, $this->normalize($stored));
-                if ($sim > $bestSim) {
-                    $bestSim = $sim;
-                    $bestPose = $pose;
-                }
-                if ($sim >= self::SOFT_THRESHOLD) {
-                    $softPoses++;
-                }
+                $sims[$pose] = round($this->cosine($vec, $this->normalize($stored)), 4);
             }
-
-            if ($bestPose === null) {
+            if (!$sims) {
                 continue;
             }
 
-            $isDuplicate = $bestSim >= self::HARD_THRESHOLD
-                || $softPoses >= self::SOFT_MIN_POSES;
+            arsort($sims);
+            $bestPose = array_key_first($sims);
+            $bestSim = $sims[$bestPose];
+            $softPoses = count(array_filter($sims, fn ($s) => $s >= $soft));
+            $frontOk = isset($sims['front']) && $sims['front'] >= $soft;
+
+            $isDuplicate = $bestSim >= $hard
+                || ($softPoses >= $minPoses && (!$requireFront || $frontOk));
+
+            $candidates[] = [
+                'user_id' => $reg->user_id,
+                'sims' => $sims,
+                'best' => $bestSim,
+                'dup' => $isDuplicate,
+            ];
 
             if ($isDuplicate && ($best === null || $bestSim > $best['similarity'])) {
                 $best = [
                     'user_id' => $reg->user_id,
-                    'similarity' => round($bestSim, 4),
+                    'similarity' => $bestSim,
                     'pose' => $bestPose,
                     'matching_poses' => $softPoses,
+                    'scores' => $sims,
                 ];
             }
         }
+
+        // Log the closest 3 candidates so thresholds can be tuned from real data.
+        usort($candidates, fn ($a, $b) => $b['best'] <=> $a['best']);
+        Log::info('face-duplicate check', [
+            'checking_user_id' => $excludeUserId,
+            'compared' => count($candidates),
+            'thresholds' => compact('hard', 'soft', 'minPoses', 'requireFront'),
+            'top' => array_slice($candidates, 0, 3),
+        ]);
 
         if ($best === null) {
             return null;

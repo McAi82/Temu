@@ -40,6 +40,7 @@ class FaceDuplicateController extends Controller
                 'matched_id' => $match['user_id'],
                 'similarity' => $match['similarity'],
                 'pose'       => $match['pose'],
+                'scores'     => $match['scores'] ?? null,
                 'device_id'  => $data['device_id'] ?? null,
             ]);
 
@@ -51,6 +52,7 @@ class FaceDuplicateController extends Controller
                     'name'       => $match['name'],
                     'similarity' => $match['similarity'],
                     'pose'       => $match['pose'],
+                    'scores'     => $match['scores'] ?? null,
                 ],
             ], 409);
         }
