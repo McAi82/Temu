@@ -19,6 +19,7 @@ use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\PaymentController;
 use App\Http\Controllers\API\FaceRegistrationController;
+use App\Http\Controllers\API\FaceDuplicateController;
 use App\Http\Controllers\API\PasswordResetController;
 use App\Http\Controllers\API\DeviceSwitchController;
 use App\Http\Controllers\API\ArchiveController;
@@ -88,6 +89,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post(
             '/register',
             [FaceRegistrationController::class, 'register']
+        );
+        Route::post(
+            '/check-duplicate',
+            [FaceDuplicateController::class, 'check']
         );
         Route::post(
             '/takeover/request',
