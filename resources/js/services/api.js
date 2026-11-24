@@ -1,8 +1,8 @@
 // web/src/services/api.js
 import axios from 'axios';
 
-// const API_BASE_URL = 'https://ivory-gerbil-502781.hostingersite.com/api';
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'https://ivory-gerbil-502781.hostingersite.com/api';
+// const API_BASE_URL = 'http://localhost:8000/api';
 
 console.log('🌐 API Base URL:', API_BASE_URL);
 
