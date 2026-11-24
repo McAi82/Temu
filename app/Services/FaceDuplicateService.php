@@ -33,7 +33,7 @@ class FaceDuplicateService
     {
         $block = (float) config('face.duplicate.block', 0.72);
         $review = (float) config('face.duplicate.review', 0.65);
-        $hard = (float) config('face.duplicate.hard', 0.95);
+        $hard = (float) config('face.duplicate.hard', 0.80);
 
         $live = [];
         foreach (self::POSES as $pose) {
@@ -126,7 +126,12 @@ class FaceDuplicateService
 
     private function registrationsQuery(int|string $excludeUserId)
     {
-        return FaceRegistration::query()->where('user_id', '!=', $excludeUserId);
+        // Only ACTIVE registrations count. Archived rows (replaced, reset or
+        // transferred faces) must not block anyone, otherwise a transferred
+        // face would keep matching its own old copy forever.
+        return FaceRegistration::query()
+            ->where('is_active', true)
+            ->where('user_id', '!=', $excludeUserId);
     }
 
     private function decode(mixed $raw): ?array

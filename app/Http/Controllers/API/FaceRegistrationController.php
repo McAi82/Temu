@@ -7,6 +7,7 @@ use App\Models\FaceRegistration;
 use App\Models\FaceTakeoverRequest;
 use App\Models\Notification;
 use App\Models\User;
+use App\Services\FaceDuplicateService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,46 @@ class FaceRegistrationController extends Controller
             'message' => 'You have already registered your face. Only one face registration per account is allowed. Please contact an administrator if you need to reset it.',
             'code'    => 'FACE_ALREADY_REGISTERED',
         ], 409);
+    }
+
+    // ── DUPLICATE-FACE GUARD (server-authoritative) ──
+    // Never trust the client's pre-check: it can be skipped, fail or be
+    // bypassed (offline, old app build, direct API call). Run the same
+    // check here before anything is stored.
+    $match = app(FaceDuplicateService::class)->findDuplicate([
+        'front' => $request->front_encoding,
+        'left'  => $request->left_encoding,
+        'right' => $request->right_encoding,
+    ], $user->getKey());
+
+    if ($match && $match['level'] === 'block') {
+        Log::warning('Duplicate face registration BLOCKED (register)', [
+            'user_id'    => $user->getKey(),
+            'matched_id' => $match['user_id'],
+            'scores'     => $match['scores'],
+            'device_id'  => $request->device_id,
+        ]);
+
+        return response()->json([
+            'message' => 'This face is already registered to another account.',
+            'code'    => 'FACE_DUPLICATE',
+            'matched' => [
+                'user_id'    => $match['user_id'],
+                'name'       => $match['name'],
+                'similarity' => $match['similarity'],
+                'pose'       => $match['pose'],
+                'scores'     => $match['scores'],
+            ],
+        ], 409);
+    }
+
+    if ($match && $match['level'] === 'review') {
+        Log::warning('Possible duplicate face registration (REVIEW, register)', [
+            'user_id'    => $user->getKey(),
+            'matched_id' => $match['user_id'],
+            'scores'     => $match['scores'],
+            'device_id'  => $request->device_id,
+        ]);
     }
 
     DB::beginTransaction();
