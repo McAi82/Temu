@@ -1,5 +1,6 @@
 // web/src/pages/Archives.jsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -310,7 +311,11 @@ const Archives = () => {
     const notify = useAlert();
     const { isAdmin } = useAuth();
 
-    const [tab, setTab] = useState('violators');
+    const [searchParams] = useSearchParams();
+    const initialTab = searchParams.get('tab');
+    const [tab, setTab] = useState(
+        RESOURCES.some((r) => r.key === initialTab) ? initialTab : 'violators',
+    );
     const [view, setView] = useState('list');
     const [page, setPage] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
@@ -569,7 +574,7 @@ const Archives = () => {
                         <option value="issued">Issued</option>
                         <option value="partial_paid">Partial Paid</option>
                         <option value="paid">Paid</option>
-                        <option value="dismissed">Dismissed</option>
+                        <option value="dismissed">Archived</option>
                     </select>
                 </div>
             )}

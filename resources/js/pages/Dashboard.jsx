@@ -14,7 +14,7 @@ import {
 const STATUS = {
   paid: { label: "Paid", color: "#1E8449", soft: "#E5F2EA", text: "#1E8449", icon: CheckCircle },
   issued: { label: "Issued", color: "#F0B429", soft: "#FBF1DC", text: "#92600A", icon: Clock },
-  dismissed: { label: "Dismissed", color: "#C8202F", soft: "#FBE7E9", text: "#C8202F", icon: XCircle },
+  dismissed: { label: "Archived", color: "#C8202F", soft: "#FBE7E9", text: "#C8202F", icon: XCircle },
 };
 
 const useCountUp = (target, ms = 900) => {
@@ -141,18 +141,18 @@ const Dashboard = () => {
   const pending = (stats.total_fines || 0) - (stats.collected_fines || 0);
 
   const statCards = [
-    { key: null, title: "Total Tickets", value: stats.total_tickets, icon: Ticket, color: "#16233F", soft: "#E9ECF2", text: "#16233F" },
-    { key: "paid", title: "Paid Tickets", value: stats.paid_tickets, icon: CheckCircle, ...STATUS.paid },
-    { key: "issued", title: "Issued/Pending", value: stats.issued_tickets, icon: Clock, ...STATUS.issued },
-    { key: "dismissed", title: "Dismissed", value: stats.dismissed_tickets, icon: XCircle, ...STATUS.dismissed },
-    { key: undefined, title: "In Court", value: courtTotal, icon: Gavel, color: "#7A1621", soft: "#F6E3E5", text: "#7A1621" },
-    { key: undefined, title: "Collection Rate", value: stats.collection_rate, suffix: "%", icon: TrendingUp, color: "#3B5170", soft: "#EEF1F5", text: "#3B5170" },
+    { to: "/tickets", title: "Total Tickets", value: stats.total_tickets, icon: Ticket, color: "#16233F", soft: "#E9ECF2", text: "#16233F" },
+    { to: "/tickets?status=paid", title: "Paid Tickets", value: stats.paid_tickets, icon: CheckCircle, ...STATUS.paid },
+    { to: "/tickets?status=issued", title: "Issued/Pending", value: stats.issued_tickets, icon: Clock, ...STATUS.issued },
+    { to: "/archives?tab=tickets", title: "Archived", value: stats.dismissed_tickets, icon: XCircle, ...STATUS.dismissed },
+    { to: "/payments", title: "In Court", value: courtTotal, icon: Gavel, color: "#7A1621", soft: "#F6E3E5", text: "#7A1621" },
+    { to: "/payments", title: "Collection Rate", value: stats.collection_rate, suffix: "%", icon: TrendingUp, color: "#3B5170", soft: "#EEF1F5", text: "#3B5170" },
   ];
   const quick = [
-    { icon: Users, bg: "#E9ECF2", fg: "#16233F", value: stats.total_tickets, label: "Total Violations" },
-    { icon: CheckCircle, bg: "#E5F2EA", fg: "#1E8449", value: stats.paid_tickets, label: "Resolved Cases" },
-    { icon: Clock, bg: "#FBF1DC", fg: "#92600A", value: stats.issued_tickets, label: "Active Cases" },
-    { icon: TrendingUp, bg: "#EEF1F5", fg: "#3B5170", value: stats.collection_rate, suffix: "%", label: "Efficiency Rate" },
+    { to: "/tickets", icon: Users, bg: "#E9ECF2", fg: "#16233F", value: stats.total_tickets, label: "Total Violations" },
+    { to: "/tickets?status=paid", icon: CheckCircle, bg: "#E5F2EA", fg: "#1E8449", value: stats.paid_tickets, label: "Resolved Cases" },
+    { to: "/tickets?status=issued", icon: Clock, bg: "#FBF1DC", fg: "#92600A", value: stats.issued_tickets, label: "Active Cases" },
+    { to: "/payments", icon: TrendingUp, bg: "#EEF1F5", fg: "#3B5170", value: stats.collection_rate, suffix: "%", label: "Efficiency Rate" },
   ];
 
   if (loading) return (
@@ -202,22 +202,16 @@ const Dashboard = () => {
       </header>
 
       <section className="bg-white rounded-xl border border-[#E3E7EE] grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 overflow-hidden">
-        {statCards.map((s) => {
-          const clickable = s.key !== undefined;
-          const active = clickable && s.key !== null && filter === s.key;
-          const dim = filter && clickable && s.key !== null && filter !== s.key;
-          return (
-            <button key={s.title} type="button" disabled={!clickable} aria-pressed={active}
-              onClick={() => setFilter(s.key === null || filter === s.key ? null : s.key)}
-              className={`relative text-left p-5 border-dashed border-[#CBD5E1] border-b border-r transition-all duration-300 ${clickable ? "hover:bg-[#F8F9FB] cursor-pointer" : "cursor-default"} ${dim ? "opacity-40" : ""}`}
-              style={active ? { background: s.soft } : undefined}>
-              <span className="absolute top-0 left-0 right-0 h-1.5 transition-transform origin-left duration-500" style={{ background: s.color, transform: `scaleX(${active ? 1 : 0.3})` }} />
-              <s.icon className="w-5 h-5 mb-3" style={{ color: s.text }} />
-              <p className="text-4xl font-['Oswald'] font-semibold text-gray-800 tabular-nums leading-none"><Count value={s.value} suffix={s.suffix} /></p>
-              <p className="text-xs text-gray-500 mt-2">{s.title}</p>
-            </button>
-          );
-        })}
+        {statCards.map((s) => (
+          <Link key={s.title} to={s.to}
+            className="group relative block text-left p-5 border-dashed border-[#CBD5E1] border-b border-r transition-colors duration-200 hover:bg-[#F8F9FB] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#16233F] focus-visible:-outline-offset-2"
+            style={{ "--card-soft": s.soft }}>
+            <span className="absolute top-0 left-0 right-0 h-1.5 transition-transform origin-left duration-300 scale-x-[0.3] group-hover:scale-x-100" style={{ background: s.color }} />
+            <s.icon className="w-5 h-5 mb-3" style={{ color: s.text }} />
+            <p className="text-4xl font-['Oswald'] font-semibold text-gray-800 tabular-nums leading-none"><Count value={s.value} suffix={s.suffix} /></p>
+            <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">{s.title}<ArrowRight className="w-3 h-3 opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0" /></p>
+          </Link>
+        ))}
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -364,13 +358,13 @@ const Dashboard = () => {
 
       <section className="bg-[#16233F] rounded-xl grid grid-cols-2 md:grid-cols-4 md:divide-x divide-white/10 text-white">
         {quick.map((q) => (
-          <div key={q.label} className="p-5 flex items-center gap-3">
+          <Link key={q.label} to={q.to} className="p-5 flex items-center gap-3 hover:bg-white/5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#F0B429] focus-visible:-outline-offset-2">
             <div className="p-2 rounded-lg" style={{ background: q.bg }}><q.icon className="w-5 h-5" style={{ color: q.fg }} /></div>
             <div>
               <p className="text-2xl font-['Oswald'] font-semibold tabular-nums"><Count value={q.value} suffix={q.suffix} /></p>
               <p className="text-xs text-[#C7CEDB]">{q.label}</p>
             </div>
-          </div>
+          </Link>
         ))}
       </section>
     </div>
