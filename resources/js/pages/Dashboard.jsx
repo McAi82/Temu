@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { getTicketStatistics, getTickets } from "../services/api";
+import { Link } from "react-router-dom";
+import { getTicketStatistics, getTickets, getOverduePayments } from "../services/api";
 import {
   Ticket, CheckCircle, Clock, XCircle, TrendingUp, RefreshCw,
-  Users, Car, Calendar, PhilippinePeso,
+  Users, Car, Calendar, PhilippinePeso, Gavel, ArrowRight,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
@@ -38,6 +39,15 @@ const Count = ({ value, prefix = "", suffix = "" }) => {
   return <>{prefix}{(Number.isInteger(raw) ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString()}{suffix}</>;
 };
 
+// Recency of an in-court row: uses the first date field present, falling back to the id.
+const courtSortKey = (r) => {
+  const t = r?.ticket || r || {};
+  const raw = r?.due_date ?? r?.deadline ?? t.due_date ?? t.deadline ?? t.violation_datetime ?? t.created_at ?? r?.created_at;
+  const time = raw ? new Date(raw).getTime() : NaN;
+  if (!Number.isNaN(time)) return time;
+  return Number(t.ticket_id ?? r?.id) || 0;
+};
+
 const Dashboard = () => {
   const [stats, setStats] = useState({
     total_tickets: 0,
@@ -49,6 +59,8 @@ const Dashboard = () => {
     collection_rate: 0
   });
   const [recentTickets, setRecentTickets] = useState([]);
+  const [courtViolators, setCourtViolators] = useState([]);
+  const [courtTotal, setCourtTotal] = useState(0);
   const [ticketsByMonth, setTicketsByMonth] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,6 +92,21 @@ const Dashboard = () => {
       if (ticketsRes?.data?.data) list = ticketsRes.data.data;
       else if (ticketsRes?.data) list = ticketsRes.data;
       setRecentTickets(Array.isArray(list) ? list.slice(0, 5) : []);
+      // In-court violators (missed payment deadline). Non-critical: don't fail the whole dashboard.
+      try {
+        // Fetch a larger page, then sort here so the 5 shown are the latest
+        // regardless of the order the API returns them in.
+        const courtRes = await getOverduePayments(1, 50);
+        const body = courtRes?.data;
+        const rows = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+        setCourtViolators(
+          [...rows].sort((a, b) => courtSortKey(b) - courtSortKey(a)).slice(0, 5)
+        );
+        setCourtTotal(body?.total ?? rows.length);
+      } catch {
+        setCourtViolators([]);
+        setCourtTotal(0);
+      }
     } catch (e) {
       setError("Failed to load dashboard data. Please make sure the API is running.");
     } finally {
@@ -97,6 +124,12 @@ const Dashboard = () => {
     return t.total_fine ? parseFloat(t.total_fine) || 0 : 0;
   };
 
+  const getBalance = (t) => {
+    if (!t) return 0;
+    if (t.balance != null) return parseFloat(t.balance) || 0;
+    return Math.max(0, getTotalFine(t) - (parseFloat(t.total_paid) || 0));
+  };
+
   const counts = {
     paid: stats.paid_tickets,
     issued: stats.issued_tickets,
@@ -112,6 +145,7 @@ const Dashboard = () => {
     { key: "paid", title: "Paid Tickets", value: stats.paid_tickets, icon: CheckCircle, ...STATUS.paid },
     { key: "issued", title: "Issued/Pending", value: stats.issued_tickets, icon: Clock, ...STATUS.issued },
     { key: "dismissed", title: "Dismissed", value: stats.dismissed_tickets, icon: XCircle, ...STATUS.dismissed },
+    { key: undefined, title: "In Court", value: courtTotal, icon: Gavel, color: "#7A1621", soft: "#F6E3E5", text: "#7A1621" },
     { key: undefined, title: "Collection Rate", value: stats.collection_rate, suffix: "%", icon: TrendingUp, color: "#3B5170", soft: "#EEF1F5", text: "#3B5170" },
   ];
   const quick = [
@@ -167,7 +201,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <section className="bg-white rounded-xl border border-[#E3E7EE] grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 overflow-hidden">
+      <section className="bg-white rounded-xl border border-[#E3E7EE] grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 overflow-hidden">
         {statCards.map((s) => {
           const clickable = s.key !== undefined;
           const active = clickable && s.key !== null && filter === s.key;
@@ -291,6 +325,42 @@ const Dashboard = () => {
           )}
         </section>
       </div>
+
+      <section className="bg-white rounded-xl border border-[#E3E7EE] border-t-4 border-t-[#7A1621] p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <Title icon={Gavel} color="#7A1621">In Court Violators</Title>
+          <Link to="/payments" className="text-xs flex items-center gap-1 px-3 py-1 rounded-full bg-[#F6E3E5] text-[#7A1621] hover:bg-[#EFD0D3] transition-colors">
+            View all ({courtTotal.toLocaleString()}) <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+        {courtViolators.length === 0 ? <div className="text-center py-12 text-gray-500">No violators in court</div> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-wider text-[#94A3B8] border-b border-dashed border-[#CBD5E1]">
+                  <th className="py-2 pr-4 font-medium">Violator</th>
+                  <th className="py-2 pr-4 font-medium">Ticket #</th>
+                  <th className="py-2 pr-4 font-medium">Plate</th>
+                  <th className="py-2 text-right font-medium">Amount Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {courtViolators.map((r, i) => {
+                  const t = r.ticket || r;
+                  return (
+                    <tr key={t.ticket_id ?? r.id ?? i} className="border-b border-[#EEF0F4] last:border-0 hover:bg-[#F8F9FB] transition-colors">
+                      <td className="py-3 pr-4 text-gray-800">{t.violator?.firstname} {t.violator?.lastname}</td>
+                      <td className="py-3 pr-4 font-mono font-semibold text-gray-800">{t.ticket_number || "—"}</td>
+                      <td className="py-3 pr-4 text-gray-600"><Car className="w-3 h-3 inline mr-1 text-gray-400" />{t.vehicle?.platenumber || "—"}</td>
+                      <td className="py-3 text-right font-['Oswald'] font-semibold text-[#C8202F] tabular-nums">₱{getBalance(t).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="bg-[#16233F] rounded-xl grid grid-cols-2 md:grid-cols-4 md:divide-x divide-white/10 text-white">
         {quick.map((q) => (

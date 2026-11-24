@@ -13,8 +13,11 @@ use App\Models\Vehicle;
 use App\Models\ViolationType;
 use App\Models\Violator;
 use App\Services\NotificationService;
+use App\Services\FaceArchiveService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class ArchiveController extends Controller
 {
@@ -141,7 +144,16 @@ class ArchiveController extends Controller
         }
 
         try {
-            $row->restoreArchive();
+            $faceRestored = false;
+
+            DB::transaction(function () use ($row, $resource, $id, &$faceRestored) {
+                $row->restoreArchive();
+
+                // Bring back the face registration that was archived with the user.
+                if ($resource === 'users') {
+                    $faceRestored = app(FaceArchiveService::class)->restoreForUser($id);
+                }
+            });
 
             try {
                 $restorer = $request->user();
@@ -161,6 +173,7 @@ class ArchiveController extends Controller
 
             return response()->json([
                 'message' => 'Record restored successfully.',
+                'face_registration_restored' => $faceRestored,
                 'data'    => $row->fresh(),
             ]);
         } catch (\Throwable $e) {
@@ -186,7 +199,7 @@ class ArchiveController extends Controller
     private function hasColumn(string $modelClass, string $column): bool
     {
         try {
-            return \Schema::hasColumn((new $modelClass)->getTable(), $column);
+            return Schema::hasColumn((new $modelClass)->getTable(), $column);
         } catch (\Throwable $e) {
             return false;
         }

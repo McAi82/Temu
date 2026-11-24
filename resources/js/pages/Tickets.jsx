@@ -15,7 +15,6 @@ import { byFields } from '../lib/sortBy';
 import {
   getTickets,
   getTicket,
-  updateTicketStatus,
   deleteTicket,
   getUsers,
   getViolations,
@@ -240,34 +239,31 @@ const ViewToggle = ({ view, setView }) => (
   </div>
 );
 
+/* Filter modal (pop-up dialog) */
 const FilterShell = ({ title, onClose, onReset, children }) => (
-  <aside className="self-start rounded-xl bg-[#FBF1DC] border-t-4 border-[#F0B429] p-5 space-y-5 lg:sticky lg:top-4">
-    <div className="flex justify-between items-center">
-      <h3 className="text-base font-['Oswald'] font-medium text-[#16233F]">
-        {title}
-      </h3>
-      <button
-        onClick={onClose}
-        className="p-1 rounded hover:bg-[#F0B429]/25"
-      >
-        <X className="w-4 h-4 text-[#92600A]" />
-      </button>
-    </div>
-    {children}
-    <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
-      <Button onClick={onClose} className="bg-[#1E8449] hover:bg-[#186B3B]">
-        Apply Filters
-      </Button>
-      <Button
-        onClick={onReset}
-        variant="ghost"
-        className="text-[#64748B] hover:text-[#C8202F]"
-      >
-        <X className="w-4 h-4 mr-1" />
-        Reset
-      </Button>
-    </div>
-  </aside>
+  <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <DialogContent className="w-[92vw] max-w-lg max-h-[90vh] overflow-y-auto bg-[#FBF1DC] border-t-4 border-[#F0B429]">
+      <DialogHeader>
+        <DialogTitle className="text-base font-['Oswald'] font-medium text-[#16233F]">
+          {title}
+        </DialogTitle>
+      </DialogHeader>
+      <div className="space-y-5">{children}</div>
+      <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
+        <Button onClick={onClose} className="bg-[#1E8449] hover:bg-[#186B3B]">
+          Apply Filters
+        </Button>
+        <Button
+          onClick={onReset}
+          variant="ghost"
+          className="text-[#64748B] hover:text-[#C8202F]"
+        >
+          <X className="w-4 h-4 mr-1" />
+          Reset
+        </Button>
+      </div>
+    </DialogContent>
+  </Dialog>
 );
 
 const Spec = ({ label, children, mono, danger }) => (
@@ -801,20 +797,6 @@ const Tickets = () => {
   const tickets = getDataArray(ticketsResponse);
   const meta = getMeta(ticketsResponse);
 
-  const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }) => updateTicketStatus(id, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      queryClient.invalidateQueries({ queryKey: ['ticket'] });
-      notify.success('Ticket status updated successfully');
-    },
-    onError: (err) => {
-      notify.error(
-        err.response?.data?.message || 'Failed to update ticket status',
-      );
-    },
-  });
-
   const archiveMutation = useMutation({
     mutationFn: deleteTicket,
     onSuccess: () => {
@@ -828,14 +810,6 @@ const Tickets = () => {
       );
     },
   });
-
-  const handleStatusUpdate = async (id, status) => {
-    const ok = await notify.confirm(
-      `Change ticket status to ${status.toUpperCase().replace('_', ' ')}?`,
-      { confirmText: 'Change' },
-    );
-    if (ok) updateStatusMutation.mutate({ id, status });
-  };
 
   const handleArchive = async (id) => {
     const ok = await notify.confirm(
@@ -980,18 +954,9 @@ const Tickets = () => {
     );
   };
 
-  /* Only Dismiss + Archive remain — Mark Paid is gone. */
+  /* Only Archive remains. */
   const rowActions = (ticket) => (
     <div className="flex flex-wrap gap-2">
-      {ticket.status === 'paid' && (
-        <ActionButton
-          icon={XCircle}
-          variant="danger"
-          onClick={() => handleStatusUpdate(ticket.ticket_id, 'dismissed')}
-        >
-          Dismiss
-        </ActionButton>
-      )}
       <ActionButton
         icon={Archive}
         variant="danger"
@@ -1181,9 +1146,7 @@ const Tickets = () => {
       </header>
 
       <div
-        className={`grid gap-6 ${
-          showFilters ? 'lg:grid-cols-[300px_minmax(0,1fr)]' : ''
-        }`}
+        className="grid gap-6"
       >
         {showFilters && panel}
 

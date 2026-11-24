@@ -249,22 +249,35 @@ const Quick = ({ apply }) => (
   </div>
 );
 
+/* Filter modal (pop-up dialog) */
 const FilterShell = ({ title, onClose, onReset, children }) => (
-  <aside className="self-start rounded-xl bg-[#FBF1DC] border-t-4 border-[#F0B429] p-5 space-y-5 lg:sticky lg:top-4">
-    <div className="flex justify-between items-center">
-      <h3 className="text-base font-['Oswald'] font-medium text-[#16233F]">{title}</h3>
-      <button onClick={onClose} className="p-1 rounded hover:bg-[#F0B429]/25"><X className="w-4 h-4 text-[#92600A]" /></button>
-    </div>
-    {children}
-    <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
-      <Button onClick={onClose} className="bg-[#1E8449] hover:bg-[#186B3B]">Apply Filters</Button>
-      <Button onClick={onReset} variant="ghost" className="text-[#64748B] hover:text-[#C8202F]"><X className="w-4 h-4 mr-1" />Reset</Button>
-    </div>
-  </aside>
+  <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <DialogContent className="w-[92vw] max-w-lg max-h-[90vh] overflow-y-auto bg-[#FBF1DC] border-t-4 border-[#F0B429]">
+      <DialogHeader>
+        <DialogTitle className="text-base font-['Oswald'] font-medium text-[#16233F]">
+          {title}
+        </DialogTitle>
+      </DialogHeader>
+      <div className="space-y-5">{children}</div>
+      <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
+        <Button onClick={onClose} className="bg-[#1E8449] hover:bg-[#186B3B]">
+          Apply Filters
+        </Button>
+        <Button
+          onClick={onReset}
+          variant="ghost"
+          className="text-[#64748B] hover:text-[#C8202F]"
+        >
+          <X className="w-4 h-4 mr-1" />
+          Reset
+        </Button>
+      </div>
+    </DialogContent>
+  </Dialog>
 );
 
 const Section = ({ title, hint, icon: Icon, accent, placeholder, search, setSearch, showFilters, setShowFilters, count, panel, chips, loading, items, noneText, renderItem, renderRow, columns, rowClass, view, setView, meta, setPage }) => (
-  <div className={`grid gap-6 ${showFilters ? "lg:grid-cols-[300px_minmax(0,1fr)]" : ""}`}>
+  <div className="grid gap-6">
     {showFilters && panel}
     <div className="space-y-4 min-w-0">
       <div className="flex flex-wrap items-center gap-3">

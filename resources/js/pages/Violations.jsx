@@ -115,6 +115,33 @@ const ROW =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
   'md:grid md:grid-cols-[minmax(0,.9fr)_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,.7fr)_minmax(0,14rem)] md:gap-4';
 
+/* Filter modal (pop-up dialog) */
+const FilterShell = ({ title, onClose, onReset, children }) => (
+  <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <DialogContent className="w-[92vw] max-w-lg max-h-[90vh] overflow-y-auto bg-[#FBF1DC] border-t-4 border-[#F0B429]">
+      <DialogHeader>
+        <DialogTitle className="text-base font-['Oswald'] font-medium text-[#16233F]">
+          {title}
+        </DialogTitle>
+      </DialogHeader>
+      <div className="space-y-5">{children}</div>
+      <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
+        <Button onClick={onClose} className="bg-[#1E8449] hover:bg-[#186B3B]">
+          Apply Filters
+        </Button>
+        <Button
+          onClick={onReset}
+          variant="ghost"
+          className="text-[#64748B] hover:text-[#C8202F]"
+        >
+          <X className="w-4 h-4 mr-1" />
+          Reset
+        </Button>
+      </div>
+    </DialogContent>
+  </Dialog>
+);
+
 const L = ({ children }) => (
   <label className="text-xs font-semibold text-[#16233F] mb-1.5 block">{children}</label>
 );
@@ -450,11 +477,7 @@ const Violations = () => {
   );
 
   const panel = (
-    <aside className="self-start rounded-xl bg-[#FBF1DC] border-t-4 border-[#F0B429] p-5 space-y-5 lg:sticky lg:top-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-base font-['Oswald'] font-medium text-[#16233F]">Filter Violations</h3>
-        <button onClick={() => setShowFilters(false)} className="p-1 rounded hover:bg-[#F0B429]/25"><X className="w-4 h-4 text-[#92600A]" /></button>
-      </div>
+    <FilterShell title="Filter Violations" onClose={() => setShowFilters(false)} onReset={clearFilters}>
       <div>
         <L>Category</L>
         <select className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-[#1F2937] focus-visible:ring-[#F0B429]"
@@ -481,11 +504,7 @@ const Violations = () => {
         <L>Demerit points</L>
         <div className="flex flex-wrap items-center gap-2">{rangeInputs("min_points", "max_points")}</div>
       </div>
-      <div className="flex gap-2 pt-3 border-t border-[#F0B429]/30">
-        <Button onClick={() => setShowFilters(false)} className="bg-[#1E8449] hover:bg-[#186B3B]">Apply Filters</Button>
-        <Button onClick={clearFilters} variant="ghost" className="text-[#64748B] hover:text-[#C8202F]"><X className="w-4 h-4 mr-1" />Reset</Button>
-      </div>
-    </aside>
+    </FilterShell>
   );
 
   return (
@@ -930,7 +949,7 @@ const Violations = () => {
         </div>
       </header>
 
-      <div className={`grid gap-6 ${showFilters ? "lg:grid-cols-[300px_minmax(0,1fr)]" : ""}`}>
+      <div className="grid gap-6">
         {showFilters && panel}
         <div className="space-y-4 min-w-0">
           <div className="flex flex-wrap items-center gap-3">

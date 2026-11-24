@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\Face;
 use App\Models\Notification;
 use App\Services\NotificationService;
+use App\Services\FaceArchiveService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -123,7 +125,7 @@ class UserController extends Controller
      |  ARCHIVE (replaces destroy)
      ================================================================== */
 
-    public function destroy(Request $request, $id)
+    public function destroy(Request $request, $id, FaceArchiveService $faceArchive)
     {
         $user = User::findOrFail($id);
 
@@ -136,7 +138,16 @@ class UserController extends Controller
         }
 
         try {
-            $user->archive($request->user()->user_id);
+            $facesArchived = 0;
+
+            // Archive the user and their face registration together, or neither.
+            DB::transaction(function () use ($user, $request, $faceArchive, &$facesArchived) {
+                $user->archive($request->user()->user_id);
+                $facesArchived = $faceArchive->archiveForUser(
+                    (int) $user->user_id,
+                    (int) $request->user()->user_id
+                );
+            });
 
             try {
                 $actor = $request->user();
@@ -157,6 +168,7 @@ class UserController extends Controller
             return response()->json([
                 'message' => 'User archived successfully',
                 'archived' => true,
+                'face_registrations_archived' => $facesArchived,
                 'user' => $user->fresh(),
             ]);
         } catch (\Throwable $e) {
