@@ -416,7 +416,7 @@ class TicketController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'status' => 'required|in:issued,paid,dismissed',
+            'status' => 'required|in:issued,paid',
         ]);
 
         if ($validator->fails()) {
@@ -440,17 +440,6 @@ class TicketController extends Controller
                             'Ticket Paid',
                             "Ticket {$ticket->ticket_number} has been paid",
                             Notification::TYPE_TICKET_PAID,
-                            'ticket',
-                            $ticket->ticket_id
-                        );
-                        break;
-
-                    case 'dismissed':
-                        NotificationService::notifyUser(
-                            $enforcerId,
-                            'Ticket Dismissed',
-                            "Ticket {$ticket->ticket_number} has been dismissed",
-                            Notification::TYPE_TICKET_DISMISSED,
                             'ticket',
                             $ticket->ticket_id
                         );
@@ -582,7 +571,7 @@ class TicketController extends Controller
             $totalTickets     = (clone $base)->count();
             $paidTickets      = (clone $base)->where('status', 'paid')->count();
             $issuedTickets    = (clone $base)->where('status', 'issued')->count();
-            $dismissedTickets = (clone $base)->where('status', 'dismissed')->count();
+            $archivedTickets  = Ticket::query()->archived()->count();
 
             $overdueTickets = (clone $base)
                 ->where('status', 'issued')
@@ -628,7 +617,7 @@ class TicketController extends Controller
                 'total_tickets'     => (int) $totalTickets,
                 'paid_tickets'      => (int) $paidTickets,
                 'issued_tickets'    => (int) $issuedTickets,
-                'dismissed_tickets' => (int) $dismissedTickets,
+                'archived_tickets'  => (int) $archivedTickets,
                 'overdue_tickets'   => (int) $overdueTickets,
                 'due_soon_tickets'  => (int) $dueSoonTickets,
                 'total_fines'       => (float) $totalFines,
@@ -642,7 +631,7 @@ class TicketController extends Controller
                 'total_tickets'     => Ticket::active()->count(),
                 'paid_tickets'      => Ticket::active()->where('status', 'paid')->count(),
                 'issued_tickets'    => Ticket::active()->where('status', 'issued')->count(),
-                'dismissed_tickets' => Ticket::active()->where('status', 'dismissed')->count(),
+                'archived_tickets'  => Ticket::archived()->count(),
                 'overdue_tickets'   => 0,
                 'due_soon_tickets'  => 0,
                 'total_fines'       => 0,

@@ -1,5 +1,6 @@
 // web/src/pages/Tickets.jsx
 import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -66,14 +67,6 @@ const STATUS_META = {
     text: '#1E8449',
     chip: 'bg-[#E5F2EA] text-[#1E8449]',
     icon: CheckCircle,
-  },
-  dismissed: {
-    label: 'Dismissed',
-    color: '#C8202F',
-    soft: '#FBE7E9',
-    text: '#C8202F',
-    chip: 'bg-[#FBE7E9] text-[#C8202F]',
-    icon: XCircle,
   },
 };
 
@@ -293,7 +286,7 @@ const DueBadge = ({ ticket, compact = false }) => {
     year: 'numeric',
   });
 
-  if (ticket.status === 'paid' || ticket.status === 'dismissed') {
+  if (ticket.status === 'paid') {
     return <span className="text-sm text-[#64748B]">{dueLabel}</span>;
   }
 
@@ -724,7 +717,13 @@ const Tickets = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState([]);
+  // Pre-apply the status filter when arriving from a Dashboard stat (e.g. /tickets?status=paid).
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState(() =>
+    (searchParams.get('status') || '')
+      .split(',')
+      .filter((s) => Object.prototype.hasOwnProperty.call(STATUS_META, s)),
+  );
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [enforcerId, setEnforcerId] = useState('');

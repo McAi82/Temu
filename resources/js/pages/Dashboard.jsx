@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getTicketStatistics, getTickets, getOverduePayments } from "../services/api";
 import {
   Ticket, CheckCircle, Clock, XCircle, TrendingUp, RefreshCw,
@@ -14,8 +14,8 @@ import {
 const STATUS = {
   paid: { label: "Paid", color: "#1E8449", soft: "#E5F2EA", text: "#1E8449", icon: CheckCircle },
   issued: { label: "Issued", color: "#F0B429", soft: "#FBF1DC", text: "#92600A", icon: Clock },
-  dismissed: { label: "Archived", color: "#C8202F", soft: "#FBE7E9", text: "#C8202F", icon: XCircle },
 };
+const ARCHIVED = { label: "Archived", color: "#C8202F", soft: "#FBE7E9", text: "#C8202F", icon: XCircle };
 
 const useCountUp = (target, ms = 900) => {
   const [v, setV] = useState(0);
@@ -53,7 +53,6 @@ const Dashboard = () => {
     total_tickets: 0,
     paid_tickets: 0,
     issued_tickets: 0,
-    dismissed_tickets: 0,
     total_fines: 0,
     collected_fines: 0,
     collection_rate: 0
@@ -61,6 +60,8 @@ const Dashboard = () => {
   const [recentTickets, setRecentTickets] = useState([]);
   const [courtViolators, setCourtViolators] = useState([]);
   const [courtTotal, setCourtTotal] = useState(0);
+  const [archivedTotal, setArchivedTotal] = useState(0);
+  const navigate = useNavigate();
   const [ticketsByMonth, setTicketsByMonth] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,11 +81,11 @@ const Dashboard = () => {
           total_tickets: d.total_tickets || 0,
           paid_tickets: d.paid_tickets || 0,
           issued_tickets: d.issued_tickets || 0,
-          dismissed_tickets: d.dismissed_tickets || 0,
           total_fines: d.total_fines || 0,
           collected_fines: d.collected_fines || 0,
           collection_rate: d.collection_rate || 0,
         });
+        setArchivedTotal(d.archived_tickets || 0);
         setTicketsByMonth(d.tickets_by_month || []);
       }
       const ticketsRes = await getTickets(1, 5);
@@ -133,9 +134,11 @@ const Dashboard = () => {
   const counts = {
     paid: stats.paid_tickets,
     issued: stats.issued_tickets,
-    dismissed: stats.dismissed_tickets,
   };
-  const pieData = Object.entries(STATUS).map(([k, s]) => ({ key: k, name: s.label, value: counts[k], color: s.color })).filter((d) => d.value > 0);
+  const pieData = [
+    ...Object.entries(STATUS).map(([k, s]) => ({ key: k, name: s.label, value: counts[k], color: s.color })),
+    { key: "archived", name: ARCHIVED.label, value: archivedTotal, color: ARCHIVED.color },
+  ].filter((d) => d.value > 0);
   const chartData = useMemo(() => (range ? ticketsByMonth.slice(-range) : ticketsByMonth), [ticketsByMonth, range]);
   const shownTickets = filter ? recentTickets.filter((t) => t.status === filter) : recentTickets;
   const pending = (stats.total_fines || 0) - (stats.collected_fines || 0);
@@ -144,7 +147,7 @@ const Dashboard = () => {
     { to: "/tickets", title: "Total Tickets", value: stats.total_tickets, icon: Ticket, color: "#16233F", soft: "#E9ECF2", text: "#16233F" },
     { to: "/tickets?status=paid", title: "Paid Tickets", value: stats.paid_tickets, icon: CheckCircle, ...STATUS.paid },
     { to: "/tickets?status=issued", title: "Issued/Pending", value: stats.issued_tickets, icon: Clock, ...STATUS.issued },
-    { to: "/archives?tab=tickets", title: "Archived", value: stats.dismissed_tickets, icon: XCircle, ...STATUS.dismissed },
+    { to: "/archives?tab=tickets", title: "Archived", value: archivedTotal, icon: XCircle, ...ARCHIVED },
     { to: "/payments", title: "In Court", value: courtTotal, icon: Gavel, color: "#7A1621", soft: "#F6E3E5", text: "#7A1621" },
     { to: "/payments", title: "Collection Rate", value: stats.collection_rate, suffix: "%", icon: TrendingUp, color: "#3B5170", soft: "#EEF1F5", text: "#3B5170" },
   ];
@@ -246,7 +249,7 @@ const Dashboard = () => {
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={5} dataKey="value"
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  onClick={(d) => setFilter(filter === d.key ? null : d.key)} style={{ cursor: "pointer" }}>
+                  onClick={(d) => (d.key === "archived" ? navigate("/archives?tab=tickets") : setFilter(filter === d.key ? null : d.key))} style={{ cursor: "pointer" }}>
                   {pieData.map((e) => <Cell key={e.key} fill={e.color} fillOpacity={!filter || filter === e.key ? 1 : 0.3} stroke={filter === e.key ? "#16233F" : "none"} strokeWidth={2} />)}
                 </Pie>
                 <Tooltip />

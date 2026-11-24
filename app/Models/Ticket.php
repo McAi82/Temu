@@ -148,7 +148,7 @@ class Ticket extends Model
     public function getIsOverdueAttribute(): bool
     {
         if (!$this->payment_due_at) return false;
-        if (in_array($this->status, ['paid', 'dismissed'], true)) return false;
+        if ($this->status === 'paid') return false;
         return $this->payment_due_at->isPast();
     }
 

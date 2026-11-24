@@ -574,7 +574,6 @@ const Archives = () => {
                         <option value="issued">Issued</option>
                         <option value="partial_paid">Partial Paid</option>
                         <option value="paid">Paid</option>
-                        <option value="dismissed">Archived</option>
                     </select>
                 </div>
             )}
