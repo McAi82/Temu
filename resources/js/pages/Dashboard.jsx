@@ -4,11 +4,13 @@ import { getTicketStatistics, getTickets, getOverduePayments } from "../services
 import {
   Ticket, CheckCircle, Clock, XCircle, TrendingUp, RefreshCw,
   Users, Car, Calendar, PhilippinePeso, Gavel, ArrowRight,
+  BarChart3, AlertTriangle, CloudUpload, Check,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
+  BarChart, Bar,
 } from "recharts";
 
 const STATUS = {
@@ -39,7 +41,6 @@ const Count = ({ value, prefix = "", suffix = "" }) => {
   return <>{prefix}{(Number.isInteger(raw) ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString()}{suffix}</>;
 };
 
-// Recency of an in-court row: uses the first date field present, falling back to the id.
 const courtSortKey = (r) => {
   const t = r?.ticket || r || {};
   const raw = r?.due_date ?? r?.deadline ?? t.due_date ?? t.deadline ?? t.violation_datetime ?? t.created_at ?? r?.created_at;
@@ -48,14 +49,183 @@ const courtSortKey = (r) => {
   return Number(t.ticket_id ?? r?.id) || 0;
 };
 
+/* ------------------------------------------------------------------ */
+/*  Insights helpers                                                   */
+/* ------------------------------------------------------------------ */
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const daysAgo = (n) => { const d = startOfDay(new Date()); d.setDate(d.getDate() - n); return d; };
+
+const computeInsights = (tickets, stats, courtTotal) => {
+  const daily = [0,0,0,0,0,0,0];
+  const dailyLabels = [];
+  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  for (let i = 6; i >= 0; i--) {
+    const d = daysAgo(i);
+    dailyLabels.push(dayNames[d.getDay()]);
+  }
+
+  const weekStart = startOfDay(daysAgo(6)).getTime();
+  const prevWeekStart = startOfDay(daysAgo(13)).getTime();
+  const nowMs = Date.now();
+
+  let thisWeek = 0, lastWeek = 0;
+  const violationCounts = {};
+
+  for (const t of tickets) {
+    const raw = t?.violation_datetime || t?.created_at || t?.date || null;
+    if (raw) {
+      const ts = new Date(raw).getTime();
+      if (!Number.isNaN(ts)) {
+        if (ts >= weekStart && ts <= nowMs) thisWeek++;
+        else if (ts >= prevWeekStart && ts < weekStart) lastWeek++;
+        const dayStart = startOfDay(new Date(ts)).getTime();
+        for (let i = 0; i < 7; i++) {
+          if (dayStart === startOfDay(daysAgo(6 - i)).getTime()) { daily[i]++; break; }
+        }
+      }
+    }
+    const name = t?.violations?.[0]?.violation_type?.violation_name
+      || t?.violations?.[0]?.violation_name
+      || t?.violation_type?.violation_name
+      || null;
+    if (name) violationCounts[name] = (violationCounts[name] || 0) + 1;
+  }
+
+  const topViolations = Object.entries(violationCounts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
+  const paid = stats.paid_tickets || 0;
+  const issued = stats.issued_tickets || 0;
+  const archived = stats.archived_tickets || 0;
+  const total = paid + issued + archived;
+
+  return {
+    daily, dailyLabels,
+    thisWeek, lastWeek, weekDelta: thisWeek - lastWeek,
+    topViolations,
+    total, paid, issued, archived,
+    courtTotal: courtTotal || 0,
+    sampleSize: tickets.length,
+  };
+};
+
+/* ------------------------------------------------------------------ */
+/*  Graph 1 — 7-day bar chart                                          */
+/* ------------------------------------------------------------------ */
+const DailyBars = ({ data }) => (
+  <ResponsiveContainer width="100%" height={180}>
+    <BarChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+      <CartesianGrid strokeDasharray="2 6" vertical={false} stroke="#D5DAE3" />
+      <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
+      <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} fontSize={11} />
+      <Tooltip
+        cursor={{ fill: "#16233F0A" }}
+        contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 6px 24px #16233F22" }}
+      />
+      <Bar dataKey="tickets" name="Tickets" radius={[4,4,0,0]} fill="#16233F">
+        {data.map((d, i) => (
+          <Cell key={i} fill={i === data.length - 1 ? "#F0B429" : "#16233F"} />
+        ))}
+      </Bar>
+    </BarChart>
+  </ResponsiveContainer>
+);
+
+/* ------------------------------------------------------------------ */
+/*  Graph 2 — week-over-week grouped bar                               */
+/* ------------------------------------------------------------------ */
+const WeekCompare = ({ thisWeek, lastWeek }) => {
+  const data = [
+    { name: "Last week", value: lastWeek, fill: "#94A3B8" },
+    { name: "This week", value: thisWeek, fill: "#16233F" },
+  ];
+  return (
+    <ResponsiveContainer width="100%" height={180}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="2 6" vertical={false} stroke="#D5DAE3" />
+        <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} />
+        <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} fontSize={11} />
+        <Tooltip
+          cursor={{ fill: "#16233F0A" }}
+          contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 6px 24px #16233F22" }}
+        />
+        <Bar dataKey="value" name="Tickets" radius={[6,6,0,0]}>
+          {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/*  Graph 3 — top-3 violations (horizontal bars)                       */
+/* ------------------------------------------------------------------ */
+const TopViolations = ({ items }) => (
+  <ResponsiveContainer width="100%" height={Math.max(120, items.length * 44)}>
+    <BarChart
+      data={items}
+      layout="vertical"
+      margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
+    >
+      <CartesianGrid strokeDasharray="2 6" horizontal={false} stroke="#D5DAE3" />
+      <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
+      <YAxis
+        type="category"
+        dataKey="name"
+        tickLine={false}
+        axisLine={false}
+        width={130}
+        fontSize={11}
+        tick={{ fill: "#5F6779" }}
+      />
+      <Tooltip
+        cursor={{ fill: "#16233F0A" }}
+        contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 6px 24px #16233F22" }}
+      />
+      <Bar dataKey="count" name="Tickets" fill="#16233F" radius={[0,6,6,0]} barSize={18} />
+    </BarChart>
+  </ResponsiveContainer>
+);
+
+/* ------------------------------------------------------------------ */
+/*  Status mix strip (100% stacked)                                     */
+/* ------------------------------------------------------------------ */
+const StatusStrip = ({ paid, issued, archived, total }) => {
+  if (!total) return <div className="text-sm text-gray-500 py-2">No tickets yet.</div>;
+  const seg = (v, color, label) => {
+    const pct = Math.round((v / total) * 100);
+    if (!v) return null;
+    return (
+      <div
+        key={label}
+        title={`${label}: ${v} (${pct}%)`}
+        style={{ width: `${pct}%`, background: color }}
+        className="h-3 first:rounded-l-full last:rounded-r-full transition-all duration-700"
+      />
+    );
+  };
+  return (
+    <div>
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-[#E4E7EE]">
+        {seg(paid, STATUS.paid.color, "Paid")}
+        {seg(issued, STATUS.issued.color, "Issued")}
+        {seg(archived, ARCHIVED.color, "Archived")}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-[#5F6779]">
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS.paid.color }} />Paid {paid}</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: STATUS.issued.color }} />Issued {issued}</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: ARCHIVED.color }} />Archived {archived}</span>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const [stats, setStats] = useState({
-    total_tickets: 0,
-    paid_tickets: 0,
-    issued_tickets: 0,
-    total_fines: 0,
-    collected_fines: 0,
-    collection_rate: 0
+    total_tickets: 0, paid_tickets: 0, issued_tickets: 0,
+    total_fines: 0, collected_fines: 0, collection_rate: 0,
   });
   const [recentTickets, setRecentTickets] = useState([]);
   const [courtViolators, setCourtViolators] = useState([]);
@@ -93,10 +263,7 @@ const Dashboard = () => {
       if (ticketsRes?.data?.data) list = ticketsRes.data.data;
       else if (ticketsRes?.data) list = ticketsRes.data;
       setRecentTickets(Array.isArray(list) ? list.slice(0, 5) : []);
-      // In-court violators (missed payment deadline). Non-critical: don't fail the whole dashboard.
       try {
-        // Fetch a larger page, then sort here so the 5 shown are the latest
-        // regardless of the order the API returns them in.
         const courtRes = await getOverduePayments(1, 50);
         const body = courtRes?.data;
         const rows = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
@@ -112,7 +279,6 @@ const Dashboard = () => {
       setError("Failed to load dashboard data. Please make sure the API is running.");
     } finally {
       setLoading(false);
-      // Hold refresh spinner for a visible minimum.
       setTimeout(() => setRefreshing(false), 600);
     }
   };
@@ -124,17 +290,13 @@ const Dashboard = () => {
       return t.violations.reduce((s, v) => s + (parseFloat(v?.fine_amount) || 0), 0);
     return t.total_fine ? parseFloat(t.total_fine) || 0 : 0;
   };
-
   const getBalance = (t) => {
     if (!t) return 0;
     if (t.balance != null) return parseFloat(t.balance) || 0;
     return Math.max(0, getTotalFine(t) - (parseFloat(t.total_paid) || 0));
   };
 
-  const counts = {
-    paid: stats.paid_tickets,
-    issued: stats.issued_tickets,
-  };
+  const counts = { paid: stats.paid_tickets, issued: stats.issued_tickets };
   const pieData = [
     ...Object.entries(STATUS).map(([k, s]) => ({ key: k, name: s.label, value: counts[k], color: s.color })),
     { key: "archived", name: ARCHIVED.label, value: archivedTotal, color: ARCHIVED.color },
@@ -142,6 +304,13 @@ const Dashboard = () => {
   const chartData = useMemo(() => (range ? ticketsByMonth.slice(-range) : ticketsByMonth), [ticketsByMonth, range]);
   const shownTickets = filter ? recentTickets.filter((t) => t.status === filter) : recentTickets;
   const pending = (stats.total_fines || 0) - (stats.collected_fines || 0);
+
+  /* ---- Insights (memoized) ---- */
+  const insights = useMemo(
+    () => computeInsights(recentTickets, { ...stats, archived_tickets: archivedTotal }, courtTotal),
+    [recentTickets, stats, archivedTotal, courtTotal],
+  );
+  const dailyData = insights.daily.map((v, i) => ({ day: insights.dailyLabels[i], tickets: v }));
 
   const statCards = [
     { to: "/tickets", title: "Total Tickets", value: stats.total_tickets, icon: Ticket, color: "#16233F", soft: "#E9ECF2", text: "#16233F" },
@@ -215,6 +384,91 @@ const Dashboard = () => {
             <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">{s.title}<ArrowRight className="w-3 h-3 opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0" /></p>
           </Link>
         ))}
+      </section>
+
+      {/* ---------------- INSIGHTS ---------------- */}
+      <section className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <Title icon={BarChart3} color="#16233F">Insights</Title>
+          <span className="text-xs text-gray-400">
+            Based on last {insights.sampleSize} ticket{insights.sampleSize === 1 ? "" : "s"} loaded
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* 7-day activity */}
+          <section className="lg:col-span-7 bg-white border-t-4 border-[#16233F] rounded-b-xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <Title icon={Calendar} color="#16233F">Last 7 days</Title>
+              <span
+                className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                  insights.weekDelta > 0
+                    ? "bg-[#E5F2EA] text-[#1E8449]"
+                    : insights.weekDelta < 0
+                      ? "bg-[#FBE7E9] text-[#C8202F]"
+                      : "bg-[#EEF0F4] text-[#5F6779]"
+                }`}
+              >
+                {insights.weekDelta > 0 ? "▲ +" : insights.weekDelta < 0 ? "▼ " : "– "}
+                {insights.weekDelta} vs last wk
+              </span>
+            </div>
+            <DailyBars data={dailyData} />
+            <div className="flex justify-between text-xs text-[#5F6779] mt-2">
+              <span>This week: <strong className="text-[#16233F]">{insights.thisWeek}</strong></span>
+              <span>Last week: <strong className="text-[#16233F]">{insights.lastWeek}</strong></span>
+            </div>
+          </section>
+
+          {/* week compare */}
+          <section className="lg:col-span-5 bg-[#F6F1E4] rounded-xl p-6">
+            <div className="mb-2"><Title icon={TrendingUp} color="#3B5170">Week over week</Title></div>
+            <WeekCompare thisWeek={insights.thisWeek} lastWeek={insights.lastWeek} />
+            <p className="text-xs text-[#5F6779] mt-2 leading-relaxed">
+              Compares the rolling 7-day window ending today with the 7 days before it. Two data points — read the delta, not the slope.
+            </p>
+          </section>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* top violations */}
+          <section className="lg:col-span-7 bg-white rounded-xl border border-[#E3E7EE] p-6">
+            <div className="flex items-center justify-between mb-2">
+              <Title icon={AlertTriangle} color="#F0B429">Most common violations</Title>
+              <span className="text-xs text-gray-400">Top 3</span>
+            </div>
+            {insights.topViolations.length === 0
+              ? <div className="text-sm text-gray-500 py-8 text-center">No violations recorded in this sample.</div>
+              : <TopViolations items={insights.topViolations} />}
+          </section>
+
+          {/* status mix */}
+          <section className="lg:col-span-5 bg-white rounded-xl border border-[#E3E7EE] p-6">
+            <div className="mb-4"><Title icon={Ticket} color="#16233F">Status mix</Title></div>
+            <StatusStrip
+              paid={insights.paid}
+              issued={insights.issued}
+              archived={insights.archived}
+              total={insights.total}
+            />
+            <div className="mt-5 pt-4 border-t border-dashed border-[#CBD5E1] flex items-center gap-3">
+              {courtTotal > 0 ? (
+                <>
+                  <Gavel className="w-4 h-4 text-[#7A1621]" />
+                  <p className="text-xs text-[#5F6779] flex-1">
+                    <strong className="text-[#7A1621]">{courtTotal}</strong> case{courtTotal === 1 ? "" : "s"} escalated to court
+                  </p>
+                  <Link to="/payments" className="text-xs text-[#7A1621] font-semibold hover:underline">Review</Link>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 text-[#1E8449]" />
+                  <p className="text-xs text-[#5F6779]">No cases escalated to court.</p>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
