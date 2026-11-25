@@ -1,13 +1,21 @@
 <?php
 return [
     'duplicate' => [
-        // front >= block  -> reject registration (409 FACE_DUPLICATE)
-        'block' => (float) env('FACE_DUP_BLOCK', 0.72),
+        // A face is a duplicate only when at least `min_poses` of the 3 poses
+        // (front, left, right) each reach their threshold against the SAME
+        // pose of another account. 3 = all poses must match.
+        'min_poses' => (int) env('FACE_DUP_MIN_POSES', 3),
 
-        // review <= front < block -> allow, but log a warning for admin review
-        'review' => (float) env('FACE_DUP_REVIEW', 0.65),
+        // Cosine-similarity threshold applied to every pose (front by default).
+        'block' => (float) env('FACE_DUP_BLOCK', 0.85),
 
-        // ANY pose >= hard -> reject (practically certain match)
-        'hard' => (float) env('FACE_DUP_HARD', 0.80),
+        // Optional separate thresholds for the turned-head poses, which
+        // normally score lower than the front. Default: same as 'block'.
+        'block_left' => (float) env('FACE_DUP_BLOCK_LEFT', env('FACE_DUP_BLOCK', 0.85)),
+        'block_right' => (float) env('FACE_DUP_BLOCK_RIGHT', env('FACE_DUP_BLOCK', 0.85)),
+
+        // "review" band: logged for admin review but allowed. A pose counts
+        // toward review when it is within (block - review) of its threshold.
+        'review' => (float) env('FACE_DUP_REVIEW', 0.80),
     ],
 ];

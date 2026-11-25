@@ -12,9 +12,12 @@ use Illuminate\Support\Facades\Log;
  * Same-pose cosine similarity on L2-normalised 192-d embeddings.
  * Thresholds live in config/face.php (override with FACE_DUP_* in .env).
  *
- * Returns the closest other account when it is at least in the review band:
- *   level 'block'  : front >= block  OR any pose >= hard  -> reject
- *   level 'review' : review <= front < block              -> allow + warn
+ * A registration is a duplicate only when ENOUGH POSES agree (default: all 3).
+ * Each pose (front / left / right) is compared to the same pose of the other
+ * account and must reach its own threshold:
+ *   level 'block'  : at least min_poses poses >= their block threshold -> reject
+ *   level 'review' : at least min_poses poses >= (block - margin)      -> allow + warn
+ * One strong pose on its own (e.g. only the front matching) never blocks.
  *
  * ASSUMPTIONS (adjust to your schema):
  *  - Model App\Models\FaceRegistration, one row per user
@@ -31,9 +34,18 @@ class FaceDuplicateService
      */
     public function findDuplicate(array $encodings, int|string $excludeUserId): ?array
     {
-        $block = (float) config('face.duplicate.block', 0.78);
-        $review = (float) config('face.duplicate.review', 0.75);
-        $hard = (float) config('face.duplicate.hard', 0.80);
+        $block = (float) config('face.duplicate.block', 0.72);
+        $review = (float) config('face.duplicate.review', 0.65);
+        $minPoses = max(1, min(count(self::POSES), (int) config('face.duplicate.min_poses', 3)));
+        $margin = max(0.0, $block - $review);
+
+        // Per-pose block thresholds. Left/right turns usually score lower than
+        // the front, so they can be tuned separately (default: same as front).
+        $poseBlock = [
+            'front' => $block,
+            'left'  => (float) config('face.duplicate.block_left', $block),
+            'right' => (float) config('face.duplicate.block_right', $block),
+        ];
 
         $live = [];
         foreach (self::POSES as $pose) {
@@ -42,7 +54,8 @@ class FaceDuplicateService
                 $live[$pose] = $this->normalize(array_map('floatval', $v));
             }
         }
-        if (!$live) {
+        // Can't confirm a duplicate if we were not given enough poses.
+        if (count($live) < $minPoses) {
             return null;
         }
 
@@ -62,23 +75,33 @@ class FaceDuplicateService
                 continue;
             }
 
-            $front = $sims['front'] ?? null;
-            $maxPose = array_search(max($sims), $sims, true);
-            $maxSim = $sims[$maxPose];
+            // How many poses agree with this account?
+            $passBlock = 0;
+            $passReview = 0;
+            foreach ($sims as $pose => $sim) {
+                if ($sim >= $poseBlock[$pose]) {
+                    $passBlock++;
+                }
+                if ($sim >= $poseBlock[$pose] - $margin) {
+                    $passReview++;
+                }
+            }
 
             $level = null;
-            if ($maxSim >= $hard || ($front !== null && $front >= $block)) {
+            if ($passBlock >= $minPoses) {
                 $level = 'block';
-            } elseif ($front !== null && $front >= $review) {
+            } elseif ($passReview >= $minPoses) {
                 $level = 'review';
             }
 
-            // Rank candidates by front score (fall back to best pose).
-            $rank = $front ?? $maxSim;
+            // Rank by the average over all compared poses.
+            $rank = round(array_sum($sims) / count($sims), 4);
 
             $candidates[] = [
                 'user_id' => $reg->user_id,
                 'sims' => $sims,
+                'mean' => $rank,
+                'poses_passed' => $passBlock,
                 'level' => $level,
             ];
 
@@ -91,21 +114,20 @@ class FaceDuplicateService
                         'level' => $level,
                         'user_id' => $reg->user_id,
                         'similarity' => $rank,
-                        'pose' => $front !== null ? 'front' : $maxPose,
+                        'pose' => isset($sims['front']) ? 'front' : array_key_first($sims),
                         'scores' => $sims,
                     ];
                 }
             }
         }
 
-        usort(
-            $candidates,
-            fn ($a, $b) => ($b['sims']['front'] ?? 0) <=> ($a['sims']['front'] ?? 0)
-        );
+        usort($candidates, fn ($a, $b) => $b['mean'] <=> $a['mean']);
         Log::info('face-duplicate check', [
             'checking_user_id' => $excludeUserId,
             'compared' => count($candidates),
-            'thresholds' => compact('block', 'review', 'hard'),
+            'min_poses' => $minPoses,
+            'pose_thresholds' => $poseBlock,
+            'review_margin' => $margin,
             'top' => array_slice($candidates, 0, 3),
         ]);
 
