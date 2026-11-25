@@ -274,7 +274,7 @@ const Spec = ({ label, children, mono, danger }) => (
 /* ============================================================
  *  Due / Overdue badge
  * ============================================================ */
-const DueBadge = ({ ticket, compact = false }) => {
+const DueBadge = ({ ticket, compact = false, stacked = false }) => {
   if (!ticket?.payment_due_at) {
     return <span className="text-sm text-[#94A3B8]">—</span>;
   }
@@ -294,41 +294,51 @@ const DueBadge = ({ ticket, compact = false }) => {
   const isOverdue = ticket.is_overdue === true || days < 0;
   const isDueSoon = !isOverdue && days <= 1;
 
-  const base = `inline-flex items-center gap-1 rounded-full font-semibold whitespace-nowrap ${
+  const base = `inline-flex items-center gap-1 rounded-full font-semibold whitespace-nowrap max-w-full min-w-0 ${
     compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs'
   }`;
 
+  let tone;
+  let Icon = null;
+  let text;
+  let title;
+
   if (isOverdue) {
     const overdueDays = Math.abs(days);
-    return (
-      <span
-        className={`${base} bg-[#FBE7E9] text-[#C8202F]`}
-        title={`Overdue by ${overdueDays} day${overdueDays === 1 ? '' : 's'} (due ${dueLabel})`}
-      >
-        <AlertTriangle className="w-3 h-3" />
-        Overdue · {dueLabel}
-      </span>
-    );
+    tone = 'bg-[#FBE7E9] text-[#C8202F]';
+    Icon = AlertTriangle;
+    text = stacked ? 'Overdue' : `Overdue · ${dueLabel}`;
+    title = `Overdue by ${overdueDays} day${overdueDays === 1 ? '' : 's'} (due ${dueLabel})`;
+  } else if (isDueSoon) {
+    tone = 'bg-[#FBEAE2] text-[#C2541F]';
+    Icon = Clock;
+    text = stacked ? `Due in ${days}d` : `Due in ${days}d · ${dueLabel}`;
+    title = `Due in ${days} day${days === 1 ? '' : 's'} (${dueLabel})`;
+  } else {
+    tone = 'bg-[#F1F5F9] text-[#475569]';
+    text = stacked
+      ? ticket.days_until_due != null
+        ? `Due in ${days}d`
+        : 'Upcoming'
+      : `Due ${dueLabel}`;
+    title = `Due ${dueLabel}`;
   }
 
-  if (isDueSoon) {
-    return (
-      <span
-        className={`${base} bg-[#FBEAE2] text-[#C2541F]`}
-        title={`Due in ${days} day${days === 1 ? '' : 's'} (${dueLabel})`}
-      >
-        <Clock className="w-3 h-3" />
-        Due in {days}d · {dueLabel}
-      </span>
-    );
-  }
+  const badge = (
+    <span className={`${base} ${tone}`} title={title}>
+      {Icon && <Icon className="w-3 h-3 flex-shrink-0" />}
+      <span className="truncate">{text}</span>
+    </span>
+  );
+
+  if (!stacked) return badge;
 
   return (
-    <span
-      className={`${base} bg-[#F1F5F9] text-[#475569]`}
-      title={`Due ${dueLabel}`}
-    >
-      Due {dueLabel}
+    <span className="inline-flex flex-col items-start gap-1 max-w-full min-w-0">
+      {badge}
+      <span className="text-xs text-[#64748B] whitespace-nowrap">
+        {dueLabel}
+      </span>
     </span>
   );
 };
@@ -707,7 +717,7 @@ const Info = (props) => (
 
 const ROW_CLASS =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 cursor-pointer ' +
-  'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.6fr)_minmax(0,.9fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(11.5rem,1.4fr)_minmax(0,9rem)] md:gap-x-6 md:gap-y-4';
+  'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(7.5rem,1.1fr)_minmax(0,9rem)] md:gap-x-6 md:gap-y-4';
 
 const Tickets = () => {
   const queryClient = useQueryClient();
@@ -1446,12 +1456,12 @@ const Tickets = () => {
                         {statusBadge(ticket.status)}
                       </span>
 
-                      <span className="justify-self-start min-w-0 md:pr-2">
+                      <span className="justify-self-start min-w-0 max-w-full md:pr-4">
                         <Mini>Due</Mini>
-                        <DueBadge ticket={ticket} />
+                        <DueBadge ticket={ticket} stacked />
                       </span>
 
-                      <div className="justify-self-end md:justify-self-start md:pl-2">
+                      <div className="justify-self-end md:justify-self-start md:pl-4">
                         {rowActions(ticket)}
                       </div>
                     </li>
