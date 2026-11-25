@@ -111,12 +111,14 @@ const STATUS_META = {
         chip: 'bg-[#E5F2EA] text-[#1E8449]',
         Icon: CheckCircle,
     },
-    dismissed: {
-        label: 'Dismissed',
+    // "Dismissed" is gone. Archived is now the only non-active bucket,
+    // and it reads `archived_tickets` from the backend (the is_archived flag).
+    archived: {
+        label: 'Archived',
         color: COLORS.red,
         tint: '#FBE7E9',
         chip: 'bg-[#FBE7E9] text-[#C8202F]',
-        Icon: XCircle,
+        Icon: Archive,
     },
 };
 
@@ -781,8 +783,9 @@ const PrintHeader = ({
                     <FormField label="7. Total violations">{summary.total_tickets || 0}</FormField>
                     <FormField label="8. Resolved (paid)">{summary.paid_tickets || 0}</FormField>
                     <FormField label="9. Active (issued)">{summary.issued_tickets || 0}</FormField>
+                    <FormField label="10. Archived">{summary.archived_tickets || 0}</FormField>
                     <div style={{ flex: 1, padding: '2px 6px 4px' }}>
-                        <div style={{ fontSize: '6.5px', letterSpacing: '1px', textTransform: 'uppercase', color: '#64748B' }}>10. Collection rate</div>
+                        <div style={{ fontSize: '6.5px', letterSpacing: '1px', textTransform: 'uppercase', color: '#64748B' }}>11. Collection rate</div>
                         <div style={{ fontSize: '10px', fontWeight: 600, color: FORM_INK, marginTop: '1px' }}>{summary.collection_rate || 0}%</div>
                     </div>
                 </FormRow>
@@ -815,7 +818,7 @@ const PrintNarrative = ({
 
     const findings = [
         `A total of ${total} violation ticket(s) were issued during the period, an average of ${chartStats.avg.toFixed(1)} per day over ${rangeDays} day(s).`,
-        `${n(summary.paid_tickets)} ticket(s) (${pct(summary.paid_tickets)}%) have been paid, ${n(summary.issued_tickets)} remain issued and awaiting settlement, and ${n(summary.dismissed_tickets)} were dismissed.`,
+        `${n(summary.paid_tickets)} ticket(s) (${pct(summary.paid_tickets)}%) have been paid, ${n(summary.issued_tickets)} remain issued and awaiting settlement, and ${n(summary.archived_tickets)} were archived.`,
         `Fines issued amounted to ${formatCurrency(n(summary.total_fines))}. The collection rate reported by the system for the period is ${n(summary.collection_rate)}%.`,
     ];
     if (payments)
@@ -878,8 +881,7 @@ const PrintNotes = ({ generatedAt, includeArchived }) => {
     const defs = [
         ['Issued', 'A ticket that has been recorded and is awaiting payment or action.'],
         ['Paid', 'A ticket that has been settled through a recorded payment.'],
-        ['Contested', 'A ticket that the violator has protested and that is under review.'],
-        ['Dismissed', 'A ticket that has been cancelled; no fine is due.'],
+        ['Archived', 'A ticket that has been moved to the archive; it no longer appears in active totals.'],
         ['Collection rate', 'The share of tickets settled in the period, as computed by the system.'],
         ['Net collected', 'Total payments received less any refunds.'],
         ['Peak day', 'The day in the period with the highest number of tickets issued.'],
@@ -902,7 +904,7 @@ const PrintNotes = ({ generatedAt, includeArchived }) => {
                     Figures reflect the records held in the TEMU Command Center as of{' '}
                     {generatedAt.toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}
                     {includeArchived ? ', including archived records' : ', excluding archived records'}. Payments,
-                    dismissals or corrections recorded after this time are not reflected. Percentages are rounded and
+                    cancellations or corrections recorded after this time are not reflected. Percentages are rounded and
                     may not add up to exactly 100%. This document is confidential and for official use only; it should
                     not be reproduced or shared without the approval of the issuing office.
                 </p>
@@ -1219,171 +1221,155 @@ const ChartTooltip = ({ active, payload, label }) => {
     );
 };
 
-const StatTile = ({
-    title,
-    value,
-    icon: Icon,
-    color,
-    tint,
-    textColor,
-    clickable = false,
-    active = false,
-    onClick,
-    animated,
-    suffix,
-}) => (
-    <button
-        type="button"
-        disabled={!clickable}
-        onClick={onClick}
-        aria-pressed={active}
-        className={`relative text-left p-5 border-dashed border-[#CBD5E1] border-b border-r transition-all duration-300 ${clickable ? 'hover:bg-[#F8F9FB] cursor-pointer' : 'cursor-default'
-            }`}
-        style={active ? { background: tint } : undefined}
-    >
-        <span
-            className="absolute top-0 left-0 right-0 h-1.5 transition-transform origin-left duration-500"
-            style={{
-                background: color,
-                transform: `scaleX(${active ? 1 : 0.3})`,
-            }}
-        />
-        <Icon className="w-5 h-5 mb-3" style={{ color: textColor }} />
-        <p
-            className="text-4xl font-['Oswald'] font-semibold tabular-nums leading-none"
-            style={{ color: '#1F2937' }}
-        >
-            {animated ? (
-                <AnimatedValue
-                    value={value}
-                    prefix={animated.prefix}
-                    suffix={animated.suffix || suffix}
-                    integer={animated.integer}
-                />
-            ) : (
-                <>
-                    {value}
-                    {suffix}
-                </>
-            )}
-        </p>
-        <p className="text-xs text-gray-500 mt-2">{title}</p>
-    </button>
-);
+/* ------------------------------------------------------------------ */
+/* Summary table (replaces the old stat-card strip)                    */
+/* ------------------------------------------------------------------ */
 
-const CompareTable = ({ primary, compare, primaryRange, compareRange }) => {
-    if (!primary || !compare) return null;
+const SummaryTable = ({ summary, rangeDays, focusTile, onFocus }) => {
+    const total = toNumber(summary.total_tickets);
+    const paid = toNumber(summary.paid_tickets);
+    const issued = toNumber(summary.issued_tickets);
+    const archived = toNumber(summary.archived_tickets);
+    const rate = toNumber(summary.collection_rate);
 
-    const metrics = [
-        { key: 'total_tickets', label: 'Tickets issued', format: (v) => String(v) },
-        { key: 'total_violations', label: 'Violations recorded', format: (v) => String(v) },
-        { key: 'total_fines', label: 'Total fines', format: (v) => formatCurrency(v) },
-        { key: 'paid_tickets', label: 'Paid tickets', format: (v) => String(v) },
-        { key: 'issued_tickets', label: 'Issued (unpaid)', format: (v) => String(v) },
-        { key: 'partial_tickets', label: 'Partial payments', format: (v) => String(v) },
-        { key: 'dismissed_tickets', label: 'Dismissed tickets', format: (v) => String(v) },
-        { key: 'average_daily_tickets', label: 'Avg tickets / day', format: (v) => toNumber(v).toFixed(2) },
-        { key: 'collection_rate', label: 'Collection rate', format: (v) => `${toNumber(v).toFixed(1)}%` },
+    const share = (v) => (total > 0 ? Math.round((v / total) * 100) : 0);
+    const avg = rangeDays > 0 ? (total / rangeDays).toFixed(1) : '0.0';
+
+    const rows = [
+        {
+            key: 'total_tickets',
+            icon: Ticket,
+            color: COLORS.navy,
+            tint: '#E9ECF2',
+            label: 'Total tickets',
+            value: total,
+            suffix: '',
+            sub: rangeDays > 0 ? `${avg} per day · ${rangeDays} day(s)` : '—',
+        },
+        {
+            key: 'paid_tickets',
+            icon: CheckCircle,
+            color: COLORS.green,
+            tint: '#E5F2EA',
+            label: 'Paid tickets',
+            value: paid,
+            suffix: '',
+            sub: total > 0 ? `${share(paid)}% of total` : '—',
+        },
+        {
+            key: 'issued_tickets',
+            icon: Clock,
+            color: COLORS.amber,
+            tint: '#FBF1DC',
+            label: 'Issued / Pending',
+            value: issued,
+            suffix: '',
+            sub: total > 0 ? `${share(issued)}% of total` : '—',
+        },
+        {
+            key: 'archived_tickets',
+            icon: Archive,
+            color: COLORS.red,
+            tint: '#FBE7E9',
+            label: 'Archived',
+            value: archived,
+            suffix: '',
+            sub: total > 0 ? `${share(archived)}% of total` : '—',
+        },
+        {
+            key: 'collection_rate',
+            icon: TrendingUp,
+            color: COLORS.compare,
+            tint: '#EEF1F5',
+            label: 'Collection rate',
+            value: rate,
+            suffix: '%',
+            sub: `${formatCurrency(summary.total_fines)} fines issued`,
+        },
     ];
 
-    const getDelta = (key) => {
-        const p = toNumber(primary[key]);
-        const c = toNumber(compare[key]);
-        const change = p - c;
-        const percent = c > 0 ? (change / c) * 100 : p > 0 ? 100 : 0;
-        const direction = change > 0 ? 'up' : change < 0 ? 'down' : 'flat';
-        return { primary: p, compare: c, change, percent, direction };
-    };
-
     return (
-        <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-                <span className="inline-flex items-center gap-1.5 bg-[#16233F] text-white px-2.5 py-1 rounded-full font-medium">
-                    <span className="w-2 h-2 rounded-full bg-[#F0B429]" />
-                    Primary: {formatShortDate(primaryRange.start)} –{' '}
-                    {formatShortDate(primaryRange.end)}
-                </span>
-                <span className="inline-flex items-center gap-1.5 bg-[#EEF1F5] text-[#3B5170] px-2.5 py-1 rounded-full font-medium">
-                    <span className="w-2 h-2 rounded-full bg-[#3B5170]" />
-                    Compare: {formatShortDate(compareRange.start)} –{' '}
-                    {formatShortDate(compareRange.end)}
+        <section className="bg-white rounded-xl border border-[#E3E7EE] overflow-hidden print-card">
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[#E3E7EE] bg-[#F8F9FB] no-print">
+                <h2 className="font-['Oswald'] font-medium text-sm uppercase tracking-[0.14em] text-[#16233F] flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-[#16233F]" />
+                    Summary of figures
+                </h2>
+                <span className="text-xs text-[#64748B] tabular-nums">
+                    {total.toLocaleString()} total ticket{total === 1 ? '' : 's'}
                 </span>
             </div>
-
-            <div className="-mx-2 overflow-x-auto px-2">
+            <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px]">
-                    <thead className="border-b-2 border-[#E9ECF2]">
-                        <tr>
-                            <th className="py-3 text-left font-['Inter'] text-xs font-semibold uppercase tracking-wider text-[#64748B]">
+                    <thead>
+                        <tr className="border-b-2 border-[#E3E7EE] bg-white">
+                            <th className="text-left px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748B] w-[38%]">
                                 Metric
                             </th>
-                            <th className="py-3 text-right font-['Inter'] text-xs font-semibold uppercase tracking-wider text-[#16233F]">
-                                Primary
+                            <th className="text-right px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748B]">
+                                Value
                             </th>
-                            <th className="py-3 text-right font-['Inter'] text-xs font-semibold uppercase tracking-wider text-[#3B5170]">
-                                Compare
-                            </th>
-                            <th className="py-3 text-right font-['Inter'] text-xs font-semibold uppercase tracking-wider text-[#64748B]">
-                                Change
-                            </th>
-                            <th className="py-3 text-right font-['Inter'] text-xs font-semibold uppercase tracking-wider text-[#64748B]">
-                                %
+                            <th className="text-left px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748B]">
+                                Context
                             </th>
                         </tr>
                     </thead>
                     <tbody>
-                        {metrics.map((m) => {
-                            const d = getDelta(m.key);
-                            const colorMap = {
-                                up: COLORS.green,
-                                down: COLORS.red,
-                                flat: COLORS.slate,
-                            };
-                            const Icon =
-                                d.direction === 'up'
-                                    ? TrendingUp
-                                    : d.direction === 'down'
-                                        ? TrendingDown
-                                        : Minus;
-                            const color = colorMap[d.direction];
+                        {rows.map((r) => {
+                            const Icon = r.icon;
+                            const active = focusTile === r.key;
                             return (
                                 <tr
-                                    key={m.key}
-                                    className="border-b border-[#F3F4F6] hover:bg-[#F8F9FA]"
+                                    key={r.key}
+                                    onClick={() => onFocus(active ? null : r.key)}
+                                    className={`cursor-pointer transition-colors border-b border-[#F3F4F6] last:border-0 ${active ? 'bg-[#F8F9FB]' : 'hover:bg-[#F8F9FB]'
+                                        }`}
                                 >
-                                    <td className="py-2.5 text-sm text-[#1F2937]">
-                                        {m.label}
+                                    <td className="px-5 py-3">
+                                        <div className="flex items-center gap-3">
+                                            <span
+                                                className="w-1 h-8 rounded-full shrink-0"
+                                                style={{ background: r.color }}
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                                                style={{ background: r.tint }}
+                                            >
+                                                <Icon className="w-4 h-4" style={{ color: r.color }} />
+                                            </div>
+                                            <span className="text-sm font-medium text-[#1F2937]">
+                                                {r.label}
+                                            </span>
+                                        </div>
                                     </td>
-                                    <td className="py-2.5 text-right font-semibold text-[#16233F] tabular-nums">
-                                        {m.format(primary[m.key])}
-                                    </td>
-                                    <td className="py-2.5 text-right font-semibold text-[#3B5170] tabular-nums">
-                                        {m.format(compare[m.key])}
-                                    </td>
-                                    <td
-                                        className="py-2.5 text-right font-medium tabular-nums"
-                                        style={{ color }}
-                                    >
-                                        {d.change > 0 ? '+' : ''}
-                                        {m.format(d.change)}
-                                    </td>
-                                    <td
-                                        className="py-2.5 text-right font-medium whitespace-nowrap tabular-nums"
-                                        style={{ color }}
-                                    >
-                                        <span className="inline-flex items-center gap-1 justify-end">
-                                            <Icon className="w-3 h-3" />
-                                            {d.percent > 0 ? '+' : ''}
-                                            {d.percent.toFixed(1)}%
+                                    <td className="px-5 py-3 text-right">
+                                        <span className="font-['Oswald'] text-2xl font-semibold tabular-nums text-[#16233F]">
+                                            <AnimatedValue value={r.value} suffix={r.suffix} integer />
                                         </span>
+                                    </td>
+                                    <td className="px-5 py-3">
+                                        <span className="text-xs text-[#64748B]">{r.sub}</span>
                                     </td>
                                 </tr>
                             );
                         })}
                     </tbody>
+                    <tfoot>
+                        <tr className="bg-[#16233F] text-white">
+                            <td className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em]">
+                                Totals
+                            </td>
+                            <td className="px-5 py-2.5 text-right font-['Oswald'] text-lg font-semibold tabular-nums">
+                                {total.toLocaleString()}
+                            </td>
+                            <td className="px-5 py-2.5 text-[11px] text-[#C7CEDB]">
+                                Across {rangeDays} day(s) · {formatCurrency(summary.total_fines)} fines
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
-        </div>
+        </section>
     );
 };
 
@@ -1606,7 +1592,6 @@ const PaymentsSection = ({ paymentsSummary }) => {
 /* Period / compare pickers                                            */
 /* ------------------------------------------------------------------ */
 
-/* Tooltip for the daily chart: full date + all three measures */
 const DailyTooltip = ({ active, payload }) => {
     if (!active || !payload?.length) return null;
     const row = payload[0].payload || {};
@@ -1635,7 +1620,6 @@ const DailyTooltip = ({ active, payload }) => {
     );
 };
 
-/* Headline figures above the daily chart */
 const ChartStatsStrip = ({ stats }) => {
     const cells = [
         {
@@ -1677,7 +1661,6 @@ const ChartStatsStrip = ({ stats }) => {
     );
 };
 
-/* Printed report only: the numbers behind the chart */
 const DailyFiguresTable = ({ rows, stats }) => {
     if (!rows.length || rows.length > 31) return null;
     return (
@@ -1996,7 +1979,6 @@ const Reports = () => {
     const compare = data?.compare || null;
     const deltas = compare?.deltas || null;
 
-    // ⬇️ reportRange moved BEFORE rangeDays so useMemo below can safely close over it.
     const reportRange = data?.date_range || {
         start: picker.date || picker.start_date,
         end: picker.date || picker.end_date,
@@ -2078,15 +2060,17 @@ const Reports = () => {
         ...allViolators.map((v) => Number(v.tickets_count) || 0),
     );
 
+    /* Status donut data — reads archived_tickets (the is_archived flag). */
     const weeklyStatusData = useMemo(() => {
         if (!summary) return [];
-        return Object.keys(STATUS_META)
-            .map((key) => ({
-                key,
-                name: STATUS_META[key].label,
-                value: Number(summary[`${key}_tickets`]) || 0,
-            }))
-            .filter((d) => d.value > 0);
+        const buckets = [
+            { key: 'issued', value: Number(summary.issued_tickets) || 0 },
+            { key: 'paid', value: Number(summary.paid_tickets) || 0 },
+            { key: 'archived', value: Number(summary.archived_tickets) || 0 },
+        ];
+        return buckets
+            .filter((b) => b.value > 0)
+            .map((b) => ({ ...b, name: STATUS_META[b.key].label }));
     }, [summary]);
 
     const weeklyStatusTotal = weeklyStatusData.reduce(
@@ -2153,59 +2137,6 @@ const Reports = () => {
         (picker.compare_start &&
             picker.compare_end &&
             picker.compare_start <= picker.compare_end);
-
-    const statCards = [
-        {
-            key: 'total_tickets',
-            title: 'Total Tickets',
-            value: summary.total_tickets || 0,
-            icon: Ticket,
-            color: '#16233F',
-            tint: '#E9ECF2',
-            textColor: '#16233F',
-            animated: { integer: true },
-        },
-        {
-            key: 'paid_tickets',
-            title: 'Paid Tickets',
-            value: summary.paid_tickets || 0,
-            icon: CheckCircle,
-            color: '#1E8449',
-            tint: '#E5F2EA',
-            textColor: '#1E8449',
-            animated: { integer: true },
-        },
-        {
-            key: 'issued_tickets',
-            title: 'Issued / Pending',
-            value: summary.issued_tickets || 0,
-            icon: Clock,
-            color: '#F0B429',
-            tint: '#FBF1DC',
-            textColor: '#92600A',
-            animated: { integer: true },
-        },
-        {
-            key: 'dismissed_tickets',
-            title: 'Dismissed',
-            value: summary.dismissed_tickets || 0,
-            icon: XCircle,
-            color: '#C8202F',
-            tint: '#FBE7E9',
-            textColor: '#C8202F',
-            animated: { integer: true },
-        },
-        {
-            key: 'collection_rate',
-            title: 'Collection Rate',
-            value: summary.collection_rate || 0,
-            icon: TrendingUp,
-            color: '#3B5170',
-            tint: '#EEF1F5',
-            textColor: '#3B5170',
-            animated: { integer: false, suffix: '%' },
-        },
-    ];
 
     const pendingFines = Math.max(
         0,
@@ -2377,14 +2308,14 @@ const Reports = () => {
                         ))}
                     </div>
                     <Button
-  onClick={fetchReport}
-  variant="outline"
-  disabled={loading}
-  className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
->
-  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-  Refresh
-</Button>
+                        onClick={fetchReport}
+                        variant="outline"
+                        disabled={loading}
+                        className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white"
+                    >
+                        <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                        Refresh
+                    </Button>
                     <Button
                         onClick={() => window.print()}
                         variant="outline"
@@ -2495,29 +2426,13 @@ const Reports = () => {
                                 <ReportSkeleton />
                             ) : data ? (
                                 <>
-                                    <section className="bg-white rounded-xl border border-[#E3E7EE] grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 overflow-hidden print-card">
-                                        {statCards.map((s) => (
-                                            <StatTile
-                                                key={s.key}
-                                                title={s.title}
-                                                value={s.value}
-                                                icon={s.icon}
-                                                color={s.color}
-                                                tint={s.tint}
-                                                textColor={s.textColor}
-                                                animated={s.animated}
-                                                clickable
-                                                active={focusTile === s.key}
-                                                onClick={() =>
-                                                    setFocusTile(
-                                                        focusTile === s.key
-                                                            ? null
-                                                            : s.key,
-                                                    )
-                                                }
-                                            />
-                                        ))}
-                                    </section>
+                                    {/* ⬇️ Summary is now a table instead of stat-card tiles */}
+                                    <SummaryTable
+                                        summary={summary}
+                                        rangeDays={rangeDays}
+                                        focusTile={focusTile}
+                                        onFocus={setFocusTile}
+                                    />
 
                                     {/* FULL-WIDTH CHART */}
                                     <section className="bg-white border-t-4 border-[#16233F] rounded-b-xl p-6 shadow-sm print-card">
@@ -2666,7 +2581,7 @@ const Reports = () => {
 
                                     {/* FULL-WIDTH STATUS DONUT */}
                                     <section className="bg-[#F6F1E4] rounded-xl p-6 print-card">
-                                        <SectionHeader note={`Breakdown of the ${weeklyStatusTotal} ticket(s) by current status: issued, paid, contested and dismissed. Percentages are computed on the total shown.`}
+                                        <SectionHeader note={`Breakdown of the ${weeklyStatusTotal} ticket(s) by current status: issued, paid, and archived. Percentages are computed on the total shown.`}
                                             icon={TrendingUp}
                                             color={COLORS.compare}
                                         >
@@ -2680,9 +2595,7 @@ const Reports = () => {
                                                     <ChartBox printing={printing} height={260} printHeight={210}>
                                                         <RePieChart>
                                                             <Pie
-                                                                data={
-                                                                    weeklyStatusData
-                                                                }
+                                                                data={weeklyStatusData}
                                                                 dataKey="value"
                                                                 isAnimationActive={!printing}
                                                                 nameKey="name"
@@ -2691,125 +2604,70 @@ const Reports = () => {
                                                                 paddingAngle={2}
                                                                 onClick={(d) =>
                                                                     setFocusTile(
-                                                                        focusTile ===
-                                                                            d.key
+                                                                        focusTile === d.key
                                                                             ? null
                                                                             : d.key,
                                                                     )
                                                                 }
-                                                                style={{
-                                                                    cursor: 'pointer',
-                                                                }}
+                                                                style={{ cursor: 'pointer' }}
                                                             >
-                                                                {weeklyStatusData.map(
-                                                                    (entry) => (
-                                                                        <Cell
-                                                                            key={
-                                                                                entry.key
-                                                                            }
-                                                                            fill={
-                                                                                STATUS_META[
-                                                                                    entry.key
-                                                                                ].color
-                                                                            }
-                                                                            fillOpacity={
-                                                                                !focusTile ||
-                                                                                    focusTile ===
-                                                                                    entry.key
-                                                                                    ? 1
-                                                                                    : 0.3
-                                                                            }
-                                                                            stroke={
-                                                                                focusTile ===
-                                                                                    entry.key
-                                                                                    ? '#16233F'
-                                                                                    : 'none'
-                                                                            }
-                                                                            strokeWidth={
-                                                                                2
-                                                                            }
-                                                                        />
-                                                                    ),
-                                                                )}
+                                                                {weeklyStatusData.map((entry) => (
+                                                                    <Cell
+                                                                        key={entry.key}
+                                                                        fill={STATUS_META[entry.key].color}
+                                                                        fillOpacity={
+                                                                            !focusTile || focusTile === entry.key
+                                                                                ? 1
+                                                                                : 0.3
+                                                                        }
+                                                                        stroke={
+                                                                            focusTile === entry.key
+                                                                                ? '#16233F'
+                                                                                : 'none'
+                                                                        }
+                                                                        strokeWidth={2}
+                                                                    />
+                                                                ))}
                                                             </Pie>
-                                                            <Tooltip
-                                                                content={
-                                                                    <ChartTooltip />
-                                                                }
-                                                            />
+                                                            <Tooltip content={<ChartTooltip />} />
                                                         </RePieChart>
                                                     </ChartBox>
                                                 </div>
                                                 <div className="lg:col-span-7">
                                                     <ul className="space-y-3">
-                                                        {weeklyStatusData.map(
-                                                            (entry) => {
-                                                                const meta =
-                                                                    STATUS_META[
-                                                                    entry.key
-                                                                    ];
-                                                                const share =
-                                                                    weeklyStatusTotal >
-                                                                        0
-                                                                        ? Math.round(
-                                                                            (entry.value /
-                                                                                weeklyStatusTotal) *
-                                                                            100,
-                                                                        )
-                                                                        : 0;
-                                                                return (
-                                                                    <li
-                                                                        key={
-                                                                            entry.key
-                                                                        }
-                                                                        className="flex items-center gap-3"
-                                                                    >
-                                                                        <span
-                                                                            className="w-3 h-3 rounded-full flex-shrink-0"
-                                                                            style={{
-                                                                                background:
-                                                                                    meta.color,
-                                                                            }}
-                                                                        />
-                                                                        <span className="text-sm text-[#1F2937] flex-1">
-                                                                            {
-                                                                                meta.label
-                                                                            }
-                                                                        </span>
-                                                                        <span className="text-sm font-semibold text-[#1F2937] tabular-nums">
-                                                                            {
-                                                                                entry.value
-                                                                            }
-                                                                        </span>
-                                                                        <span className="text-xs text-[#64748B] w-12 text-right tabular-nums">
-                                                                            {
-                                                                                share
-                                                                            }
-                                                                            %
-                                                                        </span>
-                                                                    </li>
-                                                                );
-                                                            },
-                                                        )}
+                                                        {weeklyStatusData.map((entry) => {
+                                                            const meta = STATUS_META[entry.key];
+                                                            const share =
+                                                                weeklyStatusTotal > 0
+                                                                    ? Math.round((entry.value / weeklyStatusTotal) * 100)
+                                                                    : 0;
+                                                            return (
+                                                                <li key={entry.key} className="flex items-center gap-3">
+                                                                    <span
+                                                                        className="w-3 h-3 rounded-full flex-shrink-0"
+                                                                        style={{ background: meta.color }}
+                                                                    />
+                                                                    <span className="text-sm text-[#1F2937] flex-1">
+                                                                        {meta.label}
+                                                                    </span>
+                                                                    <span className="text-sm font-semibold text-[#1F2937] tabular-nums">
+                                                                        {entry.value}
+                                                                    </span>
+                                                                    <span className="text-xs text-[#64748B] w-12 text-right tabular-nums">
+                                                                        {share}%
+                                                                    </span>
+                                                                </li>
+                                                            );
+                                                        })}
                                                     </ul>
                                                     <p className="text-xs text-[#64748B] mt-4 text-center">
                                                         Showing{' '}
                                                         <span className="font-semibold text-[#16233F] tabular-nums">
-                                                            {
-                                                                weeklyStatusData.length
-                                                            }
+                                                            {weeklyStatusData.length}
                                                         </span>{' '}
-                                                        {weeklyStatusData.length ===
-                                                            1
-                                                            ? 'status'
-                                                            : 'statuses'}{' '}
-                                                        ·{' '}
+                                                        {weeklyStatusData.length === 1 ? 'status' : 'statuses'} ·{' '}
                                                         <span className="font-semibold text-[#16233F] tabular-nums">
-                                                            <AnimatedValue
-                                                                value={
-                                                                    weeklyStatusTotal
-                                                                }
-                                                            />
+                                                            <AnimatedValue value={weeklyStatusTotal} />
                                                         </span>{' '}
                                                         total tickets
                                                     </p>
@@ -2843,9 +2701,7 @@ const Reports = () => {
                                                 action={
                                                     <ViewToggle
                                                         view={violationsView}
-                                                        setView={
-                                                            setViolationsView
-                                                        }
+                                                        setView={setViolationsView}
                                                     />
                                                 }
                                             >
@@ -2858,263 +2714,73 @@ const Reports = () => {
                                                 <>
                                                     {violationsView === 'cards' ? (
                                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                            {shownViolations.map(
-                                                                (v, idx) => (
-                                                                    <RankedCard
-                                                                        key={
-                                                                            v.violation_id ??
-                                                                            v.violation_name ??
-                                                                            idx
-                                                                        }
-                                                                        rank={
-                                                                            (violationsSafePage -
-                                                                                1) *
-                                                                            ITEMS_PER_PAGE +
-                                                                            idx +
-                                                                            1
-                                                                        }
-                                                                        primary={
-                                                                            v.violation_name
-                                                                        }
-                                                                        secondary={`${formatCurrency(
-                                                                            v.total_fine,
-                                                                        )} in fines`}
-                                                                        value={`${v.count}×`}
-                                                                        share={
-                                                                            ((Number(
-                                                                                v.count,
-                                                                            ) || 0) /
-                                                                                maxTopViolation) *
-                                                                            100
-                                                                        }
-                                                                        color={
-                                                                            COLORS.amberDark
-                                                                        }
-                                                                    />
-                                                                ),
-                                                            )}
+                                                            {shownViolations.map((v, idx) => (
+                                                                <RankedCard
+                                                                    key={v.violation_id ?? v.violation_name ?? idx}
+                                                                    rank={
+                                                                        (violationsSafePage - 1) * ITEMS_PER_PAGE +
+                                                                        idx +
+                                                                        1
+                                                                    }
+                                                                    primary={v.violation_name}
+                                                                    secondary={`${formatCurrency(v.total_fine)} in fines`}
+                                                                    value={`${v.count}×`}
+                                                                    share={
+                                                                        ((Number(v.count) || 0) /
+                                                                            maxTopViolation) *
+                                                                        100
+                                                                    }
+                                                                    color={COLORS.amberDark}
+                                                                />
+                                                            ))}
                                                         </div>
                                                     ) : (
                                                         <ul className="space-y-4">
-                                                            {shownViolations.map(
-                                                                (v, idx) => (
-                                                                    <RankedRow
-                                                                        key={
-                                                                            v.violation_id ??
-                                                                            v.violation_name ??
-                                                                            idx
-                                                                        }
-                                                                        rank={
-                                                                            (violationsSafePage -
-                                                                                1) *
-                                                                            ITEMS_PER_PAGE +
-                                                                            idx +
-                                                                            1
-                                                                        }
-                                                                        primary={
-                                                                            v.violation_name
-                                                                        }
-                                                                        secondary={`${formatCurrency(
-                                                                            v.total_fine,
-                                                                        )} in fines`}
-                                                                        value={`${v.count}×`}
-                                                                        share={
-                                                                            ((Number(
-                                                                                v.count,
-                                                                            ) || 0) /
-                                                                                maxTopViolation) *
-                                                                            100
-                                                                        }
-                                                                        color={
-                                                                            COLORS.amberDark
-                                                                        }
-                                                                    />
-                                                                ),
-                                                            )}
+                                                            {shownViolations.map((v, idx) => (
+                                                                <RankedRow
+                                                                    key={v.violation_id ?? v.violation_name ?? idx}
+                                                                    rank={
+                                                                        (violationsSafePage - 1) * ITEMS_PER_PAGE +
+                                                                        idx +
+                                                                        1
+                                                                    }
+                                                                    primary={v.violation_name}
+                                                                    secondary={`${formatCurrency(v.total_fine)} in fines`}
+                                                                    value={`${v.count}×`}
+                                                                    share={
+                                                                        ((Number(v.count) || 0) /
+                                                                            maxTopViolation) *
+                                                                        100
+                                                                    }
+                                                                    color={COLORS.amberDark}
+                                                                />
+                                                            ))}
                                                         </ul>
                                                     )}
                                                     <MiniPager
                                                         page={violationsSafePage}
-                                                        onPageChange={
-                                                            setViolationsPage
-                                                        }
-                                                        total={
-                                                            allViolations.length
-                                                        }
+                                                        onPageChange={setViolationsPage}
+                                                        total={allViolations.length}
                                                         label="violations"
                                                     />
                                                 </>
                                             ) : (
-                                                <EmptyState message="No violations in this range." />
+                                                <EmptyState message="No violations recorded in this period." />
                                             )}
                                         </section>
 
                                         <section className="lg:col-span-6 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
-                                            <SectionHeader note={`Number of tickets issued by each enforcer in the period, ranked from highest to lowest. ${allEnforcers.length} enforcer(s) with recorded activity.`}
-                                                icon={Users}
-                                                color={COLORS.navy}
-                                                action={
-                                                    <ViewToggle
-                                                        view={enforcersView}
-                                                        setView={
-                                                            setEnforcersView
-                                                        }
-                                                    />
-                                                }
-                                            >
-                                                Enforcer performance
-                                                <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
-                                                    (primary range)
-                                                </span>
-                                            </SectionHeader>
-                                            {allEnforcers.length ? (
-                                                <>
-                                                    {enforcersView === 'cards' ? (
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                            {shownEnforcers.map(
-                                                                (e, idx) => (
-                                                                    <article
-                                                                        key={
-                                                                            e.user_id ??
-                                                                            e.name ??
-                                                                            idx
-                                                                        }
-                                                                        className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
-                                                                    >
-                                                                        <div
-                                                                            className="h-2"
-                                                                            style={{
-                                                                                background:
-                                                                                    COLORS.amber,
-                                                                            }}
-                                                                        />
-                                                                        <div className="p-4">
-                                                                            <div className="flex items-center gap-3 mb-3">
-                                                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E9ECF2] text-sm font-bold text-[#16233F]">
-                                                                                    {getInitials(
-                                                                                        e.name,
-                                                                                    )}
-                                                                                </div>
-                                                                                <p className="font-['Oswald'] text-base leading-tight text-[#1F2937] truncate">
-                                                                                    {
-                                                                                        e.name
-                                                                                    }
-                                                                                </p>
-                                                                            </div>
-                                                                            <p className="text-2xl font-['Oswald'] font-semibold text-[#16233F] tabular-nums">
-                                                                                {
-                                                                                    e.tickets_count
-                                                                                }
-                                                                            </p>
-                                                                            <p className="text-xs text-[#64748B]">
-                                                                                tickets issued
-                                                                            </p>
-                                                                            <div className="print-bar mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#F1F5F9]">
-                                                                                <div
-                                                                                    className="h-full rounded-full bg-[#F0B429] transition-[width] duration-500"
-                                                                                    style={{
-                                                                                        width: `${Math.max(
-                                                                                            ((Number(
-                                                                                                e.tickets_count,
-                                                                                            ) ||
-                                                                                                0) /
-                                                                                                maxTopEnforcer) *
-                                                                                            100,
-                                                                                            2,
-                                                                                        )}%`,
-                                                                                    }}
-                                                                                />
-                                                                            </div>
-                                                                        </div>
-                                                                    </article>
-                                                                ),
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <ul className="space-y-4">
-                                                            {shownEnforcers.map(
-                                                                (e, idx) => (
-                                                                    <li
-                                                                        key={
-                                                                            e.user_id ??
-                                                                            e.name ??
-                                                                            idx
-                                                                        }
-                                                                        className="space-y-1.5"
-                                                                    >
-                                                                        <div className="flex items-center justify-between gap-3">
-                                                                            <div className="flex min-w-0 items-center gap-3">
-                                                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E9ECF2] text-xs font-bold text-[#16233F]">
-                                                                                    {getInitials(
-                                                                                        e.name,
-                                                                                    )}
-                                                                                </div>
-                                                                                <span className="truncate text-sm text-[#1F2937]">
-                                                                                    {
-                                                                                        e.name
-                                                                                    }
-                                                                                </span>
-                                                                            </div>
-                                                                            <span className="shrink-0 text-sm font-semibold text-[#16233F] tabular-nums">
-                                                                                {
-                                                                                    e.tickets_count
-                                                                                }{' '}
-                                                                                tickets
-                                                                            </span>
-                                                                        </div>
-                                                                        <div className="print-bar ml-11 h-1.5 overflow-hidden rounded-full bg-[#F1F5F9]">
-                                                                            <div
-                                                                                className="h-full rounded-full bg-[#F0B429] transition-[width] duration-500"
-                                                                                style={{
-                                                                                    width: `${Math.max(
-                                                                                        ((Number(
-                                                                                            e.tickets_count,
-                                                                                        ) ||
-                                                                                            0) /
-                                                                                            maxTopEnforcer) *
-                                                                                        100,
-                                                                                        2,
-                                                                                    )}%`,
-                                                                                }}
-                                                                            />
-                                                                        </div>
-                                                                    </li>
-                                                                ),
-                                                            )}
-                                                        </ul>
-                                                    )}
-                                                    <MiniPager
-                                                        page={enforcersSafePage}
-                                                        onPageChange={
-                                                            setEnforcersPage
-                                                        }
-                                                        total={
-                                                            allEnforcers.length
-                                                        }
-                                                        label="enforcers"
-                                                    />
-                                                </>
-                                            ) : (
-                                                <EmptyState message="No tickets issued in this range." />
-                                            )}
-                                        </section>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                                        <section className="lg:col-span-7 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
-                                            <SectionHeader note={`Violators with the highest number of tickets in the period, identified by name and license number. ${allViolators.length} violator(s) listed.`}
+                                            <SectionHeader note={`Violators who received the highest number of tickets during the period, ranked by ticket count. ${allViolators.length} violator(s) recorded.`}
                                                 icon={Users}
                                                 color={COLORS.red}
                                                 action={
                                                     <ViewToggle
                                                         view={violatorsView}
-                                                        setView={
-                                                            setViolatorsView
-                                                        }
+                                                        setView={setViolatorsView}
                                                     />
                                                 }
                                             >
-                                                Repeat violators
+                                                Top violators
                                                 <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
                                                     (primary range)
                                                 </span>
@@ -3123,533 +2789,247 @@ const Reports = () => {
                                                 <>
                                                     {violatorsView === 'cards' ? (
                                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                            {shownViolators.map(
-                                                                (v, idx) => (
-                                                                    <RankedCard
-                                                                        key={
-                                                                            v.violator_id ??
-                                                                            v.license ??
-                                                                            idx
-                                                                        }
-                                                                        rank={
-                                                                            (violatorsSafePage -
-                                                                                1) *
-                                                                            ITEMS_PER_PAGE +
-                                                                            idx +
-                                                                            1
-                                                                        }
-                                                                        primary={
-                                                                            [
-                                                                                v.firstname,
-                                                                                v.lastname,
-                                                                            ]
-                                                                                .filter(
-                                                                                    Boolean,
-                                                                                )
-                                                                                .join(
-                                                                                    ' ',
-                                                                                ) ||
-                                                                            'Unnamed violator'
-                                                                        }
-                                                                        secondary={
-                                                                            v.license
-                                                                        }
-                                                                        value={`${v.tickets_count} tickets`}
-                                                                        share={
-                                                                            ((Number(
-                                                                                v.tickets_count,
-                                                                            ) || 0) /
-                                                                                maxTopViolator) *
-                                                                            100
-                                                                        }
-                                                                        color={
-                                                                            COLORS.red
-                                                                        }
-                                                                        label="Total tickets"
-                                                                    />
-                                                                ),
-                                                            )}
+                                                            {shownViolators.map((v, idx) => (
+                                                                <RankedCard
+                                                                    key={`${v.license ?? idx}-${idx}`}
+                                                                    rank={
+                                                                        (violatorsSafePage - 1) * ITEMS_PER_PAGE +
+                                                                        idx +
+                                                                        1
+                                                                    }
+                                                                    primary={`${v.firstname ?? ''} ${v.lastname ?? ''}`.trim()}
+                                                                    secondary={v.license ? `License ${v.license}` : undefined}
+                                                                    value={`${v.tickets_count}×`}
+                                                                    share={
+                                                                        ((Number(v.tickets_count) || 0) /
+                                                                            maxTopViolator) *
+                                                                        100
+                                                                    }
+                                                                    color={COLORS.red}
+                                                                />
+                                                            ))}
                                                         </div>
                                                     ) : (
                                                         <ul className="space-y-4">
-                                                            {shownViolators.map(
-                                                                (v, idx) => (
-                                                                    <RankedRow
-                                                                        key={
-                                                                            v.violator_id ??
-                                                                            v.license ??
-                                                                            idx
-                                                                        }
-                                                                        rank={
-                                                                            (violatorsSafePage -
-                                                                                1) *
-                                                                            ITEMS_PER_PAGE +
-                                                                            idx +
-                                                                            1
-                                                                        }
-                                                                        primary={
-                                                                            [
-                                                                                v.firstname,
-                                                                                v.lastname,
-                                                                            ]
-                                                                                .filter(
-                                                                                    Boolean,
-                                                                                )
-                                                                                .join(
-                                                                                    ' ',
-                                                                                ) ||
-                                                                            'Unnamed violator'
-                                                                        }
-                                                                        secondary={
-                                                                            v.license
-                                                                        }
-                                                                        value={`${v.tickets_count} tickets`}
-                                                                        share={
-                                                                            ((Number(
-                                                                                v.tickets_count,
-                                                                            ) || 0) /
-                                                                                maxTopViolator) *
-                                                                            100
-                                                                        }
-                                                                        color={
-                                                                            COLORS.red
-                                                                        }
-                                                                    />
-                                                                ),
-                                                            )}
+                                                            {shownViolators.map((v, idx) => (
+                                                                <RankedRow
+                                                                    key={`${v.license ?? idx}-${idx}`}
+                                                                    rank={
+                                                                        (violatorsSafePage - 1) * ITEMS_PER_PAGE +
+                                                                        idx +
+                                                                        1
+                                                                    }
+                                                                    primary={`${v.firstname ?? ''} ${v.lastname ?? ''}`.trim()}
+                                                                    secondary={v.license ? `License ${v.license}` : undefined}
+                                                                    value={`${v.tickets_count}×`}
+                                                                    share={
+                                                                        ((Number(v.tickets_count) || 0) /
+                                                                            maxTopViolator) *
+                                                                        100
+                                                                    }
+                                                                    color={COLORS.red}
+                                                                />
+                                                            ))}
                                                         </ul>
                                                     )}
                                                     <MiniPager
                                                         page={violatorsSafePage}
-                                                        onPageChange={
-                                                            setViolatorsPage
-                                                        }
-                                                        total={
-                                                            allViolators.length
-                                                        }
+                                                        onPageChange={setViolatorsPage}
+                                                        total={allViolators.length}
                                                         label="violators"
                                                     />
                                                 </>
                                             ) : (
-                                                <EmptyState message="No repeat violators in this range." />
+                                                <EmptyState message="No violators recorded in this period." />
                                             )}
-                                        </section>
-
-                                        <section className="lg:col-span-5 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
-                                            <SectionHeader note="Count of tickets for each status in the primary range, showing how the issued tickets have progressed toward settlement."
-                                                icon={TrendingUp}
-                                                color={COLORS.green}
-                                            >
-                                                Status breakdown
-                                                <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
-                                                    (primary range)
-                                                </span>
-                                            </SectionHeader>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {Object.keys(STATUS_META).map(
-                                                    (key) => {
-                                                        const meta =
-                                                            STATUS_META[key];
-                                                        const count =
-                                                            Number(
-                                                                summary[
-                                                                `${key}_tickets`
-                                                                ],
-                                                            ) || 0;
-                                                        const share =
-                                                            weeklyStatusTotal >
-                                                                0
-                                                                ? Math.round(
-                                                                    (count /
-                                                                        weeklyStatusTotal) *
-                                                                    100,
-                                                                )
-                                                                : 0;
-                                                        const Icon = meta.Icon;
-                                                        return (
-                                                            <div
-                                                                key={key}
-                                                                className="rounded-lg p-4 text-center border border-[#E3E7EE]"
-                                                                style={{
-                                                                    backgroundColor:
-                                                                        meta.tint,
-                                                                }}
-                                                            >
-                                                                <Icon
-                                                                    className="w-6 h-6 mx-auto mb-2"
-                                                                    style={{
-                                                                        color: meta.color,
-                                                                    }}
-                                                                />
-                                                                <p
-                                                                    className="text-2xl font-['Oswald'] font-semibold tabular-nums"
-                                                                    style={{
-                                                                        color: meta.color,
-                                                                    }}
-                                                                >
-                                                                    <AnimatedValue
-                                                                        value={count}
-                                                                    />
-                                                                </p>
-                                                                <p className="text-[10px] text-[#64748B] mt-1">
-                                                                    {
-                                                                        meta.label
-                                                                    }{' '}
-                                                                    · {share}%
-                                                                </p>
-                                                            </div>
-                                                        );
-                                                    },
-                                                )}
-                                            </div>
                                         </section>
                                     </div>
 
-                                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                                        <section className="lg:col-span-5 bg-[#16233F] text-white rounded-xl p-6 print-card">
-                                            <SectionHeader note="Summary of the financial figures for the period, expressed in Philippine Peso (₱)."
-                                                icon={PhilippinePeso}
-                                                color={COLORS.amber}
-                                            >
-                                                Financial Summary
-                                            </SectionHeader>
-
-                                            <div className="flex justify-between text-sm mb-3">
-                                                <span className="text-[#C7CEDB]">
-                                                    Collection Rate
-                                                </span>
-                                                <span className="font-semibold text-[#F0B429] tabular-nums">
-                                                    {summary.collection_rate ||
-                                                        0}
-                                                    %
-                                                </span>
-                                            </div>
-                                            <div className="relative h-8 mb-6">
-                                                <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-[#0C1427]" />
-                                                <div
-                                                    className="absolute left-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-[#1E8449] transition-all duration-1000"
-                                                    style={{
-                                                        width: `${Math.min(
-                                                            toNumber(
-                                                                summary.collection_rate,
-                                                            ),
-                                                            100,
-                                                        )}%`,
-                                                    }}
+                                    <section className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
+                                        <SectionHeader note={`Tickets issued per enforcer during the period, ranked by count. ${allEnforcers.length} enforcer(s) recorded.`}
+                                            icon={Users}
+                                            color={COLORS.compare}
+                                            action={
+                                                <ViewToggle
+                                                    view={enforcersView}
+                                                    setView={setEnforcersView}
                                                 />
-                                                <div
-                                                    className="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 bg-[#F0B429] text-[#16233F] rounded-full p-1.5"
-                                                    style={{
-                                                        left: `calc(${Math.min(
-                                                            toNumber(
-                                                                summary.collection_rate,
-                                                            ),
-                                                            100,
-                                                        )}% - 14px)`,
-                                                    }}
-                                                >
-                                                    <Car className="w-4 h-4" />
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                                                    <p className="text-xs text-[#C7CEDB] mb-1">
-                                                        Collected Fines
-                                                    </p>
-                                                    <p className="text-2xl font-['Oswald'] font-semibold text-[#5FD28C] tabular-nums">
-                                                        <AnimatedValue
-                                                            value={
-                                                                data
-                                                                    ?.payments_summary
-                                                                    ?.net_collected
-                                                            }
-                                                            prefix="₱"
-                                                        />
-                                                    </p>
-                                                </div>
-                                                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                                                    <p className="text-xs text-[#C7CEDB] mb-1">
-                                                        Pending Collection
-                                                    </p>
-                                                    <p className="text-2xl font-['Oswald'] font-semibold text-[#F0B429] tabular-nums">
-                                                        <AnimatedValue
-                                                            value={pendingFines}
-                                                            prefix="₱"
-                                                        />
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex justify-between items-baseline mt-6 pt-4 border-t border-white/10">
-                                                <span className="text-[#C7CEDB] text-sm">
-                                                    Total Fines Issued
-                                                </span>
-                                                <span className="text-2xl font-['Oswald'] font-semibold tabular-nums">
-                                                    <AnimatedValue
-                                                        value={summary.total_fines}
-                                                        prefix="₱"
-                                                    />
-                                                </span>
-                                            </div>
-                                        </section>
-
-                                        <section className="lg:col-span-7 bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
-                                            <SectionHeader note="The most recent tickets in the period with their reference, violator, status, date of violation and fine amount. All entries are listed in this printed copy."
-                                                icon={Ticket}
-                                                color={COLORS.navy}
-                                                action={
-                                                    <span className="text-xs text-gray-400">
-                                                        {allRecentTickets.length}{' '}
-                                                        total
-                                                    </span>
-                                                }
-                                            >
-                                                Recent Tickets
-                                            </SectionHeader>
-
-                                            {allRecentTickets.length ? (
-                                                <>
-                                                    <ol className="relative ml-2 border-l-2 border-dashed border-[#CBD5E1] space-y-5">
-                                                        {shownRecentTickets.map(
-                                                            (t) => {
-                                                                const s =
-                                                                    STATUS_META[
-                                                                    t.status
-                                                                    ];
-                                                                const Icon =
-                                                                    s?.Icon;
-                                                                return (
-                                                                    <li
-                                                                        key={
-                                                                            t.ticket_id ??
-                                                                            t.ticket_number
-                                                                        }
-                                                                        className="relative pl-6 group"
-                                                                    >
-                                                                        <span
-                                                                            className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-[3px] border-white ring-2 transition-transform group-hover:scale-125"
-                                                                            style={{
-                                                                                background:
-                                                                                    s?.color ||
-                                                                                    '#CBD5E1',
-                                                                                '--tw-ring-color':
-                                                                                    s?.color ||
-                                                                                    '#CBD5E1',
-                                                                            }}
-                                                                        />
-                                                                        <div className="flex items-start justify-between gap-3 rounded-lg p-3 -my-1 group-hover:bg-[#F8F9FB] transition-colors">
-                                                                            <div className="min-w-0">
-                                                                                <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                                                    <span className="font-mono text-sm font-semibold text-gray-800">
-                                                                                        {
-                                                                                            t.ticket_number
-                                                                                        }
-                                                                                    </span>
-                                                                                    {s && (
-                                                                                        <span
-                                                                                            className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
-                                                                                            style={{
-                                                                                                background:
-                                                                                                    s.tint,
-                                                                                                color: s.color,
-                                                                                            }}
-                                                                                        >
-                                                                                            <Icon className="w-3.5 h-3.5" />
-                                                                                            {t.status?.toUpperCase()}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                <p className="text-sm text-gray-600">
-                                                                                    {
-                                                                                        t
-                                                                                            .violator
-                                                                                            ?.firstname
-                                                                                    }{' '}
-                                                                                    {
-                                                                                        t
-                                                                                            .violator
-                                                                                            ?.lastname
-                                                                                    }
-                                                                                </p>
-                                                                                <div className="flex items-center gap-4 mt-1 flex-wrap">
-                                                                                    <p className="text-xs text-gray-400">
-                                                                                        <Car className="w-3 h-3 inline mr-1" />
-                                                                                        {t
-                                                                                            .vehicle
-                                                                                            ?.platenumber ||
-                                                                                            '—'}
-                                                                                    </p>
-                                                                                    <p className="text-xs text-gray-400">
-                                                                                        <Calendar className="w-3 h-3 inline mr-1" />
-                                                                                        {t.violation_datetime
-                                                                                            ? new Date(
-                                                                                                t.violation_datetime,
-                                                                                            ).toLocaleDateString()
-                                                                                            : 'N/A'}
-                                                                                    </p>
-                                                                                </div>
-                                                                            </div>
-                                                                            <p className="text-lg font-['Oswald'] font-semibold text-[#C8202F] tabular-nums shrink-0">
-                                                                                ₱
-                                                                                {getTotalFineFromTicket(
-                                                                                    t,
-                                                                                ).toLocaleString()}
-                                                                            </p>
-                                                                        </div>
-                                                                    </li>
-                                                                );
-                                                            },
-                                                        )}
-                                                    </ol>
-                                                    <MiniPager
-                                                        page={
-                                                            recentTicketsSafePage
-                                                        }
-                                                        onPageChange={
-                                                            setRecentTicketsPage
-                                                        }
-                                                        total={
-                                                            allRecentTickets.length
-                                                        }
-                                                        label="tickets"
-                                                    />
-                                                </>
-                                            ) : (
-                                                <EmptyState message="No tickets in this range." />
-                                            )}
-                                        </section>
-                                    </div>
-
-                                    {data.payments_summary && (
-                                        <section className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card print-avoid-break">
-                                            <SectionHeader note="Detailed account of payments received in the primary range: total collected, refunds, net collected, and the number of payments and tickets covered."
-                                                icon={Receipt}
-                                                color={COLORS.green}
-                                            >
-                                                Payments collected
-                                                <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
-                                                    (primary range)
-                                                </span>
-                                            </SectionHeader>
-                                            <PaymentsSection
-                                                paymentsSummary={
-                                                    data.payments_summary
-                                                }
-                                            />
-                                        </section>
-                                    )}
-
-                                    {compare?.payments_summary && (
-                                        <section className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card print-avoid-break">
-                                            <SectionHeader note="The same payment figures for the compare range, provided for reference against the primary range."
-                                                icon={Scale}
-                                                color={COLORS.compare}
-                                            >
-                                                Payments collected{' '}
-                                                <span className="text-[#3B5170]">
-                                                    (compare range)
-                                                </span>
-                                            </SectionHeader>
-                                            <div className="mb-3 text-xs text-[#64748B]">
-                                                {formatShortDate(
-                                                    compareRange.start,
-                                                )}{' '}
-                                                –{' '}
-                                                {formatShortDate(
-                                                    compareRange.end,
+                                            }
+                                        >
+                                            Enforcer performance
+                                            <span className="text-xs font-normal text-[#64748B] font-['Inter'] ml-2">
+                                                (primary range)
+                                            </span>
+                                        </SectionHeader>
+                                        {allEnforcers.length ? (
+                                            <>
+                                                {enforcersView === 'cards' ? (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                                        {shownEnforcers.map((e, idx) => (
+                                                            <RankedCard
+                                                                key={`${e.name ?? idx}-${idx}`}
+                                                                rank={
+                                                                    (enforcersSafePage - 1) * ITEMS_PER_PAGE +
+                                                                    idx +
+                                                                    1
+                                                                }
+                                                                primary={e.name}
+                                                                value={`${e.tickets_count}×`}
+                                                                share={
+                                                                    ((Number(e.tickets_count) || 0) /
+                                                                        maxTopEnforcer) *
+                                                                    100
+                                                                }
+                                                                color={COLORS.compare}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <ul className="space-y-4">
+                                                        {shownEnforcers.map((e, idx) => (
+                                                            <RankedRow
+                                                                key={`${e.name ?? idx}-${idx}`}
+                                                                rank={
+                                                                    (enforcersSafePage - 1) * ITEMS_PER_PAGE +
+                                                                    idx +
+                                                                    1
+                                                                }
+                                                                primary={e.name}
+                                                                value={`${e.tickets_count}×`}
+                                                                share={
+                                                                    ((Number(e.tickets_count) || 0) /
+                                                                        maxTopEnforcer) *
+                                                                    100
+                                                                }
+                                                                color={COLORS.compare}
+                                                            />
+                                                        ))}
+                                                    </ul>
                                                 )}
-                                            </div>
-                                            <PaymentsSection
-                                                paymentsSummary={
-                                                    compare.payments_summary
-                                                }
-                                            />
-                                        </section>
-                                    )}
-
-                                    <section className="bg-[#16233F] rounded-xl grid grid-cols-2 md:grid-cols-4 md:divide-x divide-white/10 text-white print-card">
-                                        {[
-                                            {
-                                                icon: Ticket,
-                                                bg: '#E9ECF2',
-                                                fg: '#16233F',
-                                                value:
-                                                    summary.total_tickets || 0,
-                                                label: 'Total Violations',
-                                            },
-                                            {
-                                                icon: CheckCircle,
-                                                bg: '#E5F2EA',
-                                                fg: '#1E8449',
-                                                value:
-                                                    summary.paid_tickets || 0,
-                                                label: 'Resolved Cases',
-                                            },
-                                            {
-                                                icon: Clock,
-                                                bg: '#FBF1DC',
-                                                fg: '#92600A',
-                                                value:
-                                                    summary.issued_tickets || 0,
-                                                label: 'Active Cases',
-                                            },
-                                            {
-                                                icon: TrendingUp,
-                                                bg: '#EEF1F5',
-                                                fg: '#3B5170',
-                                                value:
-                                                    summary.collection_rate ||
-                                                    0,
-                                                suffix: '%',
-                                                label: 'Efficiency Rate',
-                                            },
-                                        ].map((q) => (
-                                            <div
-                                                key={q.label}
-                                                className="p-5 flex items-center gap-3"
-                                            >
-                                                <div
-                                                    className="p-2 rounded-lg"
-                                                    style={{ background: q.bg }}
-                                                >
-                                                    <q.icon
-                                                        className="w-5 h-5"
-                                                        style={{ color: q.fg }}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <p className="text-2xl font-['Oswald'] font-semibold tabular-nums">
-                                                        <AnimatedValue
-                                                            value={q.value}
-                                                            suffix={
-                                                                q.suffix || ''
-                                                            }
-                                                            integer={
-                                                                q.suffix !== '%'
-                                                            }
-                                                        />
-                                                    </p>
-                                                    <p className="text-xs text-[#C7CEDB]">
-                                                        {q.label}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))}
+                                                <MiniPager
+                                                    page={enforcersSafePage}
+                                                    onPageChange={setEnforcersPage}
+                                                    total={allEnforcers.length}
+                                                    label="enforcers"
+                                                />
+                                            </>
+                                        ) : (
+                                            <EmptyState message="No enforcer data recorded in this period." />
+                                        )}
                                     </section>
+
+                                    <section className="bg-white rounded-sm border border-[#16233F]/70 p-6 shadow-[3px_3px_0_0_rgba(22,35,63,0.08)] print-card">
+                                        <SectionHeader note={`The most recent tickets issued in the period. ${allRecentTickets.length} ticket(s) shown.`}
+                                            icon={Receipt}
+                                            color={COLORS.navy}
+                                            action={
+                                                allRecentTickets.length > 0 ? (
+                                                    <span className="text-xs text-[#64748B]">
+                                                        {allRecentTickets.length} total
+                                                    </span>
+                                                ) : null
+                                            }
+                                        >
+                                            Recent tickets
+                                        </SectionHeader>
+                                        {allRecentTickets.length ? (
+                                            <>
+                                                <div className="-mx-2 overflow-x-auto px-2">
+                                                    <table className="w-full min-w-[700px]">
+                                                        <thead className="border-b border-[#E9ECF2]">
+                                                            <tr>
+                                                                {[
+                                                                    'Ticket #',
+                                                                    'Violator',
+                                                                    'Plate',
+                                                                    'Location',
+                                                                    'Date',
+                                                                    'Status',
+                                                                    'Fine',
+                                                                ].map((h) => (
+                                                                    <th
+                                                                        key={h}
+                                                                        scope="col"
+                                                                        className={`py-3 font-['Inter'] text-xs font-semibold text-[#16233F] ${h === 'Fine' ? 'text-right' : 'text-left'}`}
+                                                                    >
+                                                                        {h}
+                                                                    </th>
+                                                                ))}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {shownRecentTickets.map((t) => {
+                                                                const meta =
+                                                                    STATUS_META[t.status] || {};
+                                                                return (
+                                                                    <tr
+                                                                        key={t.ticket_id}
+                                                                        className="border-b border-[#F3F4F6] transition-colors hover:bg-[#F8F9FA]"
+                                                                    >
+                                                                        <td className="py-2.5 font-mono text-xs text-[#16233F]">
+                                                                            {t.ticket_number || '—'}
+                                                                        </td>
+                                                                        <td className="py-2.5 text-sm text-[#1F2937]">
+                                                                            {t.violator
+                                                                                ? `${t.violator.firstname} ${t.violator.lastname}`
+                                                                                : '—'}
+                                                                        </td>
+                                                                        <td className="py-2.5 font-mono text-xs text-[#64748B]">
+                                                                            {t.vehicle?.platenumber || '—'}
+                                                                        </td>
+                                                                        <td className="py-2.5 text-xs text-[#64748B]">
+                                                                            {t.location || '—'}
+                                                                        </td>
+                                                                        <td className="py-2.5 text-xs text-[#64748B]">
+                                                                            {t.violation_datetime
+                                                                                ? new Date(t.violation_datetime).toLocaleDateString('en-PH', {
+                                                                                    month: 'short',
+                                                                                    day: 'numeric',
+                                                                                    year: 'numeric',
+                                                                                })
+                                                                                : '—'}
+                                                                        </td>
+                                                                        <td className="py-2.5">
+                                                                            {meta.label ? (
+                                                                                <span
+                                                                                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${meta.chip}`}
+                                                                                >
+                                                                                    {meta.label.toUpperCase()}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-xs text-[#64748B]">
+                                                                                    {t.status || '—'}
+                                                                                </span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="py-2.5 text-right text-sm font-semibold text-[#C8202F] tabular-nums">
+                                                                            {formatCurrency(getTotalFineFromTicket(t))}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <MiniPager
+                                                    page={recentTicketsSafePage}
+                                                    onPageChange={setRecentTicketsPage}
+                                                    total={allRecentTickets.length}
+                                                    label="tickets"
+                                                />
+                                            </>
+                                        ) : (
+                                            <EmptyState message="No recent tickets in this period." />
+                                        )}
+                                    </section>
+
+                                    <PaymentsSection paymentsSummary={data?.payments_summary} />
                                 </>
-                            ) : (
-                                !error && (
-                                    <EmptyState message="No data available for this period." />
-                                )
-                            )}
+                            ) : null}
                         </TabsContent>
                     </div>
                 </div>
             </Tabs>
-            <PrintNotes generatedAt={lastUpdated || new Date()} includeArchived={includeArchived} />
-            <PrintSignatures />
-            <PrintEndFooter refNo={makeRefNo(periodLabel, reportRange)} generatedAt={lastUpdated || new Date()} />
         </div>
     );
 };

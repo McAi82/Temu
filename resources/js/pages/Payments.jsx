@@ -22,7 +22,7 @@ import {
     getOverduePayments,
 } from '../services/api';
 import MissedDeadlineTab from '../components/payments/MissedDeadlineTab';
-import { DueBadge, TimeLeft, DUE_META } from '../components/payments/DueStatus';
+import { DueBadge, DUE_META } from '../components/payments/DueStatus';
 import { getDueState } from '../lib/dueTime';
 import {
     Search,
@@ -145,10 +145,13 @@ const formatMonthLabel = (iso) => {
     return d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
 };
 
-/* Shared grids */
+/* Shared grids.
+ * PENDING_ROW went from 10 → 9 columns (Paid column removed).
+ * Order: Ticket # | Violator | Plate | Violations | Total Fine | Balance | Due | Time Left | Status
+ */
 const PENDING_ROW =
     'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-    'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)] md:gap-4';
+    'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,1.2fr)_minmax(0,1fr)] md:gap-4';
 
 const HISTORY_ROW =
     'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
@@ -241,6 +244,66 @@ const copyText = async (text) => {
     } catch {
         return false;
     }
+};
+
+/**
+ * A ticket is "overdue" when its due date is in the past.
+ * Mirrors the server's `payment_due_at < now()` predicate, so the
+ * Unpaid tab and the Missed Deadline tab never overlap.
+ */
+const isOverdueTicket = (ticket) => {
+    if (!ticket) return false;
+    return getDueState(ticket).state === 'overdue';
+};
+
+/**
+ * Local, clamped Time Left.
+ *
+ * Why not the shared <TimeLeft> component? It's not in this file, and
+ * it renders negative strings for overdue tickets ("-3d 4h"). Rather
+ * than mutate the shared component (which other screens may depend on),
+ * this local render clamps to zero and matches the visual language
+ * (red for overdue, neutral otherwise).
+ */
+const TimeLeftClamped = ({ ticket }) => {
+    const due = getDueState(ticket);
+    const state = due?.state;
+
+    // Overdue → 0d 0h in red.
+    if (state === 'overdue') {
+        return (
+            <span className="text-xs font-medium text-[#C8202F] whitespace-nowrap">
+                <Mini>Time Left</Mini>0d 0h
+            </span>
+        );
+    }
+
+    // Everything else: derive hours remaining from the due date, clamped ≥ 0.
+    const dueAt = ticket?.payment_due_at ? new Date(ticket.payment_due_at).getTime() : NaN;
+    if (Number.isNaN(dueAt)) {
+        return (
+            <span className="text-xs text-[#64748B] whitespace-nowrap">
+                <Mini>Time Left</Mini>—
+            </span>
+        );
+    }
+
+    const msLeft = Math.max(0, dueAt - Date.now());
+    const totalHours = Math.floor(msLeft / 3_600_000);
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+
+    const cls =
+        state === 'due-soon'
+            ? 'text-[#92600A] font-medium'
+            : 'text-[#1F2937]';
+
+    return (
+        <span className={`text-xs whitespace-nowrap ${cls}`}>
+            <Mini>Time Left</Mini>
+            {days}d {hours}h
+        </span>
+    );
 };
 
 const Chip = ({ label, onClear }) => (
@@ -1312,8 +1375,16 @@ const Payments = () => {
         });
 
     /* ---------- Derived ---------- */
+    /**
+     * Unpaid = status "issued" AND not yet past the deadline.
+     * Overdue tickets are excluded here and shown exclusively in the
+     * Missed Deadline tab. This guarantees the two tabs never overlap.
+     */
     const pendingTickets = useMemo(() => {
         let list = getDataArray(pendingResponse);
+
+        // Hard split: exclude anything already past its due date.
+        list = list.filter((t) => !isOverdueTicket(t));
 
         if (pendingFilters.only_partial) {
             list = list.filter((t) => (parseFloat(t.total_paid) || 0) > 0);
@@ -1831,7 +1902,7 @@ const Payments = () => {
                             {overdueCount}
                         </span>
                     </TabsTrigger>
-                    </TabsList>
+                </TabsList>
 
                 {/* ==================== PENDING TAB ==================== */}
                 <TabsContent value="pending" className="mt-0">
@@ -2057,7 +2128,6 @@ const Payments = () => {
                                             'Plate',
                                             'Violations',
                                             'Total Fine',
-                                            'Paid',
                                             'Balance',
                                             'Due',
                                             'Time Left',
@@ -2162,13 +2232,6 @@ const Payments = () => {
                                                         {formatPeso(totalFine)}
                                                     </span>
 
-                                                    <span className="font-semibold text-[#1E8449] tabular-nums whitespace-nowrap">
-                                                        <Mini>Paid</Mini>
-                                                        {paid > 0
-                                                            ? formatPeso(paid)
-                                                            : '—'}
-                                                    </span>
-
                                                     <span className="font-bold text-[#C2541F] tabular-nums whitespace-nowrap">
                                                         <Mini>Balance</Mini>
                                                         {formatPeso(balance)}
@@ -2176,7 +2239,7 @@ const Payments = () => {
 
                                                     <DueBadge ticket={ticket} />
 
-                                                    <TimeLeft ticket={ticket} />
+                                                    <TimeLeftClamped ticket={ticket} />
 
                                                     <span className="justify-self-start">
                                                         {ticketStatusBadge(
@@ -2519,7 +2582,7 @@ const Payments = () => {
                 </TabsContent>
             </Tabs>
 
-            {/* ── NEW: Plate-search payment modal ── */}
+            {/* ── Plate-search payment modal ── */}
             <PlateSearchPaymentModal
                 open={isPaymentModalOpen}
                 onClose={() => setIsPaymentModalOpen(false)}
@@ -2529,7 +2592,7 @@ const Payments = () => {
                 }}
             />
 
-            {/* ── History / View dialog (unchanged) ── */}
+            {/* ── History / View dialog ── */}
             <Dialog
                 open={isHistoryDialogOpen}
                 onOpenChange={(open) => {

@@ -225,6 +225,7 @@ class ReportController extends Controller
         $startStr = $start->toDateTimeString();
         $endStr   = $end->toDateTimeString();
 
+        // ── Active set (respects the include_archived flag) ─────────────
         $ticketQuery = Ticket::with(['violator', 'vehicle', 'enforcer', 'violations.violationType'])
             ->whereBetween('created_at', [$startStr, $endStr]);
 
@@ -232,19 +233,28 @@ class ReportController extends Controller
             $ticketQuery->active();
         }
 
-        $tickets = $ticketQuery->get();
+        $tickets   = $ticketQuery->get();
         $ticketIds = $tickets->pluck('ticket_id');
 
-        $totalTickets     = $tickets->count();
-        $totalViolations  = TicketViolation::whereIn('ticket_id', $ticketIds)->count();
-        $totalFines       = TicketViolation::whereIn('ticket_id', $ticketIds)->sum('fine_amount');
-        $paidTickets      = $tickets->where('status', 'paid')->count();
-        $issuedTickets    = $tickets->where('status', 'issued')->count();
-        $dismissedTickets = $tickets->where('status', 'dismissed')->count();
+        $totalTickets    = $tickets->count();
+        $totalViolations = TicketViolation::whereIn('ticket_id', $ticketIds)->count();
+        $totalFines      = TicketViolation::whereIn('ticket_id', $ticketIds)->sum('fine_amount');
+        $paidTickets     = $tickets->where('status', 'paid')->count();
+        $issuedTickets   = $tickets->where('status', 'issued')->count();
 
-        $daysInRange = max(1, $start->diffInDays($end) + 1);
+        // ── Archived set (always counted in full) ───────────────────────
+        // The "how many are archived" question is a fact about the data,
+        // independent of the current view. We deliberately ignore
+        // $includeArchived here: if the user filters them out of the list,
+        // the count still tells them how many exist in the period.
+        $archivedTickets = Ticket::query()
+            ->whereBetween('created_at', [$startStr, $endStr])
+            ->where('is_archived', true)
+            ->count();
+
+        $daysInRange         = max(1, $start->diffInDays($end) + 1);
         $averageDailyTickets = round($totalTickets / $daysInRange, 2);
-        $collectionRate = $totalTickets > 0 ? round(($paidTickets / $totalTickets) * 100, 2) : 0;
+        $collectionRate      = $totalTickets > 0 ? round(($paidTickets / $totalTickets) * 100, 2) : 0;
 
         $dailyBreakdown = [];
         $cursor = $start->copy()->startOfDay();
@@ -319,7 +329,7 @@ class ReportController extends Controller
                 'total_fines'           => (float) $totalFines,
                 'paid_tickets'          => $paidTickets,
                 'issued_tickets'        => $issuedTickets,
-                'dismissed_tickets'     => $dismissedTickets,
+                'archived_tickets'      => $archivedTickets,
                 'average_daily_tickets' => $averageDailyTickets,
                 'collection_rate'       => $collectionRate,
             ],
@@ -340,7 +350,7 @@ class ReportController extends Controller
             'total_fines',
             'paid_tickets',
             'issued_tickets',
-            'dismissed_tickets',
+            'archived_tickets',
             'average_daily_tickets',
             'collection_rate',
         ];
