@@ -12,16 +12,16 @@ use Illuminate\Support\Facades\Log;
  * Same-pose cosine similarity on L2-normalised 192-d embeddings.
  * Thresholds live in config/face.php (override with FACE_DUP_* in .env).
  *
- * A registration is a duplicate only when ENOUGH POSES agree (default: all 3).
- * Each pose (front / left / right) is compared to the same pose of the other
- * account and must reach its own threshold:
- *   level 'block'  : at least min_poses poses >= their block threshold -> reject
- *   level 'review' : at least min_poses poses >= (block - margin)      -> allow + warn
- * One strong pose on its own (e.g. only the front matching) never blocks.
+ * DECISION RULE (average based):
+ *   Each pose (front / left / right) is compared to the same pose of the other
+ *   account. The AVERAGE of those pose scores is the account's similarity.
+ *     level 'block'  : average >= block   (default 0.80) -> reject
+ *     level 'review' : average >= review  (default 0.75) -> allow + warn
+ *     otherwise      : registered normally
  *
  * ASSUMPTIONS (adjust to your schema):
  *  - Model App\Models\FaceRegistration, one row per user
- *  - Columns: user_id, front_encoding, left_encoding, right_encoding
+ *  - Columns: user_id, front_encoding, left_encoding, right_encoding, is_active
  *    (JSON arrays of 192 floats; array-cast or raw JSON string both work)
  */
 class FaceDuplicateService
@@ -41,13 +41,11 @@ class FaceDuplicateService
      */
     public function findDuplicate(array $encodings, int|string $excludeUserId): ?array
     {
-        $block = (float) config('face.duplicate.block', 0.72);
-        $review = (float) config('face.duplicate.review', 0.65);
+        $block = (float) config('face.duplicate.block', 0.80);
+        $review = (float) config('face.duplicate.review', 0.75);
         $minPoses = max(1, min(count(self::POSES), (int) config('face.duplicate.min_poses', 3)));
-        $margin = max(0.0, $block - $review);
 
-        // Per-pose block thresholds. Left/right turns usually score lower than
-        // the front, so they can be tuned separately (default: same as front).
+        // Per-pose thresholds are used ONLY for the "poses_passed" log value.
         $poseBlock = [
             'front' => $block,
             'left'  => (float) config('face.duplicate.block_left', $block),
@@ -83,27 +81,23 @@ class FaceDuplicateService
                 continue;
             }
 
-            // How many poses agree with this account?
+            // Average over all compared poses = the account's similarity.
+            $rank = round(array_sum($sims) / count($sims), 4);
+
+            // Informational only (not used for the decision).
             $passBlock = 0;
-            $passReview = 0;
             foreach ($sims as $pose => $sim) {
                 if ($sim >= $poseBlock[$pose]) {
                     $passBlock++;
                 }
-                if ($sim >= $poseBlock[$pose] - $margin) {
-                    $passReview++;
-                }
             }
 
             $level = null;
-            if ($passBlock >= $minPoses) {
+            if ($rank >= $block) {
                 $level = 'block';
-            } elseif ($passReview >= $minPoses) {
+            } elseif ($rank >= $review) {
                 $level = 'review';
             }
-
-            // Rank by the average over all compared poses.
-            $rank = round(array_sum($sims) / count($sims), 4);
 
             $candidates[] = [
                 'user_id' => $reg->user_id,
@@ -134,9 +128,8 @@ class FaceDuplicateService
         Log::info('face-duplicate check', [
             'checking_user_id' => $excludeUserId,
             'compared' => count($candidates),
-            'min_poses' => $minPoses,
-            'pose_thresholds' => $poseBlock,
-            'review_margin' => $margin,
+            'block_threshold' => $block,
+            'review_threshold' => $review,
             'top' => array_slice($candidates, 0, 3),
         ]);
 

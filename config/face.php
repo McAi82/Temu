@@ -1,18 +1,24 @@
 <?php
 return [
     'duplicate' => [
-        // How many of the 3 poses must reach 80% to block.
-        // 3 = all poses must match, 2 = any two poses.
-        'min_poses' => (int) env('FACE_DUP_MIN_POSES', 2),
+        // Only used to require a minimum number of captured poses before a
+        // check is run (the block decision itself uses the average score).
+        'min_poses' => (int) env('FACE_DUP_MIN_POSES', 3),
 
-        // Block at 0.80 and above, for every pose.
-        'block'       => (float) env('FACE_DUP_BLOCK', 0.83),
-        'block_left'  => (float) env('FACE_DUP_BLOCK_LEFT', 0.80),
-        'block_right' => (float) env('FACE_DUP_BLOCK_RIGHT', 0.83),
+        // BLOCK when the average similarity of the 3 poses is >= this value.
+        // 0.80 and above = blocked, 0.7999 and below = registered.
+        'block' => (float) env('FACE_DUP_BLOCK', 0.80),
 
-        // Same as block = no separate "review" band.
-        'review' => (float) env('FACE_DUP_REVIEW', 0.83),
+        // Per-pose values are only used for the "poses_passed" log value.
+        'block_left' => (float) env('FACE_DUP_BLOCK_LEFT', 0.80),
+        'block_right' => (float) env('FACE_DUP_BLOCK_RIGHT', 0.80),
 
-        'debug' => (bool) env('FACE_DUP_DEBUG', false),
+        // "review" band: average >= review but < block is registered,
+        // and logged as a warning for admin review.
+        'review' => (float) env('FACE_DUP_REVIEW', 0.75),
+
+        // While tuning: also return the closest account's scores to the app
+        // in the check-duplicate response (key "debug"). Keep false in production.
+        'debug' => (bool) env('FACE_DUP_DEBUG', true),
     ],
 ];
