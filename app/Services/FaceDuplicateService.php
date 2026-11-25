@@ -136,7 +136,7 @@ class FaceDuplicateService
     /* ------------------------------------------------------------------ */
 
     /**
-     * @return array{block_front:float,block_pose:float,block_min_poses:int,review_front:float,review_pose:float,review_min_poses:int}
+     * @return array{block_front:float,block_pose:float,block_min_poses:int,review_front:float,review_pose:float,review_min_poses:int,cross_pose:bool}
      */
     public function thresholds(): array
     {
@@ -149,6 +149,7 @@ class FaceDuplicateService
             'review_front'     => (float) config('face.duplicate.review_front', 0.70),
             'review_pose'      => (float) config('face.duplicate.review_pose', 0.70),
             'review_min_poses' => max(1, min($max, (int) config('face.duplicate.review_min_poses', 1))),
+            'cross_pose'       => (bool) config('face.duplicate.cross_pose', false),
         ];
     }
 
@@ -189,9 +190,14 @@ class FaceDuplicateService
     /**
      * Compare live poses against a candidate's stored poses.
      *
-     * For every live pose we keep the BEST cosine over all stored poses, so a
-     * head turn that differs a little between the two enrolments does not drag
-     * a true duplicate below the threshold.
+     * Default (cross_pose = false): each live pose is compared ONLY with the
+     * same stored pose (front-front, left-left, right-right).
+     *
+     * cross_pose = true: each live pose keeps the BEST cosine over all stored
+     * poses. That tolerates a different head turn between two enrolments, but
+     * taking a max over several comparisons also inflates the score of two
+     * DIFFERENT people, so only enable it once capture quality is good and
+     * you have calibrated the thresholds with it on.
      *
      * @param  array<string,float[]> $live    normalised
      * @param  array<string,float[]> $stored  normalised
@@ -209,6 +215,9 @@ class FaceDuplicateService
         $bestFrom = [];
         foreach ($live as $lp => $lv) {
             foreach ($stored as $sp => $sv) {
+                if (!$cfg['cross_pose'] && $sp !== $lp) {
+                    continue;
+                }
                 $s = $this->cosine($lv, $sv);
                 if ($sp === $lp) {
                     $same[$lp] = round($s, 4);
@@ -218,6 +227,9 @@ class FaceDuplicateService
                     $bestFrom[$lp] = $sp;
                 }
             }
+        }
+        if (!$best) {
+            return null;
         }
         foreach ($best as $p => $s) {
             $best[$p] = round($s, 4);

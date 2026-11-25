@@ -91,7 +91,7 @@ class FaceCalibrate extends Command
         sort($means);
 
         $this->newLine();
-        $this->line('<options=bold>Impostor score percentiles</options>');
+        $this->line('<options=bold>Impostor score percentiles</>');
         $rowsOut = [];
         foreach ([50, 90, 99, 99.9, 100] as $p) {
             $rowsOut[] = [
@@ -118,7 +118,7 @@ class FaceCalibrate extends Command
         usort($pairs, fn ($a, $b) => $b[0] <=> $a[0]);
         $top = max(1, (int) $this->option('top'));
         $this->newLine();
-        $this->line("<options=bold>Closest {$top} pairs</options> (check the photos: these may be real duplicate accounts)");
+        $this->line("<options=bold>Closest {$top} pairs</> (check the photos: these may be real duplicate accounts)");
         $this->table(
             ['rank', 'user A', 'user B', 'front best', 'mean of best', 'level now'],
             array_map(

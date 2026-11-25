@@ -7,10 +7,9 @@ return [
         /*
          * How a candidate account is scored
          * ---------------------------------
-         * Each live pose (front/left/right) is compared against ALL stored
-         * poses of the candidate and the BEST similarity is kept. That makes
-         * the check robust to the user turning their head a bit more or less
-         * than the first time. Then:
+         * Each live pose (front/left/right) is compared with the SAME stored
+         * pose of the candidate (or, with cross_pose on, the best of all stored
+         * poses). Then:
          *
          *   BLOCK  when  front best  >= block_front
          *          OR    at least block_min_poses poses have best >= block_pose
@@ -30,6 +29,13 @@ return [
         'review_front'     => (float) env('FACE_DUP_REVIEW_FRONT', 0.70),
         'review_pose'      => (float) env('FACE_DUP_REVIEW_POSE', 0.70),
         'review_min_poses' => (int) env('FACE_DUP_REVIEW_MIN_POSES', 1),
+
+        // false (default): compare front-front, left-left, right-right only.
+        // true: each live pose uses its best match over ALL stored poses.
+        // A max over several comparisons inflates the score of different
+        // people, so keep this off until captures are consistent and you have
+        // calibrated with it on.
+        'cross_pose' => (bool) env('FACE_DUP_CROSS_POSE', false),
 
         // What to do with a "review" match:
         //   'flag'  = register the face, log it and notify admins
