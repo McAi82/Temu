@@ -563,15 +563,20 @@ class TicketController extends Controller
         return response()->json($tickets);
     }
 
+    /* ==================================================================
+     |  STATISTICS — dashboard payload (single call for the whole page)
+     ================================================================== */
+
     public function statistics()
     {
         try {
             $base = Ticket::query()->active();
 
-            $totalTickets     = (clone $base)->count();
-            $paidTickets      = (clone $base)->where('status', 'paid')->count();
-            $issuedTickets    = (clone $base)->where('status', 'issued')->count();
-            $archivedTickets  = Ticket::query()->archived()->count();
+            // ── Core counts ────────────────────────────────────────────
+            $totalTickets    = (clone $base)->count();
+            $paidTickets     = (clone $base)->where('status', 'paid')->count();
+            $issuedTickets   = (clone $base)->where('status', 'issued')->count();
+            $archivedTickets = Ticket::query()->archived()->count();
 
             $overdueTickets = (clone $base)
                 ->where('status', 'issued')
@@ -600,6 +605,7 @@ class TicketController extends Controller
                 ? round(($collectedFines / $totalFines) * 100, 2)
                 : 0;
 
+            // ── Monthly trend ──────────────────────────────────────────
             $monthlyData = DB::select("
                 SELECT
                     DATE_FORMAT(created_at, '%b %Y') as name,
@@ -613,6 +619,25 @@ class TicketController extends Controller
             ");
             $monthlyData = array_reverse($monthlyData);
 
+            // ── Insights (computed server-side) ───────────────────────
+            $ticketsByDay  = $this->buildTicketsByDay();
+            $topViolations = $this->buildTopViolations(90, 3);
+            $trend         = $this->buildTrendInsight($monthlyData);
+            $status        = $this->buildStatusInsight(
+                (int) $paidTickets,
+                (int) $issuedTickets,
+                (int) $archivedTickets
+            );
+
+            // Court count — same predicate as PaymentController::overdue(),
+            // but a bare COUNT (no pagination, no eager loading, no writes).
+            $courtTotal = Ticket::query()
+                ->where('status', 'issued')
+                ->where('is_archived', false)
+                ->whereNotNull('payment_due_at')
+                ->where('payment_due_at', '<', now())
+                ->count();
+
             return response()->json([
                 'total_tickets'     => (int) $totalTickets,
                 'paid_tickets'      => (int) $paidTickets,
@@ -620,13 +645,19 @@ class TicketController extends Controller
                 'archived_tickets'  => (int) $archivedTickets,
                 'overdue_tickets'   => (int) $overdueTickets,
                 'due_soon_tickets'  => (int) $dueSoonTickets,
+                'court_total'       => (int) $courtTotal,
                 'total_fines'       => (float) $totalFines,
                 'collected_fines'   => (float) $collectedFines,
                 'collection_rate'   => (float) $collectionRate,
                 'tickets_by_month'  => $monthlyData,
+                'tickets_by_day'    => $ticketsByDay,
+                'top_violations'    => $topViolations,
+                'trend'             => $trend,
+                'status'            => $status,
             ]);
         } catch (\Exception $e) {
             Log::error('Statistics error: ' . $e->getMessage());
+
             return response()->json([
                 'total_tickets'     => Ticket::active()->count(),
                 'paid_tickets'      => Ticket::active()->where('status', 'paid')->count(),
@@ -634,12 +665,143 @@ class TicketController extends Controller
                 'archived_tickets'  => Ticket::archived()->count(),
                 'overdue_tickets'   => 0,
                 'due_soon_tickets'  => 0,
+                'court_total'       => 0,
                 'total_fines'       => 0,
                 'collected_fines'   => 0,
                 'collection_rate'   => 0,
                 'tickets_by_month'  => [],
+                'tickets_by_day'    => [],
+                'top_violations'    => [],
+                'trend'             => null,
+                'status'            => null,
             ]);
         }
+    }
+
+    /**
+     * Last 7 calendar days, oldest → today, zero-filled.
+     * Aggregates in SQL so we never pull every ticket row into PHP.
+     */
+    private function buildTicketsByDay(): array
+    {
+        $start = now()->subDays(6)->startOfDay();
+
+        $rows = Ticket::query()
+            ->selectRaw('DATE(created_at) as d, COUNT(*) as c')
+            ->where('created_at', '>=', $start)
+            ->where('is_archived', false)
+            ->groupBy('d')
+            ->orderBy('d')
+            ->pluck('c', 'd');
+
+        $out = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $day = now()->subDays($i);
+            $key = $day->toDateString();
+            $out[] = [
+                'date'    => $key,
+                'label'   => $day->format('D'),
+                'tickets' => (int) ($rows[$key] ?? 0),
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Top-N violation types by ticket count over the last $days days.
+     * Excludes archived tickets so totals match the rest of the payload.
+     */
+    private function buildTopViolations(int $days = 90, int $limit = 3): array
+    {
+        try {
+            return DB::table('ticket_violations as tv')
+                ->join('violation_types as vt', 'vt.violation_id', '=', 'tv.violation_id')
+                ->join('tickets as t', 't.ticket_id', '=', 'tv.ticket_id')
+                ->where('t.is_archived', false)
+                ->where('t.created_at', '>=', now()->subDays($days))
+                ->select('vt.violation_name as name', DB::raw('COUNT(*) as count'))
+                ->groupBy('vt.violation_name')
+                ->orderByDesc('count')
+                ->limit($limit)
+                ->get()
+                ->map(fn ($r) => [
+                    'name'  => (string) $r->name,
+                    'count' => (int) $r->count,
+                ])
+                ->all();
+        } catch (\Throwable $e) {
+            Log::warning('Top violations query failed: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Trend insight from monthly buckets. Null when < 2 buckets.
+     */
+    private function buildTrendInsight(array $monthly): ?array
+    {
+        if (count($monthly) < 2) {
+            return null;
+        }
+
+        $latest = (array) end($monthly);
+        $prev   = (array) $monthly[count($monthly) - 2];
+
+        $latestCount = (int) ($latest['tickets'] ?? 0);
+        $prevCount   = (int) ($prev['tickets'] ?? 0);
+        $delta       = $latestCount - $prevCount;
+
+        $peak = array_reduce($monthly, function ($best, $row) {
+            $row = (array) $row;
+            return ((int) ($row['tickets'] ?? 0)) > ((int) ($best['tickets'] ?? 0))
+                ? $row
+                : $best;
+        }, (array) $monthly[0]);
+
+        $total = array_sum(array_map(fn ($r) => (int) ((array) $r)['tickets'], $monthly));
+        $avg   = round($total / count($monthly), 1);
+
+        return [
+            'latest'    => ['name' => $latest['name'] ?? '', 'tickets' => $latestCount],
+            'previous'  => ['name' => $prev['name'] ?? '',   'tickets' => $prevCount],
+            'delta'     => $delta,
+            'direction' => $delta > 0 ? 'up' : ($delta < 0 ? 'down' : 'flat'),
+            'peak'      => ['name' => $peak['name'] ?? '',   'tickets' => (int) ($peak['tickets'] ?? 0)],
+            'average'   => $avg,
+            'buckets'   => count($monthly),
+        ];
+    }
+
+    /**
+     * Status insight: percentages + dominant label. Null-dominant when total = 0.
+     */
+    private function buildStatusInsight(int $paid, int $issued, int $archived): array
+    {
+        $total = $paid + $issued + $archived;
+
+        $paidPct = $total ? (int) round($paid / $total * 100) : 0;
+        $openPct = $total ? (int) round(($issued + $archived) / $total * 100) : 0;
+
+        $dominant = null;
+        if ($total > 0) {
+            $buckets = [
+                ['key' => 'paid',     'label' => 'Paid',     'value' => $paid],
+                ['key' => 'issued',   'label' => 'Issued',   'value' => $issued],
+                ['key' => 'archived', 'label' => 'Archived', 'value' => $archived],
+            ];
+            usort($buckets, fn ($a, $b) => $b['value'] <=> $a['value']);
+            $dominant = $buckets[0];
+        }
+
+        return [
+            'total'    => $total,
+            'paid'     => $paid,
+            'issued'   => $issued,
+            'archived' => $archived,
+            'paid_pct' => $paidPct,
+            'open_pct' => $openPct,
+            'dominant' => $dominant,
+        ];
     }
 
     public function publicShowHtml($ticketNumber)
@@ -661,96 +823,94 @@ class TicketController extends Controller
     }
 
     /**
- * Fire "due tomorrow" and "overdue" notifications for any tickets
- * the caller can currently see. Idempotent: at most one notification
- * of each type per ticket per calendar day.
- */
-private function fireDueNotifications($tickets): void
-{
-    if (empty($tickets) || $tickets->isEmpty()) {
-        return;
-    }
-
-    $ticketIds = $tickets->pluck('ticket_id')->all();
-
-    // Which of these tickets already got a due-soon / overdue
-    // notification today?
-    $already = Notification::query()
-        ->whereIn('type', [
-            Notification::TYPE_TICKET_DUE_SOON,
-            Notification::TYPE_TICKET_OVERDUE,
-        ])
-        ->where('related_entity_type', 'ticket')
-        ->whereIn('related_entity_id', $ticketIds)
-        ->whereDate('created_at', now()->toDateString())
-        ->get(['type', 'related_entity_id'])
-        ->groupBy('type')
-        ->map(fn($rows) => $rows->pluck('related_entity_id')->all());
-
-    $dueSoonAlready = $already[Notification::TYPE_TICKET_DUE_SOON] ?? [];
-    $overdueAlready = $already[Notification::TYPE_TICKET_OVERDUE] ?? [];
-
-    foreach ($tickets as $ticket) {
-        if ($ticket->status !== 'issued' || !$ticket->payment_due_at) {
-            continue;
+     * Fire "due tomorrow" and "overdue" notifications for any tickets
+     * the caller can currently see. Idempotent: at most one notification
+     * of each type per ticket per calendar day.
+     */
+    private function fireDueNotifications($tickets): void
+    {
+        if (empty($tickets) || $tickets->isEmpty()) {
+            return;
         }
 
-        $violatorName = $ticket->violator
-            ? trim("{$ticket->violator->firstname} {$ticket->violator->lastname}")
-            : 'Unknown';
-        $due = $ticket->payment_due_at->format('M d, Y');
-        $days = $ticket->days_until_due;
+        $ticketIds = $tickets->pluck('ticket_id')->all();
 
-        // ── Overdue ─────────────────────────────────────────────
-        if ($ticket->payment_due_at->isPast() && !in_array($ticket->ticket_id, $overdueAlready, true)) {
-            try {
-                if ($ticket->enforcer_id) {
-                    NotificationService::notifyUser(
-                        $ticket->enforcer_id,
+        $already = Notification::query()
+            ->whereIn('type', [
+                Notification::TYPE_TICKET_DUE_SOON,
+                Notification::TYPE_TICKET_OVERDUE,
+            ])
+            ->where('related_entity_type', 'ticket')
+            ->whereIn('related_entity_id', $ticketIds)
+            ->whereDate('created_at', now()->toDateString())
+            ->get(['type', 'related_entity_id'])
+            ->groupBy('type')
+            ->map(fn ($rows) => $rows->pluck('related_entity_id')->all());
+
+        $dueSoonAlready = $already[Notification::TYPE_TICKET_DUE_SOON] ?? [];
+        $overdueAlready = $already[Notification::TYPE_TICKET_OVERDUE] ?? [];
+
+        foreach ($tickets as $ticket) {
+            if ($ticket->status !== 'issued' || !$ticket->payment_due_at) {
+                continue;
+            }
+
+            $violatorName = $ticket->violator
+                ? trim("{$ticket->violator->firstname} {$ticket->violator->lastname}")
+                : 'Unknown';
+            $due = $ticket->payment_due_at->format('M d, Y');
+            $days = $ticket->days_until_due;
+
+            // ── Overdue ─────────────────────────────────────────────
+            if ($ticket->payment_due_at->isPast() && !in_array($ticket->ticket_id, $overdueAlready, true)) {
+                try {
+                    if ($ticket->enforcer_id) {
+                        NotificationService::notifyUser(
+                            $ticket->enforcer_id,
+                            'Ticket Overdue',
+                            "Ticket {$ticket->ticket_number} ({$violatorName}) was due on {$due} and is now overdue.",
+                            Notification::TYPE_TICKET_OVERDUE,
+                            'ticket',
+                            $ticket->ticket_id
+                        );
+                    }
+                    NotificationService::notifyAdminStaff(
                         'Ticket Overdue',
-                        "Ticket {$ticket->ticket_number} ({$violatorName}) was due on {$due} and is now overdue.",
+                        "{$ticket->ticket_number} ({$violatorName}) was due on {$due} and is now overdue.",
                         Notification::TYPE_TICKET_OVERDUE,
                         'ticket',
                         $ticket->ticket_id
                     );
+                } catch (\Throwable $e) {
+                    Log::warning("Overdue notification failed for ticket {$ticket->ticket_id}: " . $e->getMessage());
                 }
-                NotificationService::notifyAdminStaff(
-                    'Ticket Overdue',
-                    "{$ticket->ticket_number} ({$violatorName}) was due on {$due} and is now overdue.",
-                    Notification::TYPE_TICKET_OVERDUE,
-                    'ticket',
-                    $ticket->ticket_id
-                );
-            } catch (\Throwable $e) {
-                Log::warning("Overdue notification failed for ticket {$ticket->ticket_id}: " . $e->getMessage());
+                continue;
             }
-            continue;
-        }
 
-        // ── Due tomorrow (1 day left) ──────────────────────────
-        if ($days === 1 && !in_array($ticket->ticket_id, $dueSoonAlready, true)) {
-            try {
-                if ($ticket->enforcer_id) {
-                    NotificationService::notifyUser(
-                        $ticket->enforcer_id,
-                        'Payment Due Tomorrow',
-                        "Ticket {$ticket->ticket_number} ({$violatorName}) is due tomorrow ({$due}).",
+            // ── Due tomorrow (1 day left) ──────────────────────────
+            if ($days === 1 && !in_array($ticket->ticket_id, $dueSoonAlready, true)) {
+                try {
+                    if ($ticket->enforcer_id) {
+                        NotificationService::notifyUser(
+                            $ticket->enforcer_id,
+                            'Payment Due Tomorrow',
+                            "Ticket {$ticket->ticket_number} ({$violatorName}) is due tomorrow ({$due}).",
+                            Notification::TYPE_TICKET_DUE_SOON,
+                            'ticket',
+                            $ticket->ticket_id
+                        );
+                    }
+                    NotificationService::notifyAdminStaff(
+                        'Ticket Due Tomorrow',
+                        "{$ticket->ticket_number} ({$violatorName}) is due tomorrow ({$due}).",
                         Notification::TYPE_TICKET_DUE_SOON,
                         'ticket',
                         $ticket->ticket_id
                     );
+                } catch (\Throwable $e) {
+                    Log::warning("Due-soon notification failed for ticket {$ticket->ticket_id}: " . $e->getMessage());
                 }
-                NotificationService::notifyAdminStaff(
-                    'Ticket Due Tomorrow',
-                    "{$ticket->ticket_number} ({$violatorName}) is due tomorrow ({$due}).",
-                    Notification::TYPE_TICKET_DUE_SOON,
-                    'ticket',
-                    $ticket->ticket_id
-                );
-            } catch (\Throwable $e) {
-                Log::warning("Due-soon notification failed for ticket {$ticket->ticket_id}: " . $e->getMessage());
             }
         }
     }
-}
 }

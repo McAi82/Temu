@@ -4,12 +4,13 @@ import { getTicketStatistics, getTickets, getOverduePayments } from "../services
 import {
   Ticket, CheckCircle, Clock, XCircle, TrendingUp, RefreshCw,
   Users, Car, Calendar, PhilippinePeso, Gavel, ArrowRight,
-  TrendingDown, Minus, AlertTriangle, Check,
+  TrendingDown, Minus, Check,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
+  BarChart, Bar,
 } from "recharts";
 
 const STATUS = {
@@ -40,6 +41,7 @@ const Count = ({ value, prefix = "", suffix = "" }) => {
   return <>{prefix}{(Number.isInteger(raw) ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString()}{suffix}</>;
 };
 
+// Recency of an in-court row: uses the first date field present, falling back to the id.
 const courtSortKey = (r) => {
   const t = r?.ticket || r || {};
   const raw = r?.due_date ?? r?.deadline ?? t.due_date ?? t.deadline ?? t.violation_datetime ?? t.created_at ?? r?.created_at;
@@ -48,90 +50,41 @@ const courtSortKey = (r) => {
   return Number(t.ticket_id ?? r?.id) || 0;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Insight helpers — one per card                                     */
-/* ------------------------------------------------------------------ */
-
-/**
- * Trend insight for the Monthly Ticket Trend card.
- * Compares the latest bucket with the one before it, finds the peak
- * bucket in the visible window, and reports the average per bucket.
- * Returns null when there are fewer than 2 buckets — a trend of one
- * point is not a trend.
- */
-const computeTrendInsight = (chartData) => {
-  if (!Array.isArray(chartData) || chartData.length < 2) return null;
-
-  const latest = chartData[chartData.length - 1];
-  const prev = chartData[chartData.length - 2];
-  const delta = (latest.tickets || 0) - (prev.tickets || 0);
-  const peak = chartData.reduce(
-    (best, row) => ((row.tickets || 0) > (best.tickets || 0) ? row : best),
-    chartData[0],
-  );
-  const total = chartData.reduce((s, r) => s + (r.tickets || 0), 0);
-  const avg = total / chartData.length;
-
-  return {
-    latest,
-    prev,
-    delta,
-    peak,
-    avg,
-    total,
-    bucketCount: chartData.length,
-    direction: delta > 0 ? "up" : delta < 0 ? "down" : "flat",
-  };
+const EMPTY_STATS = {
+  total_tickets: 0,
+  paid_tickets: 0,
+  issued_tickets: 0,
+  total_fines: 0,
+  collected_fines: 0,
+  collection_rate: 0,
+  court_total: 0,
+  tickets_by_day: [],
+  top_violations: [],
+  trend: null,
+  status: null,
 };
 
-/**
- * Status insight for the Ticket Status Distribution card.
- * Reports the dominant status, the paid/unpaid split, and how many
- * tickets have been escalated to court (a separate bucket that is not
- * part of the donut's statuses).
- */
-const computeStatusInsight = (stats, courtTotal) => {
-  const paid = stats.paid_tickets || 0;
-  const issued = stats.issued_tickets || 0;
-  const archived = stats.archived_tickets || 0;
-  const total = paid + issued + archived;
-
-  const buckets = [
-    { key: "paid", label: STATUS.paid.label, value: paid, color: STATUS.paid.color },
-    { key: "issued", label: STATUS.issued.label, value: issued, color: STATUS.issued.color },
-    { key: "archived", label: ARCHIVED.label, value: archived, color: ARCHIVED.color },
-  ];
-  const dominant = buckets.reduce((best, b) => (b.value > best.value ? b : best), buckets[0]);
-
-  const paidPct = total ? Math.round((paid / total) * 100) : 0;
-  const openCount = issued + archived;
-  const openPct = total ? Math.round((openCount / total) * 100) : 0;
-
-  return {
-    total,
-    paid,
-    issued,
-    archived,
-    paidPct,
-    openCount,
-    openPct,
-    dominant: total > 0 ? dominant : null,
-    courtTotal: courtTotal || 0,
-  };
+const DeltaPill = ({ direction, delta, suffix = "" }) => {
+  const isUp = direction === "up";
+  const isDown = direction === "down";
+  const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
+  const cls = isUp
+    ? "bg-[#E5F2EA] text-[#1E8449]"
+    : isDown
+      ? "bg-[#FBE7E9] text-[#C8202F]"
+      : "bg-[#EEF0F4] text-[#5F6779]";
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${cls}`}>
+      <Icon className="w-3.5 h-3.5" />
+      {isUp ? "+" : ""}{delta}{suffix}
+    </span>
+  );
 };
 
 const Dashboard = () => {
-  const [stats, setStats] = useState({
-    total_tickets: 0,
-    paid_tickets: 0,
-    issued_tickets: 0,
-    total_fines: 0,
-    collected_fines: 0,
-    collection_rate: 0
-  });
+  const [stats, setStats] = useState(EMPTY_STATS);
   const [recentTickets, setRecentTickets] = useState([]);
   const [courtViolators, setCourtViolators] = useState([]);
-  const [courtTotal, setCourtTotal] = useState(0);
   const [archivedTotal, setArchivedTotal] = useState(0);
   const navigate = useNavigate();
   const [ticketsByMonth, setTicketsByMonth] = useState([]);
@@ -156,26 +109,32 @@ const Dashboard = () => {
           total_fines: d.total_fines || 0,
           collected_fines: d.collected_fines || 0,
           collection_rate: d.collection_rate || 0,
+          court_total: d.court_total || 0,
+          tickets_by_day: d.tickets_by_day || [],
+          top_violations: d.top_violations || [],
+          trend: d.trend || null,
+          status: d.status || null,
         });
         setArchivedTotal(d.archived_tickets || 0);
         setTicketsByMonth(d.tickets_by_month || []);
       }
+
+      // Only the 5 rows for the In Court table — the count now comes from stats.
       const ticketsRes = await getTickets(1, 5);
       let list = [];
       if (ticketsRes?.data?.data) list = ticketsRes.data.data;
       else if (ticketsRes?.data) list = ticketsRes.data;
       setRecentTickets(Array.isArray(list) ? list.slice(0, 5) : []);
+
       try {
-        const courtRes = await getOverduePayments(1, 50);
+        const courtRes = await getOverduePayments(1, 5);
         const body = courtRes?.data;
         const rows = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
         setCourtViolators(
           [...rows].sort((a, b) => courtSortKey(b) - courtSortKey(a)).slice(0, 5)
         );
-        setCourtTotal(body?.total ?? rows.length);
       } catch {
         setCourtViolators([]);
-        setCourtTotal(0);
       }
     } catch (e) {
       setError("Failed to load dashboard data. Please make sure the API is running.");
@@ -211,12 +170,12 @@ const Dashboard = () => {
   const shownTickets = filter ? recentTickets.filter((t) => t.status === filter) : recentTickets;
   const pending = (stats.total_fines || 0) - (stats.collected_fines || 0);
 
-  /* ---- Insights (memoized, one per card) ---- */
-  const trendInsight = useMemo(() => computeTrendInsight(chartData), [chartData]);
-  const statusInsight = useMemo(
-    () => computeStatusInsight({ ...stats, archived_tickets: archivedTotal }, courtTotal),
-    [stats, archivedTotal, courtTotal],
-  );
+  // Server-computed insights (no more JS math). The chart still responds to
+  // the 3M/6M/All toggle, but the strip's "peak"/"average" are anchored to the
+  // full monthly window, so toggling never silently changes the headline.
+  const trendInsight = stats.trend;
+  const statusInsight = stats.status;
+  const courtTotal = stats.court_total || 0;
 
   const statCards = [
     { to: "/tickets", title: "Total Tickets", value: stats.total_tickets, icon: Ticket, color: "#16233F", soft: "#E9ECF2", text: "#16233F" },
@@ -255,24 +214,6 @@ const Dashboard = () => {
       <Icon className="w-5 h-5" style={{ color }} />{children}
     </h2>
   );
-
-  /* --- Small presentational helpers for the insight strips --- */
-  const DeltaPill = ({ direction, delta, suffix = "" }) => {
-    const isUp = direction === "up";
-    const isDown = direction === "down";
-    const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
-    const cls = isUp
-      ? "bg-[#E5F2EA] text-[#1E8449]"
-      : isDown
-        ? "bg-[#FBE7E9] text-[#C8202F]"
-        : "bg-[#EEF0F4] text-[#5F6779]";
-    return (
-      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${cls}`}>
-        <Icon className="w-3.5 h-3.5" />
-        {isUp ? "+" : ""}{delta}{suffix}
-      </span>
-    );
-  };
 
   return (
     <div className="space-y-6 font-['Inter']">
@@ -322,6 +263,27 @@ const Dashboard = () => {
             </div>
           </div>
 
+          {/* 7-day sparkline — backed by GROUP BY, not a 5-row sample */}
+          {stats.tickets_by_day?.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">Last 7 days</p>
+              <ResponsiveContainer width="100%" height={80}>
+                <BarChart data={stats.tickets_by_day} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} />
+                  <Tooltip
+                    cursor={{ fill: "#16233F0A" }}
+                    contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 6px 24px #16233F22" }}
+                  />
+                  <Bar dataKey="tickets" radius={[4, 4, 0, 0]}>
+                    {stats.tickets_by_day.map((_, i, arr) => (
+                      <Cell key={i} fill={i === arr.length - 1 ? "#F0B429" : "#16233F"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           {/* Insight strip — the "so what" above the chart */}
           {trendInsight ? (
             <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -348,9 +310,9 @@ const Dashboard = () => {
               <div className="rounded-lg bg-[#F8F9FB] border border-[#E3E7EE] px-3 py-2">
                 <p className="text-[10px] uppercase tracking-wider text-[#94A3B8]">Avg / month</p>
                 <p className="text-lg font-['Oswald'] font-semibold text-[#16233F] tabular-nums leading-tight">
-                  {Math.round(trendInsight.avg * 10) / 10}
+                  {trendInsight.average}
                 </p>
-                <p className="text-[10px] text-[#5F6779]">{trendInsight.bucketCount} mo shown</p>
+                <p className="text-[10px] text-[#5F6779]">{trendInsight.buckets} mo total</p>
               </div>
             </div>
           ) : null}
@@ -374,19 +336,18 @@ const Dashboard = () => {
         <section className="lg:col-span-4 bg-[#F6F1E4] rounded-xl p-6">
           <div className="mb-4"><Title icon={TrendingUp} color="#3B5170">Ticket Status Distribution</Title></div>
 
-          {/* Insight strip — the "so what" above the donut */}
-          {statusInsight.total > 0 ? (
+          {statusInsight && statusInsight.total > 0 ? (
             <div className="mb-3 space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-[#5F6779]">Paid vs open</span>
                 <span className="font-semibold text-[#16233F] tabular-nums">
-                  {statusInsight.paidPct}% / {statusInsight.openPct}%
+                  {statusInsight.paid_pct}% / {statusInsight.open_pct}%
                 </span>
               </div>
               <div className="relative h-2.5 rounded-full bg-[#E4E7EE] overflow-hidden">
                 <div
                   className="absolute inset-y-0 left-0 rounded-full bg-[#1E8449] transition-all duration-700"
-                  style={{ width: `${statusInsight.paidPct}%` }}
+                  style={{ width: `${statusInsight.paid_pct}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-xs text-[#5F6779]">
@@ -399,11 +360,11 @@ const Dashboard = () => {
                 </span>
                 <span className="tabular-nums">{statusInsight.total} total</span>
               </div>
-              {statusInsight.courtTotal > 0 ? (
+              {courtTotal > 0 ? (
                 <div className="flex items-center gap-2 pt-2 border-t border-dashed border-[#CBD5E1]">
                   <Gavel className="w-3.5 h-3.5 text-[#7A1621]" />
                   <p className="text-xs text-[#5F6779] flex-1">
-                    <strong className="text-[#7A1621]">{statusInsight.courtTotal}</strong> escalated to court
+                    <strong className="text-[#7A1621]">{courtTotal}</strong> escalated to court
                   </p>
                   <Link to="/payments" className="text-xs text-[#7A1621] font-semibold hover:underline">Review</Link>
                 </div>

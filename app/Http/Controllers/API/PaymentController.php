@@ -55,9 +55,8 @@ class PaymentController extends Controller
             });
         }
 
-        // ── Month filter (YYYY-MM) ──
         if ($request->filled('month')) {
-            $month = $request->month; // e.g. "2026-10"
+            $month = $request->month;
             try {
                 $start = \Carbon\Carbon::createFromFormat('Y-m', $month)->startOfMonth();
                 $end   = $start->copy()->endOfMonth();
@@ -118,11 +117,8 @@ class PaymentController extends Controller
             });
         }
 
-        // ── Month filter (YYYY-MM) ──
-        // Match the month of the violation date (that's what users
-        // typically mean when they say "October tickets").
         if ($request->filled('month')) {
-            $month = $request->month; // e.g. "2026-10"
+            $month = $request->month;
             try {
                 $start = \Carbon\Carbon::createFromFormat('Y-m', $month)->startOfMonth();
                 $end   = $start->copy()->endOfMonth();
@@ -162,7 +158,7 @@ class PaymentController extends Controller
     }
 
     /* ==================================================================
-     |  SHOW / STORE / VOID / ARCHIVE / BY TICKET — unchanged
+     |  SHOW / STORE / VOID / ARCHIVE / BY TICKET
      ================================================================== */
 
     public function show($id)
@@ -431,7 +427,7 @@ class PaymentController extends Controller
     }
 
     /* ==================================================================
-     |  MISSED 72h DEADLINE — overdue(), sendWarnings(), updateWarrant()
+     |  MISSED DEADLINE — overdue(), sendWarnings(), updateWarrant()
      ================================================================== */
 
     /** Unpaid for 2+ months after the deadline → flag for a warrant visit. */
@@ -491,6 +487,9 @@ class PaymentController extends Controller
                 : $query->where('warrant_status', $request->warrant);
         }
 
+        // Count BEFORE pagination so court_total reflects the full filtered set.
+        $courtTotal = (clone $query)->count();
+
         $tickets = $query->orderBy('payment_due_at', 'asc')
             ->paginate($perPage, ['*'], 'page', $page);
 
@@ -503,10 +502,15 @@ class PaymentController extends Controller
             return $ticket;
         });
 
-        return response()->json($tickets);
+        // Keep the paginator's `total` as the page-size total, and expose
+        // the filtered count explicitly as `court_total` for clients.
+        $payload = $tickets->toArray();
+        $payload['court_total'] = $courtTotal;
+
+        return response()->json($payload);
     }
 
-    /** POST /payments/overdue/warn  { ticket_ids: [1,2,3] }  — email only. */
+    /** POST /payments/overdue/warn  { ticket_ids: [1,2,3] } — email only. */
     public function sendWarnings(Request $request)
     {
         $validator = Validator::make($request->all(), [
