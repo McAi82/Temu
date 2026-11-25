@@ -11,7 +11,6 @@ import {
     Loader2,
     X,
     ScanFace,
-    Info,
 } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 20;
@@ -86,7 +85,7 @@ const FaceImage = ({
         <img
             src={url}
             alt={alt}
-            className={className}
+            className={`-scale-y-100 ${className}`}
             onError={(e) => {
                 e.target.style.display = 'none';
             }}
