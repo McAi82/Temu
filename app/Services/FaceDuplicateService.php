@@ -30,6 +30,13 @@ class FaceDuplicateService
     private const POSES = ['front', 'left', 'right'];
 
     /**
+     * Closest other account from the LAST findDuplicate() call, even when it
+     * was not a duplicate (so callers can log / show the real scores).
+     * @var array{user_id:mixed,sims:array,mean:float,poses_passed:int,level:?string}|null
+     */
+    public ?array $lastComparison = null;
+
+    /**
      * @return array{level:string,user_id:mixed,name:string,similarity:float,pose:string,scores:array}|null
      */
     public function findDuplicate(array $encodings, int|string $excludeUserId): ?array
@@ -61,6 +68,7 @@ class FaceDuplicateService
 
         $best = null;
         $candidates = []; // for tuning logs
+        $this->lastComparison = null;
 
         foreach ($this->registrationsQuery($excludeUserId)->cursor() as $reg) {
             $sims = [];
@@ -122,6 +130,7 @@ class FaceDuplicateService
         }
 
         usort($candidates, fn ($a, $b) => $b['mean'] <=> $a['mean']);
+        $this->lastComparison = $candidates[0] ?? null;
         Log::info('face-duplicate check', [
             'checking_user_id' => $excludeUserId,
             'compared' => count($candidates),

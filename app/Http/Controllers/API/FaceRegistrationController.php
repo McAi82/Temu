@@ -69,7 +69,8 @@ class FaceRegistrationController extends Controller
     // Never trust the client's pre-check: it can be skipped, fail or be
     // bypassed (offline, old app build, direct API call). Run the same
     // check here before anything is stored.
-    $match = app(FaceDuplicateService::class)->findDuplicate([
+    $dupService = app(FaceDuplicateService::class);
+    $match = $dupService->findDuplicate([
         'front' => $request->front_encoding,
         'left'  => $request->left_encoding,
         'right' => $request->right_encoding,
@@ -102,6 +103,18 @@ class FaceRegistrationController extends Controller
             'matched_id' => $match['user_id'],
             'scores'     => $match['scores'],
             'device_id'  => $request->device_id,
+        ]);
+    }
+
+    if (!$match) {
+        $closest = $dupService->lastComparison;
+        Log::info('Face registration passed duplicate check (NOT a duplicate)', [
+            'user_id'      => $user->getKey(),
+            'closest_user' => $closest['user_id'] ?? null,
+            'scores'       => $closest['sims'] ?? null,
+            'mean'         => $closest['mean'] ?? null,
+            'poses_passed' => $closest['poses_passed'] ?? null,
+            'device_id'    => $request->device_id,
         ]);
     }
 

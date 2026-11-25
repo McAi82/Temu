@@ -65,9 +65,45 @@ class FaceDuplicateController extends Controller
                 'device_id'  => $data['device_id'] ?? null,
             ]);
 
-            return response()->json(['duplicate' => false, 'review' => true]);
+            return response()->json(array_merge(
+                ['duplicate' => false, 'review' => true],
+                $this->debugPayload($service),
+            ));
         }
 
-        return response()->json(['duplicate' => false]);
+        // Not a duplicate: still record how close the nearest account was,
+        // so thresholds can be tuned from real scores.
+        $closest = $service->lastComparison;
+        Log::info('Face duplicate check: NOT a duplicate', [
+            'user_id'        => $user->getKey(),
+            'closest_user'   => $closest['user_id'] ?? null,
+            'scores'         => $closest['sims'] ?? null,
+            'mean'           => $closest['mean'] ?? null,
+            'poses_passed'   => $closest['poses_passed'] ?? null,
+            'device_id'      => $data['device_id'] ?? null,
+        ]);
+
+        return response()->json(array_merge(
+            ['duplicate' => false],
+            $this->debugPayload($service),
+        ));
+    }
+
+    /**
+     * Scores of the closest account, returned to the app ONLY while
+     * FACE_DUP_DEBUG=true (turn it off in production).
+     */
+    private function debugPayload(FaceDuplicateService $service): array
+    {
+        if (!config('face.duplicate.debug', false)) {
+            return [];
+        }
+        $c = $service->lastComparison;
+        return ['debug' => $c ? [
+            'scores'       => $c['sims'],
+            'mean'         => $c['mean'],
+            'poses_passed' => $c['poses_passed'],
+            'min_poses'    => (int) config('face.duplicate.min_poses', 3),
+        ] : null];
     }
 }
