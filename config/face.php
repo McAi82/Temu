@@ -7,11 +7,11 @@ return [
         'min_poses' => (int) env('FACE_DUP_MIN_POSES', 2),
 
         // Cosine-similarity threshold applied to every pose (front by default).
-        'block' => (float) env('FACE_DUP_BLOCK', 0.72),
+        'block' => (float) env('FACE_DUP_BLOCK', 0.80),
 
         // Optional separate thresholds for the turned-head poses, which
         // normally score lower than the front. Default: same as 'block'.
-        'block_left' => (float) env('FACE_DUP_BLOCK_LEFT', env('FACE_DUP_BLOCK', 0.80)),
+        'block_left' => (float) env('FACE_DUP_BLOCK_LEFT', env('FACE_DUP_BLOCK', 0.50)),
         'block_right' => (float) env('FACE_DUP_BLOCK_RIGHT', env('FACE_DUP_BLOCK', 0.80)),
 
         // "review" band: logged for admin review but allowed. A pose counts
