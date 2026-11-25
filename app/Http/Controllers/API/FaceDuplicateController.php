@@ -14,7 +14,8 @@ class FaceDuplicateController extends Controller
      * POST /api/faces/check-duplicate
      *  200 {duplicate:false}                      no close match
      *  200 {duplicate:false, review:true}         close match, logged for admin review
-     *  409 {code:"FACE_DUPLICATE", matched:{...}} blocked
+     *  409 {code:"FACE_DUPLICATE"}                blocked
+     *      (+ matched:{...} only when face.duplicate.expose_match_details is on)
      */
     public function check(Request $request, FaceDuplicateService $service): JsonResponse
     {
@@ -40,27 +41,28 @@ class FaceDuplicateController extends Controller
             Log::warning('Duplicate face registration BLOCKED', [
                 'user_id'    => $user->getKey(),
                 'matched_id' => $match['user_id'],
+                'archived'   => $match['archived'] ?? null,
                 'scores'     => $match['scores'],
                 'device_id'  => $data['device_id'] ?? null,
             ]);
 
-            return response()->json([
+            $payload = [
                 'message' => 'This face is already registered to another account.',
                 'code'    => 'FACE_DUPLICATE',
-                'matched' => [
-                    'user_id'    => $match['user_id'],
-                    'name'       => $match['name'],
-                    'similarity' => $match['similarity'],
-                    'pose'       => $match['pose'],
-                    'scores'     => $match['scores'],
-                ],
-            ], 409);
+            ];
+            $details = $service->publicMatch($match);
+            if ($details) {
+                $payload['matched'] = $details;
+            }
+
+            return response()->json($payload, 409);
         }
 
         if ($match && $match['level'] === 'review') {
             Log::warning('Possible duplicate face registration (REVIEW)', [
                 'user_id'    => $user->getKey(),
                 'matched_id' => $match['user_id'],
+                'archived'   => $match['archived'] ?? null,
                 'scores'     => $match['scores'],
                 'device_id'  => $data['device_id'] ?? null,
             ]);
@@ -75,12 +77,13 @@ class FaceDuplicateController extends Controller
         // so thresholds can be tuned from real scores.
         $closest = $service->lastComparison;
         Log::info('Face duplicate check: NOT a duplicate', [
-            'user_id'        => $user->getKey(),
-            'closest_user'   => $closest['user_id'] ?? null,
-            'scores'         => $closest['sims'] ?? null,
-            'mean'           => $closest['mean'] ?? null,
-            'poses_passed'   => $closest['poses_passed'] ?? null,
-            'device_id'      => $data['device_id'] ?? null,
+            'user_id'      => $user->getKey(),
+            'closest_user' => $closest['user_id'] ?? null,
+            'scores'       => $closest['sims'] ?? null,
+            'front'        => $closest['front'] ?? null,
+            'mean'         => $closest['mean'] ?? null,
+            'poses_passed' => $closest['poses_passed'] ?? null,
+            'device_id'    => $data['device_id'] ?? null,
         ]);
 
         return response()->json(array_merge(
@@ -101,6 +104,7 @@ class FaceDuplicateController extends Controller
         $c = $service->lastComparison;
         return ['debug' => $c ? [
             'scores'       => $c['sims'],
+            'front'        => $c['front'],
             'mean'         => $c['mean'],
             'poses_passed' => $c['poses_passed'],
             'min_poses'    => (int) config('face.duplicate.min_poses', 3),
