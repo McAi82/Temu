@@ -4,10 +4,10 @@ return [
         // A face is a duplicate only when at least `min_poses` of the 3 poses
         // (front, left, right) each reach their threshold against the SAME
         // pose of another account. 3 = all poses must match.
-        'min_poses' => (int) env('FACE_DUP_MIN_POSES', 3),
+        'min_poses' => (int) env('FACE_DUP_MIN_POSES', 2),
 
         // Cosine-similarity threshold applied to every pose (front by default).
-        'block' => (float) env('FACE_DUP_BLOCK', 0.82),
+        'block' => (float) env('FACE_DUP_BLOCK', 0.72),
 
         // Optional separate thresholds for the turned-head poses, which
         // normally score lower than the front. Default: same as 'block'.
