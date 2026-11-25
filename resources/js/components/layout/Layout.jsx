@@ -68,7 +68,7 @@ const NAV_GROUPS = [
   },
   {
     key: 'reporting',
-    label: 'Reporting',
+    label: 'Summary',
     icon: FileText,
     items: [
       { path: '/reports', label: 'Reports', icon: FileText },
