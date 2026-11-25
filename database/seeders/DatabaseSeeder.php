@@ -430,12 +430,6 @@ class DatabaseSeeder extends Seeder
         $this->command->info('  ✓ Violator–vehicle links: ' . count($rows));
     }
 
-    /* ==================================================================
-     |  TICKETS + TICKET VIOLATIONS
-     |  Statuses: issued / paid / dismissed only (no contested, no partial).
-     |  Each ticket gets a 3-day payment window from its violation date.
-     ================================================================== */
-
     private function seedTicketsAndViolations(): void
     {
         $enforcerIds = DB::table('users')->where('role', 'enforcer')->pluck('user_id')->toArray();
@@ -457,7 +451,7 @@ class DatabaseSeeder extends Seeder
             'Zone 5, National Highway, Barangay Sta. Cruz',
         ];
 
-        $statuses = ['issued', 'issued', 'issued', 'paid', 'paid', 'dismissed'];
+        $statuses = ['issued', 'issued', 'issued', 'paid', 'paid', 'paid'];
 
         $tickets = [];
         $ticketViolations = [];

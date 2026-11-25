@@ -1,6 +1,6 @@
 // web/src/pages/Payments.jsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import {
@@ -43,18 +43,14 @@ import {
     LayoutGrid,
     List as ListIcon,
     Ticket as TicketIcon,
-    FileText,
     User as UserIcon,
     Car,
     Banknote,
-    Hash,
     Info,
     Copy,
     Check,
     CalendarDays,
-    CreditCard,
     AlertTriangle,
-    Building2,
     Tag,
     ShieldCheck,
 } from 'lucide-react';
@@ -145,10 +141,6 @@ const formatMonthLabel = (iso) => {
     return d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
 };
 
-/* Shared grids.
- * PENDING_ROW went from 10 → 9 columns (Paid column removed).
- * Order: Ticket # | Violator | Plate | Violations | Total Fine | Balance | Due | Time Left | Status
- */
 const PENDING_ROW =
     'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
     'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,1.4fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,.9fr)_minmax(0,1.2fr)_minmax(0,1fr)] md:gap-4';
@@ -196,6 +188,14 @@ const getTotalFine = (ticket) => {
         );
     }
     return parseFloat(ticket.total_fine) || 0;
+};
+
+const getTicketBalance = (ticket) => {
+    const totalFine = getTotalFine(ticket);
+    const paid = parseFloat(ticket?.total_paid) || 0;
+    return ticket?.balance != null
+        ? parseFloat(ticket.balance)
+        : Math.max(0, totalFine - paid);
 };
 
 const formatPeso = (n) =>
@@ -247,29 +247,28 @@ const copyText = async (text) => {
 };
 
 /**
- * A ticket is "overdue" when its due date is in the past.
- * Mirrors the server's `payment_due_at < now()` predicate, so the
- * Unpaid tab and the Missed Deadline tab never overlap.
+ * Ticket is overdue when due date is in the past and it is not already paid.
  */
 const isOverdueTicket = (ticket) => {
     if (!ticket) return false;
+    if (ticket.status === 'paid') return false;
     return getDueState(ticket).state === 'overdue';
 };
 
 /**
- * Local, clamped Time Left.
- *
- * Why not the shared <TimeLeft> component? It's not in this file, and
- * it renders negative strings for overdue tickets ("-3d 4h"). Rather
- * than mutate the shared component (which other screens may depend on),
- * this local render clamps to zero and matches the visual language
- * (red for overdue, neutral otherwise).
+ * Ticket is unpaid and NOT overdue.
  */
+const isUnpaidNotOverdueTicket = (ticket) => {
+    if (!ticket) return false;
+    if (ticket.status === 'paid' || ticket.status === 'dismissed') return false;
+    if (getTicketBalance(ticket) <= 0) return false;
+    return !isOverdueTicket(ticket);
+};
+
 const TimeLeftClamped = ({ ticket }) => {
     const due = getDueState(ticket);
     const state = due?.state;
 
-    // Overdue → 0d 0h in red.
     if (state === 'overdue') {
         return (
             <span className="text-xs font-medium text-[#C8202F] whitespace-nowrap">
@@ -278,7 +277,6 @@ const TimeLeftClamped = ({ ticket }) => {
         );
     }
 
-    // Everything else: derive hours remaining from the due date, clamped ≥ 0.
     const dueAt = ticket?.payment_due_at ? new Date(ticket.payment_due_at).getTime() : NaN;
     if (Number.isNaN(dueAt)) {
         return (
@@ -362,8 +360,8 @@ const ViewToggle = ({ view, setView }) => (
                     onClick={() => setView(v)}
                     aria-pressed={view === v}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${view === v
-                            ? 'bg-[#16233F] text-white'
-                            : 'text-[#64748B] hover:text-[#16233F]'
+                        ? 'bg-[#16233F] text-white'
+                        : 'text-[#64748B] hover:text-[#16233F]'
                         }`}
                 >
                     <I className="w-3.5 h-3.5" />
@@ -374,7 +372,6 @@ const ViewToggle = ({ view, setView }) => (
     </div>
 );
 
-/* Filter modal (pop-up dialog) */
 const FilterShell = ({ title, onClose, onReset, children }) => (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
         <DialogContent className="w-[92vw] max-w-lg max-h-[90vh] overflow-y-auto bg-[#FBF1DC] border-t-4 border-[#F0B429]">
@@ -437,7 +434,6 @@ const ticketStatusBadge = (status) => {
     );
 };
 
-/* Month picker — reusable across both tabs */
 const MonthPicker = ({ value, onChange, min, max }) => (
     <div className="flex items-center gap-2">
         <CalendarDays className="w-4 h-4 text-[#16233F]" />
@@ -488,9 +484,7 @@ const RecordPaymentConfirmDialog = ({
                             <ShieldCheck className="w-5 h-5 text-[#92600A]" />
                         </span>
                         <div>
-                            <div className="leading-tight">
-                                Confirm Payment
-                            </div>
+                            <div className="leading-tight">Confirm Payment</div>
                             <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
                                 Please review the details before recording.
                             </div>
@@ -499,7 +493,6 @@ const RecordPaymentConfirmDialog = ({
                 </DialogHeader>
 
                 <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                    {/* Vehicle */}
                     <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
                         <div className="flex items-center gap-3 p-4">
                             <div className="w-12 h-12 rounded-full bg-[#E5F2EA] flex items-center justify-center flex-shrink-0">
@@ -518,7 +511,6 @@ const RecordPaymentConfirmDialog = ({
                         </div>
                     </div>
 
-                    {/* Receipt & payer */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-1">
@@ -538,19 +530,13 @@ const RecordPaymentConfirmDialog = ({
                         </div>
                     </div>
 
-                    {/* Tickets */}
                     <div>
                         <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mb-2">
                             Tickets to be paid ({tickets.length})
                         </p>
                         <ul className="space-y-1.5">
                             {tickets.map((t) => {
-                                const totalFine = getTotalFine(t);
-                                const paid = parseFloat(t.total_paid) || 0;
-                                const balance =
-                                    t.balance != null
-                                        ? parseFloat(t.balance)
-                                        : Math.max(0, totalFine - paid);
+                                const balance = getTicketBalance(t);
                                 return (
                                     <li
                                         key={t.ticket_id}
@@ -579,7 +565,6 @@ const RecordPaymentConfirmDialog = ({
                         </div>
                     )}
 
-                    {/* Total */}
                     <div className="rounded-xl bg-[#16233F] text-white p-4">
                         <div className="flex items-center justify-between gap-2">
                             <span className="text-xs text-[#C7CEDB] uppercase tracking-wider">
@@ -590,9 +575,7 @@ const RecordPaymentConfirmDialog = ({
                             </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-white/10 text-xs">
-                            <span className="text-[#C7CEDB]">
-                                Payment method
-                            </span>
+                            <span className="text-[#C7CEDB]">Payment method</span>
                             <span className="flex items-center gap-1 font-medium text-[#5FD28C]">
                                 <Banknote className="w-3.5 h-3.5" />
                                 Cash
@@ -603,8 +586,8 @@ const RecordPaymentConfirmDialog = ({
                     <div className="flex items-start gap-2 bg-[#FBF1DC] border border-[#F0B429]/40 rounded-lg p-3 text-xs text-[#92600A]">
                         <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                         <p>
-                            This action cannot be undone from here. Make sure
-                            the cash has been received before confirming.
+                            This action cannot be undone from here. Make sure the cash has
+                            been received before confirming.
                         </p>
                     </div>
                 </div>
@@ -644,7 +627,7 @@ const RecordPaymentConfirmDialog = ({
 };
 
 /* ============================================================
- * Plate search payment modal (per-ticket selection)
+ * Plate search payment modal
  * ============================================================ */
 const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
     const notify = useAlert();
@@ -661,11 +644,8 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
     const [notes, setNotes] = useState('');
     const [formError, setFormError] = useState('');
     const [submitting, setSubmitting] = useState(false);
-
-    // Confirmation dialog
     const [confirmOpen, setConfirmOpen] = useState(false);
 
-    // Reset state when modal closes
     useEffect(() => {
         if (!open) {
             setPlateSearch('');
@@ -679,14 +659,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
             setConfirmOpen(false);
         }
     }, [open]);
-
-    const getBalance = (ticket) => {
-        const totalFine = getTotalFine(ticket);
-        const alreadyPaid = parseFloat(ticket.total_paid) || 0;
-        return ticket.balance != null
-            ? parseFloat(ticket.balance)
-            : Math.max(0, totalFine - alreadyPaid);
-    };
 
     const handleSearch = async (e) => {
         e?.preventDefault();
@@ -721,8 +693,9 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
 
             const vehicleTickets = tickets.filter(
                 (t) =>
-                    String(t.vehicle_id) === String(vehicle.vehicle_id) ||
-                    String(t.vehicle?.vehicle_id) === String(vehicle.vehicle_id),
+                    (String(t.vehicle_id) === String(vehicle.vehicle_id) ||
+                        String(t.vehicle?.vehicle_id) === String(vehicle.vehicle_id)) &&
+                    t.status !== 'paid',
             );
 
             if (!vehicleTickets.length) {
@@ -737,7 +710,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
             console.error('Plate search error:', err);
             setSearchError(
                 err.response?.data?.message ||
-                    'Failed to search for vehicle. Please try again.',
+                'Failed to search for vehicle. Please try again.',
             );
         } finally {
             setSearching(false);
@@ -745,11 +718,10 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
     };
 
     const totalOutstanding = pendingTickets.reduce(
-        (sum, t) => sum + getBalance(t),
+        (sum, t) => sum + getTicketBalance(t),
         0,
     );
 
-    // Opens the confirmation dialog (step 1 of two-step submit)
     const handleSubmitClick = (e) => {
         e?.preventDefault();
         setFormError('');
@@ -766,7 +738,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
         setConfirmOpen(true);
     };
 
-    // Actual submission (step 2 — after user confirms)
     const handleConfirmedPayment = async () => {
         setFormError('');
         setSubmitting(true);
@@ -776,8 +747,8 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
         const errors = [];
 
         for (const ticket of pendingTickets) {
-            const outstanding = getBalance(ticket);
-            if (outstanding <= 0) continue; // safety
+            const outstanding = getTicketBalance(ticket);
+            if (outstanding <= 0) continue;
 
             try {
                 await createPayment({
@@ -806,6 +777,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
         if (successCount > 0) {
             queryClient.invalidateQueries(['payments-pending']);
             queryClient.invalidateQueries(['payments-history']);
+            queryClient.invalidateQueries(['payments-overdue-count']);
             queryClient.invalidateQueries(['tickets']);
 
             notify.success(
@@ -834,7 +806,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                             <div>
                                 <div className="leading-tight">Record Payment</div>
                                 <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
-                                    Search by plate number and pick the tickets to settle
+                                    Search by plate number and settle unpaid tickets
                                 </div>
                             </div>
                         </DialogTitle>
@@ -845,7 +817,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                         className="flex flex-col max-h-[calc(92vh-100px)]"
                     >
                         <div className="flex-1 overflow-y-auto">
-                            {/* ──── SEARCH BY PLATE ──── */}
                             <div className="px-7 py-6 border-b border-dashed border-[#CBD5E1] bg-[#F8F9FA]">
                                 <div className="max-w-2xl">
                                     <label className="text-xs font-semibold text-[#16233F] mb-2 flex items-center gap-1.5">
@@ -897,11 +868,9 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                 </div>
                             </div>
 
-                            {/* ──── RESULTS ──── */}
                             {matchedVehicle && (
                                 <div className="p-7 space-y-6">
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-                                        {/* LEFT: Vehicle & summary */}
                                         <div className="lg:col-span-1 p-7 space-y-6 border-r border-dashed border-[#CBD5E1] bg-[#F8F9FA]">
                                             <section>
                                                 <div className="flex items-center gap-2 mb-3">
@@ -971,17 +940,16 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                                             Full settlement required
                                                         </p>
                                                         <p>
-                                                            All unpaid tickets of this
-                                                            vehicle are paid together.
-                                                            Each ticket is paid in full
-                                                            with its own receipt number.
+                                                            All unpaid tickets of this vehicle
+                                                            are paid together. Each ticket is
+                                                            paid in full with its own receipt
+                                                            number.
                                                         </p>
                                                     </div>
                                                 </div>
                                             </section>
                                         </div>
 
-                                        {/* RIGHT: Ticket picker + form */}
                                         <div className="lg:col-span-2 p-7 space-y-6">
                                             <section>
                                                 <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -991,29 +959,24 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                                     </h3>
                                                     <span className="h-px flex-1 bg-[#E3E7EE]" />
                                                     <span className="text-xs font-medium text-[#64748B]">
-                                                        All {pendingTickets.length} must be paid together
+                                                        All {pendingTickets.length} must be paid
+                                                        together
                                                     </span>
                                                 </div>
 
                                                 <ul className="space-y-3">
                                                     {pendingTickets.map((t) => {
-                                                        const balance = getBalance(t);
+                                                        const balance = getTicketBalance(t);
                                                         return (
                                                             <li
                                                                 key={t.ticket_id}
                                                                 className="rounded-xl border-2 border-[#E3E7EE] bg-white overflow-hidden"
                                                             >
-                                                                <div
-                                                                    className="flex items-center justify-between gap-2 px-4 py-2 text-xs bg-[#16233F] text-white"
-                                                                >
-                                                                    <span className="flex items-center gap-2 min-w-0">
-                                                                        <span className="font-mono font-semibold truncate">
-                                                                            {t.ticket_number}
-                                                                        </span>
+                                                                <div className="flex items-center justify-between gap-2 px-4 py-2 text-xs bg-[#16233F] text-white">
+                                                                    <span className="font-mono font-semibold truncate">
+                                                                        {t.ticket_number}
                                                                     </span>
-                                                                    {ticketStatusBadge(
-                                                                        t.status,
-                                                                    )}
+                                                                    {ticketStatusBadge(t.status)}
                                                                 </div>
                                                                 <div className="p-4 space-y-3">
                                                                     <div className="grid grid-cols-2 gap-3">
@@ -1027,8 +990,8 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                                                         <Spec label="Date">
                                                                             {t.violation_datetime
                                                                                 ? new Date(
-                                                                                      t.violation_datetime,
-                                                                                  ).toLocaleDateString()
+                                                                                    t.violation_datetime,
+                                                                                ).toLocaleDateString()
                                                                                 : '—'}
                                                                         </Spec>
                                                                         <Spec label="Location">
@@ -1115,16 +1078,13 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                                             placeholder="e.g., RCP-2026-000123"
                                                             value={receiptNumber}
                                                             onChange={(e) =>
-                                                                setReceiptNumber(
-                                                                    e.target.value,
-                                                                )
+                                                                setReceiptNumber(e.target.value)
                                                             }
                                                             required
                                                             className="focus-visible:ring-[#F0B429] font-mono h-11"
                                                         />
                                                         <p className="text-[11px] text-[#94A3B8] mt-1.5">
-                                                            Each ticket gets a unique
-                                                            receipt:{' '}
+                                                            Each ticket gets a unique receipt:{' '}
                                                             <span className="font-mono">
                                                                 {receiptNumber || 'BASE'}
                                                                 -TKT-XXXX
@@ -1169,9 +1129,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                                         className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[#F0B429]"
                                                         placeholder="Optional notes about this payment..."
                                                         value={notes}
-                                                        onChange={(e) =>
-                                                            setNotes(e.target.value)
-                                                        }
+                                                        onChange={(e) => setNotes(e.target.value)}
                                                     />
                                                 </div>
                                             </section>
@@ -1181,20 +1139,15 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                             )}
                         </div>
 
-                        {/* ──── STICKY FOOTER ──── */}
                         <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-dashed border-[#CBD5E1] bg-white">
                             <div className="text-xs text-[#64748B] flex items-center gap-2">
                                 <AlertCircle className="w-3.5 h-3.5 text-[#94A3B8]" />
                                 {!matchedVehicle ? (
-                                    <span>
-                                        Search for a plate number to get started.
-                                    </span>
+                                    <span>Search for a plate number to get started.</span>
                                 ) : !pendingTickets.length ? (
                                     <span>No unpaid tickets for this vehicle.</span>
                                 ) : !receiptNumber.trim() ? (
-                                    <span>
-                                        Enter the receipt number to continue.
-                                    </span>
+                                    <span>Enter the receipt number to continue.</span>
                                 ) : (
                                     <span>
                                         Ready to record{' '}
@@ -1205,8 +1158,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                         <strong className="text-[#16233F]">
                                             {pendingTickets.length}
                                         </strong>{' '}
-                                        ticket
-                                        {pendingTickets.length === 1 ? '' : 's'}.
+                                        ticket{pendingTickets.length === 1 ? '' : 's'}.
                                     </span>
                                 )}
                             </div>
@@ -1242,8 +1194,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                             {pendingTickets.length > 0
                                                 ? `${pendingTickets.length} `
                                                 : ''}
-                                            Payment
-                                            {pendingTickets.length > 1 ? 's' : ''}
+                                            Payment{pendingTickets.length > 1 ? 's' : ''}
                                         </>
                                     )}
                                 </Button>
@@ -1253,7 +1204,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                 </DialogContent>
             </Dialog>
 
-            {/* Confirmation dialog sits on top */}
             <RecordPaymentConfirmDialog
                 open={confirmOpen}
                 onClose={() => setConfirmOpen(false)}
@@ -1272,27 +1222,27 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
 
 const Payments = () => {
     const queryClient = useQueryClient();
-    const notify = useAlert();
-    const [tab, setTab] = useState('pending');
+    const [tab, setTab] = useState('unpaid');
+
+    // Filter mode inside the Unpaid Tickets view: 'unpaid' | 'history'
+    const [recordMode, setRecordMode] = useState('unpaid');
 
     const [refreshing, setRefreshing] = useState(false);
-
-    /* ---------- New Payment Modal state ---------- */
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
-    /* ---------- Pending tab ---------- */
-    const [pendingView, setPendingView] = useState('list');
-    const [pendingPage, setPendingPage] = useState(1);
-    const [pendingSearch, setPendingSearch] = useState('');
-    const [pendingMonth, setPendingMonth] = useState('');
-    const [pendingShowFilters, setPendingShowFilters] = useState(false);
-    const [pendingFilters, setPendingFilters] = useState({
+    /* ---------- Unpaid tickets state ---------- */
+    const [unpaidView, setUnpaidView] = useState('list');
+    const [unpaidPage, setUnpaidPage] = useState(1);
+    const [unpaidSearch, setUnpaidSearch] = useState('');
+    const [unpaidMonth, setUnpaidMonth] = useState('');
+    const [unpaidShowFilters, setUnpaidShowFilters] = useState(false);
+    const [unpaidFilters, setUnpaidFilters] = useState({
         min_balance: '',
         max_balance: '',
         only_partial: false,
     });
 
-    /* ---------- History tab ---------- */
+    /* ---------- Payment History (as a filter) state ---------- */
     const [historyView, setHistoryView] = useState('list');
     const [historyPage, setHistoryPage] = useState(1);
     const [historySearch, setHistorySearch] = useState('');
@@ -1307,7 +1257,7 @@ const Payments = () => {
         max_amount: '',
     });
 
-    /* ---------- Dialog state (history / ticket view only) ---------- */
+    /* ---------- Ticket payment history dialog ---------- */
     const [historyTicketId, setHistoryTicketId] = useState(null);
     const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
     const [copiedField, setCopiedField] = useState(null);
@@ -1316,24 +1266,24 @@ const Payments = () => {
     const {
         data: pendingResponse,
         isLoading: pendingLoading,
-        isFetching: pendingFetching,
         refetch: refetchPending,
         error: pendingError,
     } = useQuery({
-        queryKey: ['payments-pending', pendingPage, pendingSearch, pendingMonth],
+        queryKey: ['payments-pending', unpaidPage, unpaidSearch, unpaidMonth],
         queryFn: () =>
-            getPendingPayments(pendingPage, ITEMS_PER_PAGE, {
-                search: pendingSearch || undefined,
-                month: pendingMonth || undefined,
+            getPendingPayments(unpaidPage, ITEMS_PER_PAGE, {
+                search: unpaidSearch || undefined,
+                month: unpaidMonth || undefined,
             }),
         keepPreviousData: true,
         staleTime: 1000 * 30,
     });
 
+    const isPaymentHistoryFiltered = tab === 'unpaid' && recordMode === 'history';
+
     const {
         data: historyResponse,
         isLoading: historyLoading,
-        isFetching: historyFetching,
         refetch: refetchHistory,
         error: historyError,
     } = useQuery({
@@ -1356,7 +1306,7 @@ const Payments = () => {
             }),
         keepPreviousData: true,
         staleTime: 1000 * 60,
-        enabled: tab === 'history',
+        enabled: isPaymentHistoryFiltered,
     });
 
     const { data: overdueCountResponse } = useQuery({
@@ -1374,33 +1324,26 @@ const Payments = () => {
             enabled: !!historyTicketId && isHistoryDialogOpen,
         });
 
-    /* ---------- Derived ---------- */
-    /**
-     * Unpaid = status "issued" AND not yet past the deadline.
-     * Overdue tickets are excluded here and shown exclusively in the
-     * Missed Deadline tab. This guarantees the two tabs never overlap.
-     */
-    const pendingTickets = useMemo(() => {
+    /* ---------- Derived: Unpaid (not paid & not overdue) ---------- */
+    const unpaidTickets = useMemo(() => {
         let list = getDataArray(pendingResponse);
 
-        // Hard split: exclude anything already past its due date.
-        list = list.filter((t) => !isOverdueTicket(t));
+        // Strictly exclude paid tickets and overdue tickets
+        list = list.filter((t) => isUnpaidNotOverdueTicket(t));
 
-        if (pendingFilters.only_partial) {
+        if (unpaidFilters.only_partial) {
             list = list.filter((t) => (parseFloat(t.total_paid) || 0) > 0);
         }
-        if (pendingFilters.min_balance !== '') {
+        if (unpaidFilters.min_balance !== '') {
             list = list.filter(
                 (t) =>
-                    (parseFloat(t.balance) || 0) >=
-                    parseFloat(pendingFilters.min_balance),
+                    getTicketBalance(t) >= parseFloat(unpaidFilters.min_balance),
             );
         }
-        if (pendingFilters.max_balance !== '') {
+        if (unpaidFilters.max_balance !== '') {
             list = list.filter(
                 (t) =>
-                    (parseFloat(t.balance) || 0) <=
-                    parseFloat(pendingFilters.max_balance),
+                    getTicketBalance(t) <= parseFloat(unpaidFilters.max_balance),
             );
         }
 
@@ -1412,7 +1355,7 @@ const Payments = () => {
             if (cmp !== 0) return cmp;
             return (a.ticket_number || '').localeCompare(b.ticket_number || '');
         });
-    }, [pendingResponse, pendingFilters]);
+    }, [pendingResponse, unpaidFilters]);
 
     const pendingMeta = getMeta(pendingResponse);
 
@@ -1454,14 +1397,14 @@ const Payments = () => {
     const historyMeta = getMeta(historyResponse);
 
     /* ---------- Filter counts ---------- */
-    const pendingFilterCount = useMemo(() => {
+    const unpaidFilterCount = useMemo(() => {
         let c = 0;
-        if (pendingSearch) c++;
-        if (pendingMonth) c++;
-        if (pendingFilters.min_balance || pendingFilters.max_balance) c++;
-        if (pendingFilters.only_partial) c++;
+        if (unpaidSearch) c++;
+        if (unpaidMonth) c++;
+        if (unpaidFilters.min_balance || unpaidFilters.max_balance) c++;
+        if (unpaidFilters.only_partial) c++;
         return c;
-    }, [pendingSearch, pendingMonth, pendingFilters]);
+    }, [unpaidSearch, unpaidMonth, unpaidFilters]);
 
     const historyFilterCount = useMemo(() => {
         let c = 0;
@@ -1474,15 +1417,16 @@ const Payments = () => {
         return c;
     }, [historySearch, historyMonth, historyFilters]);
 
-    /* ---------- Refresh handler ---------- */
     const handleRefresh = async () => {
         if (refreshing) return;
-
         setRefreshing(true);
 
         try {
-            const jobs = [refetchPending({ cancelRefetch: true })];
-            if (tab === 'history') {
+            const jobs = [
+                refetchPending({ cancelRefetch: true }),
+                queryClient.invalidateQueries(['payments-overdue-count']),
+            ];
+            if (isPaymentHistoryFiltered) {
                 jobs.push(refetchHistory({ cancelRefetch: true }));
             }
             await Promise.all(jobs);
@@ -1493,7 +1437,6 @@ const Payments = () => {
         }
     };
 
-    /* ---------- Handlers ---------- */
     const openTicketHistory = (ticketId) => {
         setHistoryTicketId(ticketId);
         setIsHistoryDialogOpen(true);
@@ -1515,9 +1458,9 @@ const Payments = () => {
             date_to: daysAgoISO(0),
         }));
 
-    const clearPendingFilters = () => {
-        setPendingMonth('');
-        setPendingFilters({
+    const clearUnpaidFilters = () => {
+        setUnpaidMonth('');
+        setUnpaidFilters({
             min_balance: '',
             max_balance: '',
             only_partial: false,
@@ -1544,27 +1487,26 @@ const Payments = () => {
         }
     };
 
-    const totalPendingCount = pendingMeta.total || 0;
+    const totalUnpaidCount = unpaidTickets.length;
 
     const ticketHistory = ticketHistoryResponse?.data?.ticket;
     const ticketHistorySummary = ticketHistoryResponse?.data?.summary;
     const ticketPayments = ticketHistory?.payments || [];
 
-    const today = new Date();
-    const currentMonth = toISOMonth(today);
+    const currentMonth = toISOMonth(new Date());
 
-    /* ---------- Panels ---------- */
-    const pendingPanel = (
+    /* ---------- Filter Modals ---------- */
+    const unpaidPanel = (
         <FilterShell
             title="Filter Unpaid Tickets"
-            onClose={() => setPendingShowFilters(false)}
-            onReset={clearPendingFilters}
+            onClose={() => setUnpaidShowFilters(false)}
+            onReset={clearUnpaidFilters}
         >
             <div>
                 <L icon={CalendarDays}>Month</L>
                 <MonthPicker
-                    value={pendingMonth}
-                    onChange={(v) => setPendingMonth(v)}
+                    value={unpaidMonth}
+                    onChange={(v) => setUnpaidMonth(v)}
                     max={currentMonth}
                 />
                 <p className="text-[11px] text-[#94A3B8] mt-1.5">
@@ -1578,10 +1520,10 @@ const Payments = () => {
                     <Input
                         type="number"
                         placeholder="Min"
-                        value={pendingFilters.min_balance}
+                        value={unpaidFilters.min_balance}
                         onChange={(e) =>
-                            setPendingFilters({
-                                ...pendingFilters,
+                            setUnpaidFilters({
+                                ...unpaidFilters,
                                 min_balance: e.target.value,
                             })
                         }
@@ -1591,10 +1533,10 @@ const Payments = () => {
                     <Input
                         type="number"
                         placeholder="Max"
-                        value={pendingFilters.max_balance}
+                        value={unpaidFilters.max_balance}
                         onChange={(e) =>
-                            setPendingFilters({
-                                ...pendingFilters,
+                            setUnpaidFilters({
+                                ...unpaidFilters,
                                 max_balance: e.target.value,
                             })
                         }
@@ -1607,10 +1549,10 @@ const Payments = () => {
                 <label className="flex items-center gap-2 text-sm text-[#92600A] cursor-pointer">
                     <input
                         type="checkbox"
-                        checked={pendingFilters.only_partial}
+                        checked={unpaidFilters.only_partial}
                         onChange={(e) =>
-                            setPendingFilters({
-                                ...pendingFilters,
+                            setUnpaidFilters({
+                                ...unpaidFilters,
                                 only_partial: e.target.checked,
                             })
                         }
@@ -1644,17 +1586,15 @@ const Payments = () => {
                 <L>Status</L>
                 <div className="flex flex-wrap gap-2">
                     {STATUS_OPTIONS.map((opt) => {
-                        const active = historyFilters.status.includes(
-                            opt.value,
-                        );
+                        const active = historyFilters.status.includes(opt.value);
                         return (
                             <button
                                 key={opt.value}
                                 type="button"
                                 onClick={() => toggleHistoryStatus(opt.value)}
                                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${active
-                                        ? 'bg-[#16233F] text-white border-[#16233F]'
-                                        : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
+                                    ? 'bg-[#16233F] text-white border-[#16233F]'
+                                    : 'bg-white text-[#64748B] border-[#E9ECF2] hover:bg-[#F5F6F8]'
                                     }`}
                             >
                                 {opt.label}
@@ -1713,9 +1653,7 @@ const Payments = () => {
                     />
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap mt-2">
-                    <span className="text-xs text-[#92600A]/70 mr-1">
-                        Quick:
-                    </span>
+                    <span className="text-xs text-[#92600A]/70 mr-1">Quick:</span>
                     {PRESETS.map((p) => (
                         <button
                             key={p.label}
@@ -1762,41 +1700,29 @@ const Payments = () => {
         </FilterShell>
     );
 
-    /* ---------- Chips ---------- */
-    const pendingChips = [
-        pendingSearch && [
-            `Search: ${pendingSearch}`,
-            () => setPendingSearch(''),
+    const unpaidChips = [
+        unpaidSearch && [`Search: ${unpaidSearch}`, () => setUnpaidSearch('')],
+        unpaidMonth && [
+            `Month: ${formatMonthLabel(unpaidMonth)}`,
+            () => setUnpaidMonth(''),
         ],
-        pendingMonth && [
-            `Month: ${formatMonthLabel(pendingMonth)}`,
-            () => setPendingMonth(''),
-        ],
-        (pendingFilters.min_balance || pendingFilters.max_balance) && [
-            `Balance: ₱${pendingFilters.min_balance || '0'} → ₱${pendingFilters.max_balance || '∞'
-            }`,
+        (unpaidFilters.min_balance || unpaidFilters.max_balance) && [
+            `Balance: ₱${unpaidFilters.min_balance || '0'} → ₱${unpaidFilters.max_balance || '∞'}`,
             () =>
-                setPendingFilters({
-                    ...pendingFilters,
+                setUnpaidFilters({
+                    ...unpaidFilters,
                     min_balance: '',
                     max_balance: '',
                 }),
         ],
-        pendingFilters.only_partial && [
+        unpaidFilters.only_partial && [
             'Partially paid only',
-            () =>
-                setPendingFilters({
-                    ...pendingFilters,
-                    only_partial: false,
-                }),
+            () => setUnpaidFilters({ ...unpaidFilters, only_partial: false }),
         ],
     ].filter(Boolean);
 
     const historyChips = [
-        historySearch && [
-            `Search: ${historySearch}`,
-            () => setHistorySearch(''),
-        ],
+        historySearch && [`Search: ${historySearch}`, () => setHistorySearch('')],
         historyMonth && [
             `Month: ${formatMonthLabel(historyMonth)}`,
             () => setHistoryMonth(''),
@@ -1810,8 +1736,7 @@ const Payments = () => {
             () => setHistoryFilters({ ...historyFilters, method: '' }),
         ],
         (historyFilters.date_from || historyFilters.date_to) && [
-            `Date: ${historyFilters.date_from || '…'} → ${historyFilters.date_to || '…'
-            }`,
+            `Date: ${historyFilters.date_from || '…'} → ${historyFilters.date_to || '…'}`,
             () =>
                 setHistoryFilters({
                     ...historyFilters,
@@ -1820,8 +1745,7 @@ const Payments = () => {
                 }),
         ],
         (historyFilters.min_amount || historyFilters.max_amount) && [
-            `Amount: ₱${historyFilters.min_amount || '0'} → ₱${historyFilters.max_amount || '∞'
-            }`,
+            `Amount: ₱${historyFilters.min_amount || '0'} → ₱${historyFilters.max_amount || '∞'}`,
             () =>
                 setHistoryFilters({
                     ...historyFilters,
@@ -1858,8 +1782,7 @@ const Payments = () => {
                         className="bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white disabled:opacity-70"
                     >
                         <RefreshCw
-                            className={`w-4 h-4 mr-2 transition-transform ${refreshing ? 'animate-spin' : ''
-                                }`}
+                            className={`w-4 h-4 mr-2 transition-transform ${refreshing ? 'animate-spin' : ''}`}
                         />
                         {refreshing ? 'Refreshing…' : 'Refresh'}
                     </Button>
@@ -1876,723 +1799,573 @@ const Payments = () => {
             <Tabs value={tab} onValueChange={setTab} className="space-y-6">
                 <TabsList className="bg-[#E9ECF2]">
                     <TabsTrigger
-                        value="pending"
+                        value="unpaid"
                         className="data-[state=active]:bg-[#16233F] data-[state=active]:text-white flex items-center gap-2"
                     >
                         <Wallet className="w-4 h-4" />
                         Unpaid Tickets
                         <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                            {totalPendingCount}
+                            {totalUnpaidCount}
                         </span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="history"
-                        className="data-[state=active]:bg-[#16233F] data-[state=active]:text-white flex items-center gap-2"
-                    >
-                        <Receipt className="w-4 h-4" />
-                        Payment History
                     </TabsTrigger>
                     <TabsTrigger
                         value="overdue"
                         className="data-[state=active]:bg-[#C8202F] data-[state=active]:text-white flex items-center gap-2"
                     >
                         <AlertTriangle className="w-4 h-4" />
-                        Missed Deadline
+                        Overdue
                         <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
                             {overdueCount}
                         </span>
                     </TabsTrigger>
                 </TabsList>
 
-                {/* ==================== PENDING TAB ==================== */}
-                <TabsContent value="pending" className="mt-0">
-                    <div
-                        className="grid gap-6"
-                    >
-                        {pendingShowFilters && pendingPanel}
+                {/* ==================== UNPAID TICKETS TAB (with Payment History filter) ==================== */}
+                <TabsContent value="unpaid" className="mt-0">
+                    <div className="space-y-4 min-w-0">
+                        {/* Payment History filter toggle */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-semibold text-[#64748B] flex items-center gap-1.5 mr-1">
+                                <Filter className="w-3.5 h-3.5 text-[#16233F]" />
+                                View Filter:
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setRecordMode('unpaid')}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${recordMode === 'unpaid'
+                                    ? 'bg-[#16233F] text-white border-[#16233F]'
+                                    : 'bg-white text-[#64748B] border-[#E3E7EE] hover:text-[#16233F]'
+                                    }`}
+                            >
+                                <Wallet className="w-3.5 h-3.5" />
+                                Unpaid (Not Overdue)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setRecordMode('history')}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${recordMode === 'history'
+                                    ? 'bg-[#16233F] text-white border-[#16233F]'
+                                    : 'bg-white text-[#64748B] border-[#E3E7EE] hover:text-[#16233F]'
+                                    }`}
+                            >
+                                <Receipt className="w-3.5 h-3.5" />
+                                Payment History
+                            </button>
+                        </div>
 
-                        <div className="space-y-4 min-w-0">
-                            {/* Toolbar */}
-                            <div className="flex flex-wrap items-center gap-3">
-                                <Button
-                                    variant="outline"
-                                    onClick={() =>
-                                        setPendingShowFilters((v) => !v)
-                                    }
-                                    className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
-                                >
-                                    <Filter className="w-4 h-4 mr-2" />
-                                    Filters
-                                    {pendingFilterCount > 0 && (
-                                        <span className="ml-2 bg-[#16233F] text-white text-xs rounded-full px-2 py-0.5">
-                                            {pendingFilterCount}
-                                        </span>
-                                    )}
-                                </Button>
+                        {recordMode === 'unpaid' ? (
+                            <>
+                                {unpaidShowFilters && unpaidPanel}
 
-                                <MonthPicker
-                                    value={pendingMonth}
-                                    onChange={setPendingMonth}
-                                    max={currentMonth}
-                                />
-
-                                <div className="relative flex-1 min-w-[240px] max-w-md">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
-                                    <Input
-                                        placeholder="Search ticket #, violator, plate..."
-                                        value={pendingSearch}
-                                        onChange={(e) => {
-                                            setPendingSearch(e.target.value);
-                                            setPendingPage(1);
-                                        }}
-                                        className="pl-10 pr-10 rounded-full focus-visible:ring-[#F0B429]"
-                                    />
-                                    {pendingSearch && (
-                                        <button
-                                            onClick={() =>
-                                                setPendingSearch('')
-                                            }
-                                            title="Clear"
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                <ViewToggle
-                                    view={pendingView}
-                                    setView={setPendingView}
-                                />
-                            </div>
-
-                            {/* Chips */}
-                            {pendingChips.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {pendingChips.map(([label, clear]) => (
-                                        <Chip
-                                            key={label}
-                                            label={label}
-                                            onClear={clear}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Section title */}
-                            <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
-                                <Wallet className="w-5 h-5 text-[#F0B429]" />
-                                Tickets Awaiting Payment
-                                <span className="text-xs font-normal text-[#64748B] font-['Inter']">
-                                    {pendingMonth
-                                        ? `(${formatMonthLabel(pendingMonth)})`
-                                        : '(alphabetical by violator)'}
-                                </span>
-                            </h2>
-
-                            {/* Body */}
-                            {pendingLoading && !pendingResponse ? (
-                                <div className="flex justify-center py-10">
-                                    <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
-                                </div>
-                            ) : pendingError ? (
-                                <div className="text-center py-10 text-[#C8202F]">
-                                    Error loading pending tickets.
-                                </div>
-                            ) : pendingTickets.length === 0 ? (
-                                <div className="text-center py-14">
-                                    <CheckCircle className="w-12 h-12 text-[#1E8449] mx-auto mb-3" />
-                                    <p className="text-[#64748B]">
-                                        {pendingFilterCount > 0
-                                            ? 'No tickets match the current filters.'
-                                            : 'No tickets awaiting payment. All settled! 🎉'}
-                                    </p>
-                                </div>
-                            ) : pendingView === 'cards' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                    {pendingTickets.map((ticket) => {
-                                        const totalFine =
-                                            getTotalFine(ticket);
-                                        const paid =
-                                            parseFloat(ticket.total_paid) || 0;
-                                        const balance =
-                                            ticket.balance != null
-                                                ? parseFloat(ticket.balance)
-                                                : Math.max(
-                                                    0,
-                                                    totalFine - paid,
-                                                );
-                                        const statusMeta =
-                                            TICKET_STATUS_META[ticket.status] ||
-                                            TICKET_STATUS_META.issued;
-                                        return (
-                                            <article
-                                                key={ticket.ticket_id}
-                                                className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
-                                            >
-                                                <div
-                                                    className="h-2"
-                                                    style={{
-                                                        background:
-                                                            statusMeta.color,
-                                                    }}
-                                                />
-                                                <div className="p-4">
-                                                    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                                                        <span className="font-mono text-sm font-semibold text-[#16233F]">
-                                                            {
-                                                                ticket.ticket_number
-                                                            }
-                                                        </span>
-                                                        {ticketStatusBadge(
-                                                            ticket.status,
-                                                        )}
-                                                    </div>
-                                                    <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
-                                                        {ticket.violator
-                                                            ?.firstname}{' '}
-                                                        {ticket.violator
-                                                            ?.lastname}
-                                                    </p>
-                                                    <p className="text-xs text-[#64748B] font-mono">
-                                                        {
-                                                            ticket.violator
-                                                                ?.license
-                                                        }
-                                                    </p>
-                                                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3">
-                                                        <Spec label="Plate" mono>
-                                                            {ticket.vehicle
-                                                                ?.platenumber ||
-                                                                '—'}
-                                                        </Spec>
-                                                        <Spec
-                                                            label="Total fine"
-                                                            danger
-                                                        >
-                                                            {formatPeso(
-                                                                totalFine,
-                                                            )}
-                                                        </Spec>
-                                                        <Spec
-                                                            label="Paid"
-                                                            mono
-                                                        >
-                                                            {paid > 0
-                                                                ? formatPeso(
-                                                                    paid,
-                                                                )
-                                                                : '—'}
-                                                        </Spec>
-                                                        <Spec
-                                                            label="Balance"
-                                                            danger
-                                                        >
-                                                            {formatPeso(
-                                                                balance,
-                                                            )}
-                                                        </Spec>
-                                                    </dl>
-                                                    <div className="mt-3 text-xs text-[#64748B] line-clamp-2">
-                                                        {ticket.violations
-                                                            ?.slice(0, 2)
-                                                            .map(
-                                                                (v) =>
-                                                                    v
-                                                                        .violation_type
-                                                                        ?.violation_name ||
-                                                                    v.violation_name,
-                                                            )
-                                                            .filter(Boolean)
-                                                            .join(' · ')}
-                                                        {ticket.violations
-                                                            ?.length > 2 &&
-                                                            ` +${ticket
-                                                                .violations
-                                                                .length - 2
-                                                            } more`}
-                                                    </div>
-                                                </div>
-                                            </article>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
-                                    <div
-                                        className={`hidden ${PENDING_ROW} bg-[#16233F] text-white text-xs font-semibold`}
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setUnpaidShowFilters((v) => !v)}
+                                        className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
                                     >
-                                        {[
-                                            'Ticket #',
-                                            'Violator',
-                                            'Plate',
-                                            'Violations',
-                                            'Total Fine',
-                                            'Balance',
-                                            'Due',
-                                            'Time Left',
-                                            'Status',
-                                        ].map((c) => (
-                                            <span key={c}>{c}</span>
+                                        <Filter className="w-4 h-4 mr-2" />
+                                        Filters
+                                        {unpaidFilterCount > 0 && (
+                                            <span className="ml-2 bg-[#16233F] text-white text-xs rounded-full px-2 py-0.5">
+                                                {unpaidFilterCount}
+                                            </span>
+                                        )}
+                                    </Button>
+
+                                    <MonthPicker
+                                        value={unpaidMonth}
+                                        onChange={setUnpaidMonth}
+                                        max={currentMonth}
+                                    />
+
+                                    <div className="relative flex-1 min-w-[240px] max-w-md">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+                                        <Input
+                                            placeholder="Search ticket #, violator, plate..."
+                                            value={unpaidSearch}
+                                            onChange={(e) => {
+                                                setUnpaidSearch(e.target.value);
+                                                setUnpaidPage(1);
+                                            }}
+                                            className="pl-10 pr-10 rounded-full focus-visible:ring-[#F0B429]"
+                                        />
+                                        {unpaidSearch && (
+                                            <button
+                                                onClick={() => setUnpaidSearch('')}
+                                                title="Clear"
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <ViewToggle view={unpaidView} setView={setUnpaidView} />
+                                </div>
+
+                                {unpaidChips.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {unpaidChips.map(([label, clear]) => (
+                                            <Chip key={label} label={label} onClear={clear} />
                                         ))}
                                     </div>
-                                    <ul className="divide-y divide-[#EEF0F4]">
-                                        {pendingTickets.map((ticket) => {
-                                            const totalFine =
-                                                getTotalFine(ticket);
-                                            const paid =
-                                                parseFloat(
-                                                    ticket.total_paid,
-                                                ) || 0;
-                                            const balance =
-                                                ticket.balance != null
-                                                    ? parseFloat(
-                                                        ticket.balance,
-                                                    )
-                                                    : Math.max(
-                                                        0,
-                                                        totalFine - paid,
-                                                    );
+                                )}
+
+                                <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
+                                    <Wallet className="w-5 h-5 text-[#F0B429]" />
+                                    Unpaid Tickets (Not Overdue)
+                                    <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+                                        {unpaidMonth
+                                            ? `(${formatMonthLabel(unpaidMonth)})`
+                                            : '(alphabetical by violator)'}
+                                    </span>
+                                </h2>
+
+                                {pendingLoading && !pendingResponse ? (
+                                    <div className="flex justify-center py-10">
+                                        <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
+                                    </div>
+                                ) : pendingError ? (
+                                    <div className="text-center py-10 text-[#C8202F]">
+                                        Error loading unpaid tickets.
+                                    </div>
+                                ) : unpaidTickets.length === 0 ? (
+                                    <div className="text-center py-14">
+                                        <CheckCircle className="w-12 h-12 text-[#1E8449] mx-auto mb-3" />
+                                        <p className="text-[#64748B]">
+                                            {unpaidFilterCount > 0
+                                                ? 'No unpaid non-overdue tickets match the current filters.'
+                                                : 'No unpaid non-overdue tickets.'}
+                                        </p>
+                                    </div>
+                                ) : unpaidView === 'cards' ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                        {unpaidTickets.map((ticket) => {
+                                            const totalFine = getTotalFine(ticket);
+                                            const paid = parseFloat(ticket.total_paid) || 0;
+                                            const balance = getTicketBalance(ticket);
                                             const statusMeta =
-                                                TICKET_STATUS_META[
-                                                ticket.status
-                                                ] ||
+                                                TICKET_STATUS_META[ticket.status] ||
                                                 TICKET_STATUS_META.issued;
                                             return (
-                                                <li
+                                                <article
                                                     key={ticket.ticket_id}
-                                                    className={`${PENDING_ROW} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
-                                                    style={{
-                                                        borderLeftColor:
-                                                            (DUE_META[getDueState(ticket).state] || statusMeta).color,
-                                                    }}
+                                                    className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
                                                 >
-                                                    <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate">
-                                                        <Mini>Ticket</Mini>
-                                                        {
-                                                            ticket.ticket_number
-                                                        }
-                                                    </span>
-
-                                                    <div className="min-w-0">
-                                                        <div className="text-sm text-[#1F2937] truncate">
-                                                            {
-                                                                ticket.violator
-                                                                    ?.firstname
-                                                            }{' '}
-                                                            {
-                                                                ticket.violator
-                                                                    ?.lastname
-                                                            }
+                                                    <div
+                                                        className="h-2"
+                                                        style={{ background: statusMeta.color }}
+                                                    />
+                                                    <div className="p-4">
+                                                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                                                            <span className="font-mono text-sm font-semibold text-[#16233F]">
+                                                                {ticket.ticket_number}
+                                                            </span>
+                                                            {ticketStatusBadge(ticket.status)}
                                                         </div>
-                                                        <div className="text-xs text-[#64748B] font-mono truncate">
-                                                            {
-                                                                ticket.violator
-                                                                    ?.license
-                                                            }
-                                                        </div>
+                                                        <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
+                                                            {ticket.violator?.firstname}{' '}
+                                                            {ticket.violator?.lastname}
+                                                        </p>
+                                                        <p className="text-xs text-[#64748B] font-mono">
+                                                            {ticket.violator?.license}
+                                                        </p>
+                                                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3">
+                                                            <Spec label="Plate" mono>
+                                                                {ticket.vehicle?.platenumber || '—'}
+                                                            </Spec>
+                                                            <Spec label="Total fine" danger>
+                                                                {formatPeso(totalFine)}
+                                                            </Spec>
+                                                            <Spec label="Paid" mono>
+                                                                {paid > 0 ? formatPeso(paid) : '—'}
+                                                            </Spec>
+                                                            <Spec label="Balance" danger>
+                                                                {formatPeso(balance)}
+                                                            </Spec>
+                                                        </dl>
                                                     </div>
+                                                </article>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
+                                        <div
+                                            className={`hidden ${PENDING_ROW} bg-[#16233F] text-white text-xs font-semibold`}
+                                        >
+                                            {[
+                                                'Ticket #',
+                                                'Violator',
+                                                'Plate',
+                                                'Violations',
+                                                'Total Fine',
+                                                'Balance',
+                                                'Due',
+                                                'Time Left',
+                                                'Status',
+                                            ].map((c) => (
+                                                <span key={c}>{c}</span>
+                                            ))}
+                                        </div>
+                                        <ul className="divide-y divide-[#EEF0F4]">
+                                            {unpaidTickets.map((ticket) => {
+                                                const totalFine = getTotalFine(ticket);
+                                                const balance = getTicketBalance(ticket);
+                                                const statusMeta =
+                                                    TICKET_STATUS_META[ticket.status] ||
+                                                    TICKET_STATUS_META.issued;
+                                                return (
+                                                    <li
+                                                        key={ticket.ticket_id}
+                                                        className={`${PENDING_ROW} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
+                                                        style={{
+                                                            borderLeftColor: (
+                                                                DUE_META[getDueState(ticket).state] ||
+                                                                statusMeta
+                                                            ).color,
+                                                        }}
+                                                    >
+                                                        <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate">
+                                                            <Mini>Ticket</Mini>
+                                                            {ticket.ticket_number}
+                                                        </span>
 
-                                                    <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
-                                                        <Mini>Plate</Mini>
-                                                        {ticket.vehicle
-                                                            ?.platenumber ||
-                                                            '—'}
-                                                    </span>
+                                                        <div className="min-w-0">
+                                                            <div className="text-sm text-[#1F2937] truncate">
+                                                                {ticket.violator?.firstname}{' '}
+                                                                {ticket.violator?.lastname}
+                                                            </div>
+                                                            <div className="text-xs text-[#64748B] font-mono truncate">
+                                                                {ticket.violator?.license}
+                                                            </div>
+                                                        </div>
 
-                                                    <div className="space-y-0.5 min-w-0">
-                                                        {ticket.violations
-                                                            ?.slice(0, 2)
-                                                            .map((v, i) => (
+                                                        <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
+                                                            <Mini>Plate</Mini>
+                                                            {ticket.vehicle?.platenumber || '—'}
+                                                        </span>
+
+                                                        <div className="space-y-0.5 min-w-0">
+                                                            {ticket.violations?.slice(0, 2).map((v, i) => (
                                                                 <div
                                                                     key={i}
                                                                     className="text-xs text-[#1F2937] truncate"
                                                                 >
-                                                                    {v
-                                                                        .violation_type
-                                                                        ?.violation_name ||
+                                                                    {v.violation_type?.violation_name ||
                                                                         v.violation_name}
                                                                 </div>
                                                             ))}
-                                                        {ticket.violations
-                                                            ?.length > 2 && (
+                                                            {ticket.violations?.length > 2 && (
                                                                 <div className="text-xs text-[#94A3B8]">
-                                                                    +
-                                                                    {ticket
-                                                                        .violations
-                                                                        .length -
-                                                                        2}{' '}
-                                                                    more
+                                                                    +{ticket.violations.length - 2} more
                                                                 </div>
                                                             )}
-                                                    </div>
+                                                        </div>
 
-                                                    <span className="font-bold text-[#C8202F] tabular-nums whitespace-nowrap">
-                                                        <Mini>Fine</Mini>
-                                                        {formatPeso(totalFine)}
-                                                    </span>
+                                                        <span className="font-bold text-[#C8202F] tabular-nums whitespace-nowrap">
+                                                            <Mini>Fine</Mini>
+                                                            {formatPeso(totalFine)}
+                                                        </span>
 
-                                                    <span className="font-bold text-[#C2541F] tabular-nums whitespace-nowrap">
-                                                        <Mini>Balance</Mini>
-                                                        {formatPeso(balance)}
-                                                    </span>
+                                                        <span className="font-bold text-[#C2541F] tabular-nums whitespace-nowrap">
+                                                            <Mini>Balance</Mini>
+                                                            {formatPeso(balance)}
+                                                        </span>
 
-                                                    <DueBadge ticket={ticket} />
+                                                        <DueBadge ticket={ticket} />
 
-                                                    <TimeLeftClamped ticket={ticket} />
+                                                        <TimeLeftClamped ticket={ticket} />
 
-                                                    <span className="justify-self-start">
-                                                        {ticketStatusBadge(
-                                                            ticket.status,
+                                                        <span className="justify-self-start">
+                                                            {ticketStatusBadge(ticket.status)}
+                                                        </span>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {!pendingLoading && unpaidTickets.length > 0 && (
+                                    <Pagination
+                                        currentPage={pendingMeta.current_page}
+                                        totalPages={pendingMeta.last_page}
+                                        onPageChange={setUnpaidPage}
+                                        totalItems={pendingMeta.total}
+                                        itemsPerPage={ITEMS_PER_PAGE}
+                                    />
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                {historyShowFilters && historyPanel}
+
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setHistoryShowFilters((v) => !v)}
+                                        className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
+                                    >
+                                        <Filter className="w-4 h-4 mr-2" />
+                                        Filters
+                                        {historyFilterCount > 0 && (
+                                            <span className="ml-2 bg-[#16233F] text-white text-xs rounded-full px-2 py-0.5">
+                                                {historyFilterCount}
+                                            </span>
+                                        )}
+                                    </Button>
+
+                                    <MonthPicker
+                                        value={historyMonth}
+                                        onChange={setHistoryMonth}
+                                        max={currentMonth}
+                                    />
+
+                                    <div className="relative flex-1 min-w-[240px] max-w-md">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+                                        <Input
+                                            placeholder="Search by ticket number..."
+                                            value={historySearch}
+                                            onChange={(e) => {
+                                                setHistorySearch(e.target.value);
+                                                setHistoryPage(1);
+                                            }}
+                                            className="pl-10 pr-10 rounded-full focus-visible:ring-[#F0B429]"
+                                        />
+                                        {historySearch && (
+                                            <button
+                                                onClick={() => setHistorySearch('')}
+                                                title="Clear"
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <ViewToggle view={historyView} setView={setHistoryView} />
+                                </div>
+
+                                {historyChips.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {historyChips.map(([label, clear]) => (
+                                            <Chip key={label} label={label} onClear={clear} />
+                                        ))}
+                                    </div>
+                                )}
+
+                                <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
+                                    <Receipt className="w-5 h-5 text-[#F0B429]" />
+                                    Payment History
+                                    {historyMonth && (
+                                        <span className="text-xs font-normal text-[#64748B] font-['Inter']">
+                                            ({formatMonthLabel(historyMonth)})
+                                        </span>
+                                    )}
+                                </h2>
+
+                                {historyLoading && !historyResponse ? (
+                                    <div className="flex justify-center py-10">
+                                        <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
+                                    </div>
+                                ) : historyError ? (
+                                    <div className="text-center py-10 text-[#C8202F]">
+                                        Error loading payment history.
+                                    </div>
+                                ) : payments.length === 0 ? (
+                                    <div className="text-center py-14">
+                                        <Receipt className="w-12 h-12 text-[#CBD5E1] mx-auto mb-3" />
+                                        <p className="text-[#64748B]">
+                                            {historyFilterCount > 0
+                                                ? 'No payments match the current filters.'
+                                                : 'No payments recorded yet.'}
+                                        </p>
+                                    </div>
+                                ) : historyView === 'cards' ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                        {payments.map((p) => {
+                                            const statusMeta =
+                                                STATUS_META[p.payment_status] ||
+                                                STATUS_META.pending;
+                                            return (
+                                                <article
+                                                    key={p.payment_id}
+                                                    className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                                                >
+                                                    <div
+                                                        className="h-2"
+                                                        style={{ background: statusMeta.color }}
+                                                    />
+                                                    <div className="p-4">
+                                                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                                                            <span className="font-mono text-sm font-semibold text-[#16233F]">
+                                                                {p.receipt_number || '—'}
+                                                            </span>
+                                                            {paymentStatusBadge(p.payment_status)}
+                                                        </div>
+                                                        <p className="text-xs font-mono text-[#64748B] mb-3">
+                                                            Ref: {p.payment_reference}
+                                                        </p>
+                                                        <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
+                                                            {p.ticket?.violator
+                                                                ? `${p.ticket.violator.firstname} ${p.ticket.violator.lastname}`
+                                                                : '—'}
+                                                        </p>
+                                                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3">
+                                                            <Spec label="Ticket" mono>
+                                                                {p.ticket?.ticket_number || '—'}
+                                                            </Spec>
+                                                            <Spec label="Amount" danger>
+                                                                {formatPeso(p.amount_paid)}
+                                                            </Spec>
+                                                            <Spec label="Method">
+                                                                {p.payment_method?.replace('_', ' ') || '—'}
+                                                            </Spec>
+                                                            <Spec label="Date">
+                                                                {formatDate(p.payment_date)}
+                                                            </Spec>
+                                                        </dl>
+                                                        {p.ticket?.ticket_id && (
+                                                            <div className="mt-4 pt-4 border-t border-dashed border-[#CBD5E1]">
+                                                                <ActionButton
+                                                                    icon={Eye}
+                                                                    variant="info"
+                                                                    onClick={() =>
+                                                                        openTicketHistory(p.ticket.ticket_id)
+                                                                    }
+                                                                >
+                                                                    View
+                                                                </ActionButton>
+                                                            </div>
                                                         )}
-                                                    </span>
-                                                </li>
+                                                    </div>
+                                                </article>
                                             );
                                         })}
-                                    </ul>
-                                </div>
-                            )}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
+                                        <div
+                                            className={`hidden ${HISTORY_ROW} bg-[#16233F] text-white text-xs font-semibold`}
+                                        >
+                                            {[
+                                                'Reference',
+                                                'Receipt #',
+                                                'Ticket #',
+                                                'Violator',
+                                                'Amount',
+                                                'Method',
+                                                'Date',
+                                                'Status',
+                                                'Action',
+                                            ].map((c) => (
+                                                <span key={c}>{c}</span>
+                                            ))}
+                                        </div>
+                                        <ul className="divide-y divide-[#EEF0F4]">
+                                            {payments.map((p) => {
+                                                const statusMeta =
+                                                    STATUS_META[p.payment_status] ||
+                                                    STATUS_META.pending;
+                                                return (
+                                                    <li
+                                                        key={p.payment_id}
+                                                        className={`${HISTORY_ROW} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
+                                                        style={{ borderLeftColor: statusMeta.color }}
+                                                    >
+                                                        <span className="font-mono text-xs text-[#64748B] min-w-0 truncate">
+                                                            <Mini>Ref</Mini>
+                                                            {p.payment_reference}
+                                                        </span>
 
-                            {!pendingLoading && pendingTickets.length > 0 && (
-                                <Pagination
-                                    currentPage={pendingMeta.current_page}
-                                    totalPages={pendingMeta.last_page}
-                                    onPageChange={setPendingPage}
-                                    totalItems={pendingMeta.total}
-                                    itemsPerPage={ITEMS_PER_PAGE}
-                                />
-                            )}
-                        </div>
+                                                        <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate">
+                                                            <Mini>Receipt</Mini>
+                                                            {p.receipt_number || '—'}
+                                                        </span>
+
+                                                        <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
+                                                            <Mini>Ticket</Mini>
+                                                            {p.ticket?.ticket_number || '—'}
+                                                        </span>
+
+                                                        <span className="text-sm text-[#1F2937] min-w-0 truncate">
+                                                            <Mini>Violator</Mini>
+                                                            {p.ticket?.violator
+                                                                ? `${p.ticket.violator.firstname} ${p.ticket.violator.lastname}`
+                                                                : '—'}
+                                                        </span>
+
+                                                        <span className="font-bold text-[#1E8449] tabular-nums whitespace-nowrap">
+                                                            <Mini>Amount</Mini>
+                                                            {formatPeso(p.amount_paid)}
+                                                        </span>
+
+                                                        <span className="text-sm text-[#1F2937] capitalize whitespace-nowrap">
+                                                            <Mini>Method</Mini>
+                                                            {p.payment_method?.replace('_', ' ') || '—'}
+                                                        </span>
+
+                                                        <span className="text-sm text-[#1F2937] whitespace-nowrap">
+                                                            <Mini>Date</Mini>
+                                                            {formatDateTime(p.payment_date)}
+                                                        </span>
+
+                                                        <span className="justify-self-start">
+                                                            {paymentStatusBadge(p.payment_status)}
+                                                        </span>
+
+                                                        <div className="justify-self-end md:justify-self-start">
+                                                            {p.ticket?.ticket_id && (
+                                                                <ActionButton
+                                                                    icon={Eye}
+                                                                    variant="info"
+                                                                    onClick={() =>
+                                                                        openTicketHistory(p.ticket.ticket_id)
+                                                                    }
+                                                                >
+                                                                    View
+                                                                </ActionButton>
+                                                            )}
+                                                        </div>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {!historyLoading && payments.length > 0 && (
+                                    <Pagination
+                                        currentPage={historyMeta.current_page}
+                                        totalPages={historyMeta.last_page}
+                                        onPageChange={setHistoryPage}
+                                        totalItems={historyMeta.total}
+                                        itemsPerPage={ITEMS_PER_PAGE}
+                                    />
+                                )}
+                            </>
+                        )}
                     </div>
                 </TabsContent>
 
-                {/* ==================== MISSED DEADLINE TAB ==================== */}
+                {/* ==================== OVERDUE TAB ==================== */}
                 <TabsContent value="overdue" className="mt-0">
                     {tab === 'overdue' && <MissedDeadlineTab />}
                 </TabsContent>
-
-                {/* ==================== HISTORY TAB ==================== */}
-                <TabsContent value="history" className="mt-0">
-                    <div
-                        className="grid gap-6"
-                    >
-                        {historyShowFilters && historyPanel}
-
-                        <div className="space-y-4 min-w-0">
-                            <div className="flex flex-wrap items-center gap-3">
-                                <Button
-                                    variant="outline"
-                                    onClick={() =>
-                                        setHistoryShowFilters((v) => !v)
-                                    }
-                                    className="border-[#16233F]/20 text-[#16233F] hover:bg-[#E9ECF2]"
-                                >
-                                    <Filter className="w-4 h-4 mr-2" />
-                                    Filters
-                                    {historyFilterCount > 0 && (
-                                        <span className="ml-2 bg-[#16233F] text-white text-xs rounded-full px-2 py-0.5">
-                                            {historyFilterCount}
-                                        </span>
-                                    )}
-                                </Button>
-
-                                <MonthPicker
-                                    value={historyMonth}
-                                    onChange={setHistoryMonth}
-                                    max={currentMonth}
-                                />
-
-                                <div className="relative flex-1 min-w-[240px] max-w-md">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
-                                    <Input
-                                        placeholder="Search by ticket number..."
-                                        value={historySearch}
-                                        onChange={(e) => {
-                                            setHistorySearch(e.target.value);
-                                            setHistoryPage(1);
-                                        }}
-                                        className="pl-10 pr-10 rounded-full focus-visible:ring-[#F0B429]"
-                                    />
-                                    {historySearch && (
-                                        <button
-                                            onClick={() =>
-                                                setHistorySearch('')
-                                            }
-                                            title="Clear"
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#1F2937]"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                <ViewToggle
-                                    view={historyView}
-                                    setView={setHistoryView}
-                                />
-                            </div>
-
-                            {historyChips.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {historyChips.map(([label, clear]) => (
-                                        <Chip
-                                            key={label}
-                                            label={label}
-                                            onClear={clear}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-
-                            <h2 className="font-['Oswald'] font-medium text-lg text-[#16233F] flex items-center gap-2 border-b-2 border-dashed border-[#CBD5E1] pb-2">
-                                <Receipt className="w-5 h-5 text-[#F0B429]" />
-                                Recorded Payments
-                                {historyMonth && (
-                                    <span className="text-xs font-normal text-[#64748B] font-['Inter']">
-                                        ({formatMonthLabel(historyMonth)})
-                                    </span>
-                                )}
-                            </h2>
-
-                            {historyLoading && !historyResponse ? (
-                                <div className="flex justify-center py-10">
-                                    <Loader2 className="w-6 h-6 animate-spin text-[#16233F]" />
-                                </div>
-                            ) : historyError ? (
-                                <div className="text-center py-10 text-[#C8202F]">
-                                    Error loading payment history.
-                                </div>
-                            ) : payments.length === 0 ? (
-                                <div className="text-center py-14">
-                                    <Receipt className="w-12 h-12 text-[#CBD5E1] mx-auto mb-3" />
-                                    <p className="text-[#64748B]">
-                                        {historyFilterCount > 0
-                                            ? 'No payments match the current filters.'
-                                            : 'No payments recorded yet.'}
-                                    </p>
-                                </div>
-                            ) : historyView === 'cards' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                    {payments.map((p) => {
-                                        const statusMeta =
-                                            STATUS_META[p.payment_status] ||
-                                            STATUS_META.pending;
-                                        return (
-                                            <article
-                                                key={p.payment_id}
-                                                className="rounded-xl bg-white border border-[#E3E7EE] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
-                                            >
-                                                <div
-                                                    className="h-2"
-                                                    style={{
-                                                        background:
-                                                            statusMeta.color,
-                                                    }}
-                                                />
-                                                <div className="p-4">
-                                                    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                                                        <span className="font-mono text-sm font-semibold text-[#16233F]">
-                                                            {p.receipt_number ||
-                                                                '—'}
-                                                        </span>
-                                                        {paymentStatusBadge(
-                                                            p.payment_status,
-                                                        )}
-                                                    </div>
-                                                    <p className="text-xs font-mono text-[#64748B] mb-3">
-                                                        Ref:{' '}
-                                                        {p.payment_reference}
-                                                    </p>
-                                                    <p className="font-['Oswald'] text-lg leading-tight text-[#1F2937]">
-                                                        {p.ticket?.violator
-                                                            ? `${p.ticket.violator.firstname} ${p.ticket.violator.lastname}`
-                                                            : '—'}
-                                                    </p>
-                                                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3">
-                                                        <Spec
-                                                            label="Ticket"
-                                                            mono
-                                                        >
-                                                            {p.ticket
-                                                                ?.ticket_number ||
-                                                                '—'}
-                                                        </Spec>
-                                                        <Spec
-                                                            label="Amount"
-                                                            danger
-                                                        >
-                                                            {formatPeso(
-                                                                p.amount_paid,
-                                                            )}
-                                                        </Spec>
-                                                        <Spec label="Method">
-                                                            {p.payment_method?.replace(
-                                                                '_',
-                                                                ' ',
-                                                            ) || '—'}
-                                                        </Spec>
-                                                        <Spec label="Date">
-                                                            {formatDate(
-                                                                p.payment_date,
-                                                            )}
-                                                        </Spec>
-                                                    </dl>
-                                                    {p.ticket?.ticket_id && (
-                                                        <div className="mt-4 pt-4 border-t border-dashed border-[#CBD5E1]">
-                                                            <ActionButton
-                                                                icon={Eye}
-                                                                variant="info"
-                                                                onClick={() =>
-                                                                    openTicketHistory(
-                                                                        p.ticket
-                                                                            .ticket_id,
-                                                                    )
-                                                                }
-                                                            >
-                                                                View
-                                                            </ActionButton>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </article>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
-                                    <div
-                                        className={`hidden ${HISTORY_ROW} bg-[#16233F] text-white text-xs font-semibold`}
-                                    >
-                                        {[
-                                            'Reference',
-                                            'Receipt #',
-                                            'Ticket #',
-                                            'Violator',
-                                            'Amount',
-                                            'Method',
-                                            'Date',
-                                            'Status',
-                                            'Action',
-                                        ].map((c) => (
-                                            <span key={c}>{c}</span>
-                                        ))}
-                                    </div>
-                                    <ul className="divide-y divide-[#EEF0F4]">
-                                        {payments.map((p) => {
-                                            const statusMeta =
-                                                STATUS_META[
-                                                p.payment_status
-                                                ] || STATUS_META.pending;
-                                            return (
-                                                <li
-                                                    key={p.payment_id}
-                                                    className={`${HISTORY_ROW} hover:bg-[#F8F9FB] transition-colors border-l-4 min-w-0`}
-                                                    style={{
-                                                        borderLeftColor:
-                                                            statusMeta.color,
-                                                    }}
-                                                >
-                                                    <span className="font-mono text-xs text-[#64748B] min-w-0 truncate">
-                                                        <Mini>Ref</Mini>
-                                                        {p.payment_reference}
-                                                    </span>
-
-                                                    <span className="font-mono text-sm font-medium text-[#16233F] min-w-0 truncate">
-                                                        <Mini>Receipt</Mini>
-                                                        {p.receipt_number ||
-                                                            '—'}
-                                                    </span>
-
-                                                    <span className="font-mono text-sm text-[#1F2937] min-w-0 truncate">
-                                                        <Mini>Ticket</Mini>
-                                                        {p.ticket
-                                                            ?.ticket_number ||
-                                                            '—'}
-                                                    </span>
-
-                                                    <span className="text-sm text-[#1F2937] min-w-0 truncate">
-                                                        <Mini>Violator</Mini>
-                                                        {p.ticket?.violator
-                                                            ? `${p.ticket.violator.firstname} ${p.ticket.violator.lastname}`
-                                                            : '—'}
-                                                    </span>
-
-                                                    <span className="font-bold text-[#1E8449] tabular-nums whitespace-nowrap">
-                                                        <Mini>Amount</Mini>
-                                                        {formatPeso(
-                                                            p.amount_paid,
-                                                        )}
-                                                    </span>
-
-                                                    <span className="text-sm text-[#1F2937] capitalize whitespace-nowrap">
-                                                        <Mini>Method</Mini>
-                                                        {p.payment_method?.replace(
-                                                            '_',
-                                                            ' ',
-                                                        ) || '—'}
-                                                    </span>
-
-                                                    <span className="text-sm text-[#1F2937] whitespace-nowrap">
-                                                        <Mini>Date</Mini>
-                                                        {formatDateTime(
-                                                            p.payment_date,
-                                                        )}
-                                                    </span>
-
-                                                    <span className="justify-self-start">
-                                                        {paymentStatusBadge(
-                                                            p.payment_status,
-                                                        )}
-                                                    </span>
-
-                                                    <div className="justify-self-end md:justify-self-start">
-                                                        {p.ticket?.ticket_id && (
-                                                            <ActionButton
-                                                                icon={Eye}
-                                                                variant="info"
-                                                                onClick={() =>
-                                                                    openTicketHistory(
-                                                                        p.ticket
-                                                                            .ticket_id,
-                                                                    )
-                                                                }
-                                                            >
-                                                                View
-                                                            </ActionButton>
-                                                        )}
-                                                    </div>
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
-                                </div>
-                            )}
-
-                            {!historyLoading && payments.length > 0 && (
-                                <Pagination
-                                    currentPage={historyMeta.current_page}
-                                    totalPages={historyMeta.last_page}
-                                    onPageChange={setHistoryPage}
-                                    totalItems={historyMeta.total}
-                                    itemsPerPage={ITEMS_PER_PAGE}
-                                />
-                            )}
-                        </div>
-                    </div>
-                </TabsContent>
             </Tabs>
 
-            {/* ── Plate-search payment modal ── */}
+            {/* Plate-search payment modal */}
             <PlateSearchPaymentModal
                 open={isPaymentModalOpen}
                 onClose={() => setIsPaymentModalOpen(false)}
                 onSuccess={() => {
                     refetchPending();
-                    if (tab === 'history') refetchHistory();
+                    if (isPaymentHistoryFiltered) refetchHistory();
                 }}
             />
 
-            {/* ── History / View dialog ── */}
+            {/* Ticket payment history dialog */}
             <Dialog
                 open={isHistoryDialogOpen}
                 onOpenChange={(open) => {
@@ -2626,7 +2399,9 @@ const Payments = () => {
                     ) : !ticketHistory ? (
                         <div className="flex flex-col items-center justify-center py-24 gap-3">
                             <AlertCircle className="w-10 h-10 text-[#94A3B8]" />
-                            <p className="text-sm text-[#64748B]">No data available for this ticket.</p>
+                            <p className="text-sm text-[#64748B]">
+                                No data available for this ticket.
+                            </p>
                         </div>
                     ) : (
                         <div className="flex flex-col max-h-[calc(90vh-100px)]">
@@ -2764,8 +2539,7 @@ const Payments = () => {
                                                                         <div className="min-w-0">
                                                                             <div className="flex items-center gap-2 flex-wrap mb-1">
                                                                                 <span className="font-mono text-sm font-semibold text-[#16233F]">
-                                                                                    {p.receipt_number ||
-                                                                                        '—'}
+                                                                                    {p.receipt_number || '—'}
                                                                                 </span>
                                                                                 {paymentStatusBadge(
                                                                                     p.payment_status,
@@ -2784,18 +2558,14 @@ const Payments = () => {
                                                                             icon={Banknote}
                                                                             label="Method"
                                                                             value={
-                                                                                p.payment_method?.replace(
-                                                                                    '_',
-                                                                                    ' ',
-                                                                                ) || '—'
+                                                                                p.payment_method?.replace('_', ' ') ||
+                                                                                '—'
                                                                             }
                                                                         />
                                                                         <PreviewRow
                                                                             icon={Calendar}
                                                                             label="Date"
-                                                                            value={formatDateTime(
-                                                                                p.payment_date,
-                                                                            )}
+                                                                            value={formatDateTime(p.payment_date)}
                                                                         />
                                                                         {p.paid_by && (
                                                                             <PreviewRow
@@ -2842,10 +2612,7 @@ const Payments = () => {
                                                 <div className="flex items-center justify-between text-sm">
                                                     <span className="text-[#64748B]">Total Paid</span>
                                                     <span className="font-semibold text-[#1E8449] tabular-nums">
-                                                        −{' '}
-                                                        {formatPeso(
-                                                            ticketHistorySummary?.total_paid,
-                                                        )}
+                                                        − {formatPeso(ticketHistorySummary?.total_paid)}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center justify-between pt-3 border-t border-dashed border-[#CBD5E1]">
@@ -2853,49 +2620,13 @@ const Payments = () => {
                                                         Balance
                                                     </span>
                                                     <span
-                                                        className={`font-bold tabular-nums ${parseFloat(
-                                                            ticketHistorySummary?.balance,
-                                                        ) > 0
+                                                        className={`font-bold tabular-nums ${parseFloat(ticketHistorySummary?.balance) > 0
                                                             ? 'text-[#C2541F]'
                                                             : 'text-[#1E8449]'
                                                             }`}
                                                     >
                                                         {formatPeso(ticketHistorySummary?.balance)}
                                                     </span>
-                                                </div>
-                                                {(parseFloat(ticketHistorySummary?.balance) || 0) <=
-                                                    0 &&
-                                                    (parseFloat(
-                                                        ticketHistorySummary?.total_paid,
-                                                    ) || 0) > 0 && (
-                                                        <div className="pt-3 border-t border-dashed border-[#CBD5E1]">
-                                                            <div className="flex items-center gap-2 bg-[#E5F2EA] border border-[#1E8449]/30 rounded-lg p-2.5 text-xs text-[#1E8449]">
-                                                                <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                                                                <span className="font-medium">
-                                                                    This ticket has been fully settled.
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                            </div>
-                                        </section>
-
-                                        <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
-                                            <div className="flex items-start gap-2.5">
-                                                <Info className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
-                                                <div className="text-xs text-[#92600A] leading-relaxed">
-                                                    <p className="font-semibold mb-1">Notes</p>
-                                                    <ul className="space-y-1 list-disc list-inside">
-                                                        <li>
-                                                            All payments shown are for this ticket
-                                                            only. Refunds and voided payments are
-                                                            marked above.
-                                                        </li>
-                                                        <li>
-                                                            To void a payment, go to the Payment
-                                                            History tab and use the refund action.
-                                                        </li>
-                                                    </ul>
                                                 </div>
                                             </div>
                                         </section>
@@ -2911,8 +2642,7 @@ const Payments = () => {
                                         <strong className="text-[#16233F] tabular-nums">
                                             {ticketPayments.length}
                                         </strong>{' '}
-                                        {ticketPayments.length === 1 ? 'payment' : 'payments'}{' '}
-                                        for{' '}
+                                        {ticketPayments.length === 1 ? 'payment' : 'payments'} for{' '}
                                         <strong className="text-[#16233F] font-mono">
                                             {ticketHistory?.ticket_number}
                                         </strong>
