@@ -6,24 +6,6 @@ use App\Models\FaceRegistration;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Cross-account face duplicate detection (server database only).
- *
- * Same-pose cosine similarity on L2-normalised 192-d embeddings.
- * Thresholds live in config/face.php (override with FACE_DUP_* in .env).
- *
- * DECISION RULE (average based):
- *   Each pose (front / left / right) is compared to the same pose of the other
- *   account. The AVERAGE of those pose scores is the account's similarity.
- *     level 'block'  : average >= block   (default 0.80) -> reject
- *     level 'review' : average >= review  (default 0.75) -> allow + warn
- *     otherwise      : registered normally
- *
- * ASSUMPTIONS (adjust to your schema):
- *  - Model App\Models\FaceRegistration, one row per user
- *  - Columns: user_id, front_encoding, left_encoding, right_encoding, is_active
- *    (JSON arrays of 192 floats; array-cast or raw JSON string both work)
- */
 class FaceDuplicateService
 {
     public const EMBEDDING_SIZE = 192;
@@ -150,9 +132,6 @@ class FaceDuplicateService
 
     private function registrationsQuery(int|string $excludeUserId)
     {
-        // Only ACTIVE registrations count. Archived rows (replaced, reset or
-        // transferred faces) must not block anyone, otherwise a transferred
-        // face would keep matching its own old copy forever.
         return FaceRegistration::query()
             ->where('is_active', true)
             ->where('user_id', '!=', $excludeUserId);
