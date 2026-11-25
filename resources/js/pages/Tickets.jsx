@@ -707,7 +707,7 @@ const Info = (props) => (
 
 const ROW_CLASS =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 cursor-pointer ' +
-  'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.7fr)_minmax(0,.9fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,14rem)] md:gap-4';
+  'md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.6fr)_minmax(0,.9fr)_minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(11.5rem,1.4fr)_minmax(0,9rem)] md:gap-x-6 md:gap-y-4';
 
 const Tickets = () => {
   const queryClient = useQueryClient();
@@ -1446,12 +1446,12 @@ const Tickets = () => {
                         {statusBadge(ticket.status)}
                       </span>
 
-                      <span className="justify-self-start min-w-0">
+                      <span className="justify-self-start min-w-0 md:pr-2">
                         <Mini>Due</Mini>
                         <DueBadge ticket={ticket} />
                       </span>
 
-                      <div className="justify-self-end md:justify-self-start">
+                      <div className="justify-self-end md:justify-self-start md:pl-2">
                         {rowActions(ticket)}
                       </div>
                     </li>
