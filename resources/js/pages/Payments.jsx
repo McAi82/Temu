@@ -593,9 +593,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
     const [matchedVehicle, setMatchedVehicle] = useState(null);
     const [pendingTickets, setPendingTickets] = useState([]);
 
-    // Which ticket IDs the cashier has ticked for payment
-    const [selectedTicketIds, setSelectedTicketIds] = useState([]);
-
     const [receiptNumber, setReceiptNumber] = useState('');
     const [paidBy, setPaidBy] = useState('');
     const [notes, setNotes] = useState('');
@@ -612,7 +609,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
             setSearchError('');
             setMatchedVehicle(null);
             setPendingTickets([]);
-            setSelectedTicketIds([]);
             setReceiptNumber('');
             setPaidBy('');
             setNotes('');
@@ -641,7 +637,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
         setSearchError('');
         setMatchedVehicle(null);
         setPendingTickets([]);
-        setSelectedTicketIds([]);
 
         try {
             const vehicleRes = await searchVehicleByPlate(plate);
@@ -673,10 +668,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                 );
             } else {
                 setPendingTickets(vehicleTickets);
-                // Select all by default — payer can untick ones they don't want.
-                setSelectedTicketIds(
-                    vehicleTickets.map((t) => t.ticket_id),
-                );
                 setPaidBy(vehicle.owner || '');
             }
         } catch (err) {
@@ -690,30 +681,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
         }
     };
 
-    const toggleTicket = (ticketId) => {
-        setSelectedTicketIds((prev) =>
-            prev.includes(ticketId)
-                ? prev.filter((id) => id !== ticketId)
-                : [...prev, ticketId],
-        );
-    };
-
-    const selectAll = () =>
-        setSelectedTicketIds(pendingTickets.map((t) => t.ticket_id));
-    const clearAll = () => setSelectedTicketIds([]);
-
-    const selectedTickets = useMemo(
-        () =>
-            pendingTickets.filter((t) =>
-                selectedTicketIds.includes(t.ticket_id),
-            ),
-        [pendingTickets, selectedTicketIds],
-    );
-
-    const selectedTotal = selectedTickets.reduce(
-        (sum, t) => sum + getBalance(t),
-        0,
-    );
     const totalOutstanding = pendingTickets.reduce(
         (sum, t) => sum + getBalance(t),
         0,
@@ -724,8 +691,8 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
         e?.preventDefault();
         setFormError('');
 
-        if (!selectedTickets.length) {
-            setFormError('Select at least one ticket to pay.');
+        if (!pendingTickets.length) {
+            setFormError('No unpaid tickets to pay.');
             return;
         }
         if (!receiptNumber.trim()) {
@@ -745,7 +712,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
         let failedCount = 0;
         const errors = [];
 
-        for (const ticket of selectedTickets) {
+        for (const ticket of pendingTickets) {
             const outstanding = getBalance(ticket);
             if (outstanding <= 0) continue; // safety
 
@@ -919,27 +886,18 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
 
                                             <section className="rounded-xl bg-[#16233F] text-white p-4">
                                                 <p className="text-[10px] text-[#C7CEDB] uppercase tracking-wider mb-1">
-                                                    Selected Total
+                                                    Total to Pay
                                                 </p>
                                                 <p className="text-3xl font-['Oswald'] font-semibold tabular-nums">
-                                                    {formatPeso(selectedTotal)}
+                                                    {formatPeso(totalOutstanding)}
                                                 </p>
                                                 <p className="text-xs text-[#C7CEDB] mt-1">
-                                                    {selectedTickets.length} of{' '}
                                                     {pendingTickets.length}{' '}
                                                     {pendingTickets.length === 1
                                                         ? 'ticket'
                                                         : 'tickets'}{' '}
-                                                    selected
+                                                    to be paid in full
                                                 </p>
-                                                <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between text-[11px]">
-                                                    <span className="text-[#C7CEDB]">
-                                                        Total outstanding
-                                                    </span>
-                                                    <span className="font-semibold tabular-nums">
-                                                        {formatPeso(totalOutstanding)}
-                                                    </span>
-                                                </div>
                                             </section>
 
                                             <section className="rounded-xl border border-[#F0B429]/30 bg-[#FBF1DC] p-4">
@@ -947,14 +905,13 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                                     <Info className="w-4 h-4 text-[#92600A] mt-0.5 flex-shrink-0" />
                                                     <div className="text-xs text-[#92600A] leading-relaxed">
                                                         <p className="font-semibold mb-1">
-                                                            Partial payment allowed
+                                                            Full settlement required
                                                         </p>
                                                         <p>
-                                                            Tick only the tickets the
-                                                            payer wants to settle.
-                                                            Each selected ticket is
-                                                            paid in full with its
-                                                            own receipt number.
+                                                            All unpaid tickets of this
+                                                            vehicle are paid together.
+                                                            Each ticket is paid in full
+                                                            with its own receipt number.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -970,72 +927,23 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                                         Unpaid Tickets
                                                     </h3>
                                                     <span className="h-px flex-1 bg-[#E3E7EE]" />
-                                                    <div className="flex items-center gap-1.5">
-                                                        <button
-                                                            type="button"
-                                                            onClick={selectAll}
-                                                            disabled={
-                                                                selectedTicketIds.length ===
-                                                                pendingTickets.length
-                                                            }
-                                                            className="text-xs px-2.5 py-1 rounded-md bg-[#E9ECF2] text-[#16233F] hover:bg-[#DCE1EA] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            Select all
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={clearAll}
-                                                            disabled={
-                                                                selectedTicketIds.length === 0
-                                                            }
-                                                            className="text-xs px-2.5 py-1 rounded-md bg-[#FBE7E9] text-[#C8202F] hover:bg-[#F5D0D4] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            Clear
-                                                        </button>
-                                                    </div>
+                                                    <span className="text-xs font-medium text-[#64748B]">
+                                                        All {pendingTickets.length} must be paid together
+                                                    </span>
                                                 </div>
 
                                                 <ul className="space-y-3">
                                                     {pendingTickets.map((t) => {
                                                         const balance = getBalance(t);
-                                                        const selected =
-                                                            selectedTicketIds.includes(
-                                                                t.ticket_id,
-                                                            );
                                                         return (
                                                             <li
                                                                 key={t.ticket_id}
-                                                                onClick={() =>
-                                                                    toggleTicket(
-                                                                        t.ticket_id,
-                                                                    )
-                                                                }
-                                                                className={`rounded-xl border-2 bg-white overflow-hidden cursor-pointer transition-all ${
-                                                                    selected
-                                                                        ? 'border-[#1E8449] shadow-md'
-                                                                        : 'border-[#E3E7EE] hover:border-[#94A3B8]'
-                                                                }`}
+                                                                className="rounded-xl border-2 border-[#E3E7EE] bg-white overflow-hidden"
                                                             >
                                                                 <div
-                                                                    className={`flex items-center justify-between gap-2 px-4 py-2 text-xs ${
-                                                                        selected
-                                                                            ? 'bg-[#1E8449] text-white'
-                                                                            : 'bg-[#16233F] text-white'
-                                                                    }`}
+                                                                    className="flex items-center justify-between gap-2 px-4 py-2 text-xs bg-[#16233F] text-white"
                                                                 >
                                                                     <span className="flex items-center gap-2 min-w-0">
-                                                                        <span
-                                                                            className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                                                                                selected
-                                                                                    ? 'bg-white border-white'
-                                                                                    : 'border-white/60'
-                                                                            }`}
-                                                                            aria-hidden="true"
-                                                                        >
-                                                                            {selected && (
-                                                                                <Check className="w-3 h-3 text-[#1E8449]" />
-                                                                            )}
-                                                                        </span>
                                                                         <span className="font-mono font-semibold truncate">
                                                                             {t.ticket_number}
                                                                         </span>
@@ -1220,10 +1128,6 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                     </span>
                                 ) : !pendingTickets.length ? (
                                     <span>No unpaid tickets for this vehicle.</span>
-                                ) : !selectedTickets.length ? (
-                                    <span>
-                                        Tick at least one ticket to continue.
-                                    </span>
                                 ) : !receiptNumber.trim() ? (
                                     <span>
                                         Enter the receipt number to continue.
@@ -1232,14 +1136,14 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                     <span>
                                         Ready to record{' '}
                                         <strong className="text-[#16233F]">
-                                            {formatPeso(selectedTotal)}
+                                            {formatPeso(totalOutstanding)}
                                         </strong>{' '}
                                         for{' '}
                                         <strong className="text-[#16233F]">
-                                            {selectedTickets.length}
+                                            {pendingTickets.length}
                                         </strong>{' '}
                                         ticket
-                                        {selectedTickets.length === 1 ? '' : 's'}.
+                                        {pendingTickets.length === 1 ? '' : 's'}.
                                     </span>
                                 )}
                             </div>
@@ -1259,7 +1163,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                     disabled={
                                         submitting ||
                                         !matchedVehicle ||
-                                        !selectedTickets.length ||
+                                        !pendingTickets.length ||
                                         !receiptNumber.trim()
                                     }
                                 >
@@ -1272,11 +1176,11 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                                         <>
                                             <CheckCircle className="w-4 h-4 mr-2" />
                                             Record{' '}
-                                            {selectedTickets.length > 0
-                                                ? `${selectedTickets.length} `
+                                            {pendingTickets.length > 0
+                                                ? `${pendingTickets.length} `
                                                 : ''}
                                             Payment
-                                            {selectedTickets.length > 1 ? 's' : ''}
+                                            {pendingTickets.length > 1 ? 's' : ''}
                                         </>
                                     )}
                                 </Button>
@@ -1292,8 +1196,8 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
                 onClose={() => setConfirmOpen(false)}
                 onConfirm={handleConfirmedPayment}
                 vehicle={matchedVehicle}
-                tickets={selectedTickets}
-                totalAmount={selectedTotal}
+                tickets={pendingTickets}
+                totalAmount={totalOutstanding}
                 receiptNumber={receiptNumber}
                 paidBy={paidBy}
                 notes={notes}
