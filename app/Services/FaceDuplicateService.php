@@ -31,8 +31,8 @@ class FaceDuplicateService
      */
     public function findDuplicate(array $encodings, int|string $excludeUserId): ?array
     {
-        $block = (float) config('face.duplicate.block', 0.72);
-        $review = (float) config('face.duplicate.review', 0.65);
+        $block = (float) config('face.duplicate.block', 0.78);
+        $review = (float) config('face.duplicate.review', 0.75);
         $hard = (float) config('face.duplicate.hard', 0.80);
 
         $live = [];
