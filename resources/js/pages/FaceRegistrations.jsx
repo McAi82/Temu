@@ -85,7 +85,7 @@ const FaceImage = ({
         <img
             src={url}
             alt={alt}
-            className={`-scale-y-100 ${className}`}
+            className={className}
             onError={(e) => {
                 e.target.style.display = 'none';
             }}

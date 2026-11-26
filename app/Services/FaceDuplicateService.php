@@ -74,6 +74,8 @@ class FaceDuplicateService
                         'similarity'      => $score['rank'],
                         'pose'            => (string) array_search(max($score['best']), $score['best']),
                         'scores'          => $score['best'],
+                        'mean'            => $score['mean'],
+                        'poses_passed'    => $score['passed_block'],
                     ];
                 }
             }
@@ -128,6 +130,10 @@ class FaceDuplicateService
             'similarity' => $match['similarity'],
             'pose'       => $match['pose'],
             'scores'     => $match['scores'],
+            'mean'       => $match['mean'] ?? null,
+            'poses_passed' => $match['poses_passed'] ?? null,
+            'level'      => $match['level'],
+            'thresholds' => $this->thresholds(),
         ];
     }
 

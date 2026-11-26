@@ -107,6 +107,8 @@ class FaceDuplicateController extends Controller
             'front'        => $c['front'],
             'mean'         => $c['mean'],
             'poses_passed' => $c['poses_passed'],
+            'level'        => $c['level'] ?? null,
+            'thresholds'   => $service->thresholds(),
             'min_poses'    => (int) config('face.duplicate.min_poses', 3),
         ] : null];
     }
