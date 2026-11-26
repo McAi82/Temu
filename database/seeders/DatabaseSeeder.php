@@ -148,6 +148,17 @@ class DatabaseSeeder extends Seeder
             ['email' => 'luiskarlcons@gmail.com', 'firstname' => 'Luis Karl', 'middlename' => 'Bautista', 'lastname' => 'Consolacion', 'role' => 'staff', 'contact_number' => '09171234503'],
             ['email' => 'occ.detchos.juliane@gmail.com', 'firstname' => 'Juliane', 'middlename' => 'Gonzales', 'lastname' => 'Detchos', 'role' => 'enforcer', 'contact_number' => '09171234510'],
             ['email' => 'occ.villanueva.jessamae@gmail.com', 'firstname' => 'Jessamae', 'middlename' => 'Bautista', 'lastname' => 'Villanueva', 'role' => 'enforcer', 'contact_number' => '09171234511'],
+            // TEMU enforcer personnel list (imported from TEMU_Enforcers_Personnel_List.xlsx)
+            ['email' => 'neil.temu@gov.ph', 'firstname' => 'Neil', 'middlename' => 'Francis', 'lastname' => 'Gagno', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'kyle.temu@gov.ph', 'firstname' => 'Kyle', 'middlename' => null, 'lastname' => 'Galagnara', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'john.temu@gov.ph', 'firstname' => 'John', 'middlename' => 'Raymond', 'lastname' => 'Omega', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'billy.temu@gov.ph', 'firstname' => 'Billy', 'middlename' => 'Jun', 'lastname' => 'Tecson', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'jay.temu@gov.ph', 'firstname' => 'Jay', 'middlename' => 'Rom', 'lastname' => 'Canaugan', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'rene.temu@gov.ph', 'firstname' => 'Rene', 'middlename' => null, 'lastname' => 'Talasan', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'jayrom.temu@gov.ph', 'firstname' => 'Jayrom', 'middlename' => null, 'lastname' => 'Canaugan', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'silvino.temu@gov.ph', 'firstname' => 'Silvino', 'middlename' => null, 'lastname' => 'Vacalares', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'bernandino.temu@gov.ph', 'firstname' => 'Bernandino', 'middlename' => null, 'lastname' => 'Bete', 'role' => 'enforcer', 'contact_number' => null],
+            ['email' => 'joveneil.temu@gov.ph', 'firstname' => 'Joveneil', 'middlename' => 'Medio', 'lastname' => 'Badoles', 'role' => 'enforcer', 'contact_number' => null],
         ];
 
         $now = now();
@@ -441,14 +452,26 @@ class DatabaseSeeder extends Seeder
             ->toArray();
 
         $locations = [
-            'C.M. Recto Avenue, corner Rizal Street',
-            'Roxas Boulevard, near City Hall',
-            'Divisoria Bridge, Barangay Poblacion',
-            'Aguinaldo Street, near Public Market',
-            'Bonifacio Drive, Barangay San Roque',
-            'Rizal Park, corner Burgos Street',
-            'Apovel Drive, Barangay San Juan',
-            'Zone 5, National Highway, Barangay Sta. Cruz',
+            'Carlos Macapayag Street',
+            'Z1 PSB Traffic Light',
+            'Z3 Taytay Traffic Light',
+            'Z7 Molugan Traffic Light',
+            'E.A. Teoppe Street',
+            'Fernando Enerio Sr. Street',
+            'Provincial Road – National Highway Traffic Light',
+            'Molugan Public Market',
+            'El Defeonso Teoppe Street',
+            'Sinaloc Elementary School',
+            'City Road – Macapayag Extension Street',
+            'City Central School – Gates 1 and 2',
+            'Molugan National High School',
+            'Amoros National Highway Checkpoint',
+            'Executive Building – Basement Parking Area',
+            'Executive Building – City Hall Lobby',
+            'Zone 2 Fabri',
+            'City Road – San Francisco de Asis',
+            'Z1 TEMU Office',
+            'St. Joseph Academy',
         ];
 
         $statuses = ['issued', 'issued', 'issued', 'paid', 'paid', 'paid'];
