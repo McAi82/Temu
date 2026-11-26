@@ -1789,6 +1789,125 @@ const CompareRangePicker = ({ value, onChange, disabled }) => (
 /* Page                                                                */
 /* ================================================================== */
 
+/* ------------------------------------------------------------------ */
+/* Compare table (primary range vs. compare range)                     */
+/* ------------------------------------------------------------------ */
+
+const buildDelta = (current, previous) => {
+    const change = current - previous;
+    const direction = change > 0 ? 'up' : change < 0 ? 'down' : 'flat';
+    const percent = previous !== 0 ? Math.abs((change / previous) * 100) : 0;
+    return { direction, percent, change };
+};
+
+const CompareTable = ({ primary = {}, compare = {}, primaryRange, compareRange }) => {
+    const fmtRange = (r) => {
+        if (!r) return '—';
+        return r.start === r.end
+            ? formatShortDate(r.start)
+            : `${formatShortDate(r.start)} – ${formatShortDate(r.end)}`;
+    };
+
+    const rows = [
+        { key: 'total_tickets', label: 'Total tickets', color: COLORS.navy },
+        { key: 'paid_tickets', label: 'Paid tickets', color: COLORS.green },
+        { key: 'issued_tickets', label: 'Issued / Pending', color: COLORS.amber },
+        { key: 'archived_tickets', label: 'Archived', color: COLORS.red },
+        { key: 'total_fines', label: 'Total fines issued', color: COLORS.compare, currency: true },
+        { key: 'collection_rate', label: 'Collection rate', color: COLORS.compare, percentPoints: true },
+    ].map((r) => {
+        const a = toNumber(primary?.[r.key]);
+        const b = toNumber(compare?.[r.key]);
+        const fmt = (v) =>
+            r.currency
+                ? formatCurrency(v)
+                : r.percentPoints
+                    ? `${v.toFixed(1)}%`
+                    : v.toLocaleString();
+        return { ...r, a, b, fa: fmt(a), fb: fmt(b), delta: buildDelta(a, b) };
+    });
+
+    const thBase =
+        'px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748B]';
+
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+                <thead>
+                    <tr className="border-b-2 border-[#E3E7EE] bg-white">
+                        <th className={`text-left ${thBase} w-[30%]`}>Metric</th>
+                        <th className={`text-right ${thBase}`}>
+                            Primary
+                            <span className="block normal-case tracking-normal font-normal text-[10px] text-[#94A3B8]">
+                                {fmtRange(primaryRange)}
+                            </span>
+                        </th>
+                        <th className={`text-right ${thBase}`}>
+                            Compare
+                            <span className="block normal-case tracking-normal font-normal text-[10px] text-[#94A3B8]">
+                                {fmtRange(compareRange)}
+                            </span>
+                        </th>
+                        <th className={`text-right ${thBase}`}>Change</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((r) => {
+                        const { delta } = r;
+                        const isNew = r.b === 0 && r.a !== 0;
+                        const absChange = Math.abs(delta.change);
+                        const sign = delta.change > 0 ? '+' : delta.change < 0 ? '−' : '';
+                        const absLabel = r.currency
+                            ? formatCurrency(absChange)
+                            : r.percentPoints
+                                ? `${absChange.toFixed(1)} pts`
+                                : absChange.toLocaleString();
+                        return (
+                            <tr
+                                key={r.key}
+                                className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#F8F9FB] transition-colors"
+                            >
+                                <td className="px-5 py-3">
+                                    <div className="flex items-center gap-3">
+                                        <span
+                                            className="w-1 h-6 rounded-full shrink-0"
+                                            style={{ background: r.color }}
+                                        />
+                                        <span className="text-sm font-medium text-[#1F2937]">
+                                            {r.label}
+                                        </span>
+                                    </div>
+                                </td>
+                                <td className="px-5 py-3 text-right font-['Oswald'] text-lg font-semibold tabular-nums text-[#16233F]">
+                                    {r.fa}
+                                </td>
+                                <td className="px-5 py-3 text-right font-['Oswald'] text-lg tabular-nums text-[#64748B]">
+                                    {r.fb}
+                                </td>
+                                <td className="px-5 py-3 text-right">
+                                    <div className="inline-flex items-center justify-end gap-2">
+                                        <span className="text-xs text-[#64748B] tabular-nums">
+                                            {sign}
+                                            {absLabel}
+                                        </span>
+                                        {isNew ? (
+                                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-[#F1F5F9] text-[#64748B] print-pill">
+                                                New
+                                            </span>
+                                        ) : (
+                                            <DeltaBadge delta={delta} />
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+    );
+};
+
 const Reports = () => {
     const [period, setPeriod] = useState('daily');
     const [data, setData] = useState(null);
