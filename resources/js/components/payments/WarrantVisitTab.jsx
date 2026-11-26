@@ -80,7 +80,11 @@ const WarrantVisitTab = () => {
 
     const sendTo = (ids) => {
         if (!ids.length) return;
-        if (!window.confirm(`Send a warning email to ${ids.length} violator(s)?`)) return;
+        const resend = rows.filter((r) => ids.includes(r.ticket_id) && isWarnedTicket(r)).length;
+        const msg = resend
+            ? `Send a warning email to ${ids.length} violator(s)? ${resend} already ${resend === 1 ? 'has' : 'have'} been warned and will receive another warning.`
+            : `Send a warning email to ${ids.length} violator(s)?`;
+        if (!window.confirm(msg)) return;
         setError('');
         warnMut.mutate(ids);
     };
@@ -206,7 +210,8 @@ const WarrantVisitTab = () => {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                disabled={!v.email || warnMut.isLoading || alreadyWarned}
+                                                disabled={!v.email || warnMut.isLoading}
+                                                title={alreadyWarned ? 'Already warned. Click to send again.' : undefined}
                                                 onClick={() => sendTo([t.ticket_id])}
                                                 className={alreadyWarned ? 'bg-[#E5F2EA] text-[#1E8449] border-[#1E8449]/30' : ''}
                                             >

@@ -624,11 +624,6 @@ const TicketDetailsModal = ({ ticketId, open, onClose }) => {
                               <p className="text-sm font-semibold text-[#C8202F] tabular-nums">
                                 {formatPeso(v.fine_amount)}
                               </p>
-                              {v.demerit_points > 0 && (
-                                <p className="text-[10px] text-[#94A3B8]">
-                                  {v.demerit_points} pts
-                                </p>
-                              )}
                             </div>
                           </li>
                         ))}

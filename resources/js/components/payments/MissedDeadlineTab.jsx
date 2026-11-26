@@ -16,6 +16,47 @@ const peso = (n) =>
 
 const isWarnedTicket = (t) => (Number(t?.warning_count) || 0) > 0;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Date the ticket becomes eligible for a warrant visit (2 months after the deadline).
+const getEligibleAt = (t) => {
+    if (t?.warrant_eligible_at) {
+        const d = new Date(t.warrant_eligible_at);
+        if (!Number.isNaN(d.getTime())) return d;
+    }
+    if (t?.payment_due_at) {
+        const d = new Date(t.payment_due_at);
+        if (!Number.isNaN(d.getTime())) {
+            d.setMonth(d.getMonth() + 2);
+            return d;
+        }
+    }
+    return null;
+};
+
+const WarrantCountdown = ({ t }) => {
+    const eligible = getEligibleAt(t);
+    if (!eligible) return <span className="text-xs text-[#94A3B8]">—</span>;
+
+    const daysLeft = Math.ceil((eligible.getTime() - Date.now()) / DAY_MS);
+    if (daysLeft <= 0) {
+        return (
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-[#FBE7E9] text-[#C8202F]">
+                {t.warrant_status === 'visited' ? 'Visited' : 'Warrant visit'}
+            </span>
+        );
+    }
+    const soon = daysLeft <= 7;
+    return (
+        <div>
+            <span className={`text-sm font-semibold tabular-nums ${soon ? 'text-[#E67E22]' : 'text-[#16233F]'}`}>
+                {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left
+            </span>
+            <div className="text-[11px] text-[#64748B]">until {formatDay(eligible.toISOString())}</div>
+        </div>
+    );
+};
+
 const first = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== '');
 
 const InfoRow = ({ label, value }) =>
@@ -88,7 +129,7 @@ const ViolatorModal = ({ ticket, onClose, onWarn, warning }) => {
                             <Button variant="outline" onClick={onClose}>Close</Button>
                             <Button
                                 onClick={() => onWarn([ticket.ticket_id])}
-                                disabled={!v.email || warning || alreadyWarned}
+                                disabled={!v.email || warning}
                                 className={
                                     alreadyWarned
                                         ? 'bg-[#E5F2EA] text-[#1E8449] hover:bg-[#E5F2EA]'
@@ -156,7 +197,11 @@ const MissedDeadlineTab = () => {
 
     const sendTo = (ids) => {
         if (!ids.length) return;
-        if (!window.confirm(`Send a warning email to ${ids.length} violator(s)?`)) return;
+        const resend = rows.filter((r) => ids.includes(r.ticket_id) && isWarnedTicket(r)).length;
+        const msg = resend
+            ? `Send a warning email to ${ids.length} violator(s)? ${resend} already ${resend === 1 ? 'has' : 'have'} been warned and will receive another warning.`
+            : `Send a warning email to ${ids.length} violator(s)?`;
+        if (!window.confirm(msg)) return;
         setError('');
         warnMut.mutate(ids);
     };
@@ -206,17 +251,17 @@ const MissedDeadlineTab = () => {
                             <th className="px-3 py-3 w-8">
                                 <input type="checkbox" checked={allOnPage} onChange={toggleAll} />
                             </th>
-                            {['Ticket #', 'Violator / Email', 'Balance', 'Deadline', 'Actions'].map((h) => (
+                            {['Ticket #', 'Violator / Email', 'Balance', 'Deadline', 'Warrant Visit In', 'Actions'].map((h) => (
                                 <th key={h} className="px-3 py-3 font-semibold whitespace-nowrap">{h}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#EEF0F4]">
                         {isLoading && (
-                            <tr><td colSpan={6} className="p-8 text-center text-[#64748B]"><Loader2 className="inline w-4 h-4 animate-spin mr-2" />Loading…</td></tr>
+                            <tr><td colSpan={7} className="p-8 text-center text-[#64748B]"><Loader2 className="inline w-4 h-4 animate-spin mr-2" />Loading…</td></tr>
                         )}
                         {!isLoading && rows.length === 0 && (
-                            <tr><td colSpan={6} className="p-8 text-center text-[#64748B]">No tickets have missed the deadline. 🎉</td></tr>
+                            <tr><td colSpan={7} className="p-8 text-center text-[#64748B]">No tickets have missed the deadline. 🎉</td></tr>
                         )}
                         {rows.map((t) => {
                             const alreadyWarned = isWarnedTicket(t);
@@ -240,6 +285,7 @@ const MissedDeadlineTab = () => {
                                     </td>
                                     <td className="px-3 py-3 font-bold text-[#C2541F] tabular-nums whitespace-nowrap">{peso(t.balance)}</td>
                                     <td className="px-3 py-3 text-xs text-[#64748B] whitespace-nowrap">{formatDay(t.payment_due_at)}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap"><WarrantCountdown t={t} /></td>
                                     <td className="px-3 py-3 whitespace-nowrap">
                                         <div className="flex gap-2">
                                             <Button size="sm" variant="outline" onClick={() => setViewTicket(t)}>
@@ -248,7 +294,8 @@ const MissedDeadlineTab = () => {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                disabled={!t.violator?.email || warnMut.isLoading || alreadyWarned}
+                                                disabled={!t.violator?.email || warnMut.isLoading}
+                                                title={alreadyWarned ? 'Already warned. Click to send again.' : undefined}
                                                 onClick={() => sendTo([t.ticket_id])}
                                                 className={alreadyWarned ? 'bg-[#E5F2EA] text-[#1E8449] border-[#1E8449]/30' : ''}
                                             >

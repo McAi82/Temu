@@ -469,19 +469,11 @@ const ViolatorDetailsModal = ({ violatorId, open, onClose }) => {
                     {v.address && <PreviewRow icon={MapPin} label="Address" value={v.address} />}
                   </dl>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-[#FBE7E9] border border-[#C8202F]/20 p-3">
-                      <p className="text-[10px] text-[#C8202F] uppercase tracking-wider mb-0.5">Violations</p>
-                      <p className="text-2xl font-['Oswald'] font-semibold text-[#C8202F] tabular-nums">
-                        {v.violations_committed_count ?? 0}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-[#FBF1DC] border border-[#F0B429]/30 p-3">
-                      <p className="text-[10px] text-[#92600A] uppercase tracking-wider mb-0.5">Points</p>
-                      <p className="text-2xl font-['Oswald'] font-semibold text-[#92600A] tabular-nums">
-                        {v.total_points ?? 0}
-                      </p>
-                    </div>
+                  <div className="rounded-lg bg-[#FBE7E9] border border-[#C8202F]/20 p-3">
+                    <p className="text-[10px] text-[#C8202F] uppercase tracking-wider mb-0.5">Violations</p>
+                    <p className="text-2xl font-['Oswald'] font-semibold text-[#C8202F] tabular-nums">
+                      {v.violations_committed_count ?? 0}
+                    </p>
                   </div>
 
                   <div className="rounded-lg bg-[#16233F] text-white p-3">

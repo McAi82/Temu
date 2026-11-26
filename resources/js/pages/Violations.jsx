@@ -34,7 +34,6 @@ import {
   PhilippinePeso,
   Tag,
   FileText,
-  Award,
   AlertCircle,
   CheckCircle,
   Info,
@@ -113,7 +112,7 @@ const Chip = ({ label, onClear }) => (
 
 const ROW =
   'flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ' +
-  'md:grid md:grid-cols-[minmax(0,.9fr)_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,.7fr)_minmax(0,14rem)] md:gap-4';
+  'md:grid md:grid-cols-[minmax(0,.9fr)_minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,14rem)] md:gap-4';
 
 /* Filter modal (pop-up dialog) */
 const FilterShell = ({ title, onClose, onReset, children }) => (
@@ -215,7 +214,6 @@ const Violations = () => {
     fine_amount: "",
     description: "",
     category: "",
-    demerit_points: 0,
   });
 
   const [showFilters, setShowFilters] = useState(false);
@@ -224,8 +222,6 @@ const Violations = () => {
     active_only: true,
     min_fine: "",
     max_fine: "",
-    min_points: "",
-    max_points: "",
   });
 
   const debouncedSearch = useDebouncedValue(searchTerm, 350);
@@ -312,19 +308,6 @@ const Violations = () => {
         (v) => parseFloat(v.fine_amount || 0) <= parseFloat(filters.max_fine),
       );
     }
-    if (filters.min_points !== "") {
-      list = list.filter(
-        (v) =>
-          parseInt(v.demerit_points || 0) >= parseInt(filters.min_points),
-      );
-    }
-    if (filters.max_points !== "") {
-      list = list.filter(
-        (v) =>
-          parseInt(v.demerit_points || 0) <= parseInt(filters.max_points),
-      );
-    }
-
     const matching = term
       ? list.filter((v) => {
         const haystack = [
@@ -348,7 +331,6 @@ const Violations = () => {
     const dataToSend = {
       ...formData,
       fine_amount: parseFloat(formData.fine_amount) || 0,
-      demerit_points: parseInt(formData.demerit_points) || 0,
     };
 
     if (editingViolation) {
@@ -377,7 +359,6 @@ const Violations = () => {
       fine_amount: violation.fine_amount || "",
       description: violation.description || "",
       category: violation.category || "",
-      demerit_points: violation.demerit_points || 0,
     });
     setIsDialogOpen(true);
   };
@@ -390,7 +371,6 @@ const Violations = () => {
       fine_amount: "",
       description: "",
       category: "",
-      demerit_points: 0,
     });
   };
 
@@ -400,8 +380,6 @@ const Violations = () => {
       active_only: true,
       min_fine: "",
       max_fine: "",
-      min_points: "",
-      max_points: "",
     });
 
   const applyFinePreset = (preset) =>
@@ -413,7 +391,6 @@ const Violations = () => {
     if (filters.category) c++;
     if (!filters.active_only) c++;
     if (filters.min_fine || filters.max_fine) c++;
-    if (filters.min_points || filters.max_points) c++;
     return c;
   }, [searchTerm, filters]);
 
@@ -450,14 +427,10 @@ const Violations = () => {
     filters.category && [`Category: ${filters.category}`, () => setF({ category: "" })],
     !filters.active_only && ["Showing inactive too", () => setF({ active_only: true })],
     (filters.min_fine || filters.max_fine) && [`Fine: ₱${filters.min_fine || "0"} → ₱${filters.max_fine || "∞"}`, () => setF({ min_fine: "", max_fine: "" })],
-    (filters.min_points || filters.max_points) && [`Points: ${filters.min_points || "0"} → ${filters.max_points || "∞"}`, () => setF({ min_points: "", max_points: "" })],
   ].filter(Boolean);
 
   const catBadge = (v) => (
     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryBadgeColor(v.category)}`}>{v.category || "Uncategorized"}</span>
-  );
-  const ptsBadge = (v) => (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${v.demerit_points > 0 ? "bg-[#FBF1DC] text-[#92600A]" : "bg-gray-100 text-gray-500"}`}>{v.demerit_points || 0}</span>
   );
   const actions = (v) => isAdmin() ? (
     <div className="flex flex-wrap gap-2">
@@ -499,10 +472,6 @@ const Violations = () => {
               className="text-xs px-2.5 py-1 rounded-full bg-white text-[#16233F] hover:bg-[#16233F] hover:text-white transition-colors font-medium">{p.label}</button>
           ))}
         </div>
-      </div>
-      <div>
-        <L>Demerit points</L>
-        <div className="flex flex-wrap items-center gap-2">{rangeInputs("min_points", "max_points")}</div>
       </div>
     </FilterShell>
   );
@@ -554,7 +523,7 @@ const Violations = () => {
                       <div className="text-xs font-normal text-[#64748B] font-['Inter'] mt-0.5">
                         {editingViolation
                           ? `Update "${editingViolation.violation_name}"`
-                          : 'Define a traffic violation type, its fine, and demerit points'}
+                          : 'Define a traffic violation type, and its fine'}
                       </div>
                     </div>
                   </DialogTitle>
@@ -667,7 +636,7 @@ const Violations = () => {
                             <span className="h-px flex-1 bg-[#E3E7EE]" />
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4">
                             <div>
                               <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
                                 Fine Amount <span className="text-[#C8202F]">*</span>
@@ -710,44 +679,6 @@ const Violations = () => {
                               </div>
                             </div>
 
-                            <div>
-                              <label className="text-xs font-semibold text-[#16233F] mb-1.5 flex items-center gap-1.5">
-                                <Award className="w-3.5 h-3.5 text-[#92600A]" />
-                                Demerit Points
-                              </label>
-                              <Input
-                                type="number"
-                                min="0"
-                                value={formData.demerit_points}
-                                onChange={(e) =>
-                                  setFormData({
-                                    ...formData,
-                                    demerit_points: e.target.value,
-                                  })
-                                }
-                                className="focus-visible:ring-[#F0B429] h-11 font-mono tabular-nums"
-                              />
-                              <div className="flex flex-wrap gap-1.5 mt-2">
-                                {[0, 1, 3, 5, 10].map((v) => (
-                                  <button
-                                    key={v}
-                                    type="button"
-                                    onClick={() =>
-                                      setFormData({
-                                        ...formData,
-                                        demerit_points: String(v),
-                                      })
-                                    }
-                                    className="text-xs px-2.5 py-1 rounded-full bg-[#F5F6F8] text-[#16233F] hover:bg-[#16233F] hover:text-white transition-colors font-medium tabular-nums"
-                                  >
-                                    {v}
-                                  </button>
-                                ))}
-                              </div>
-                              <p className="text-[11px] text-[#94A3B8] mt-1.5">
-                                12 points typically trigger license suspension.
-                              </p>
-                            </div>
                           </div>
                         </section>
 
@@ -810,7 +741,7 @@ const Violations = () => {
                                 {formData.violation_name || 'Violation name'}
                               </p>
 
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-1 gap-3">
                                 <div className="rounded-lg bg-[#FBF1DC] border border-[#F0B429]/30 p-3">
                                   <p className="text-[10px] text-[#92600A] uppercase tracking-wider mb-1">
                                     Fine
@@ -818,29 +749,6 @@ const Violations = () => {
                                   <p className="text-xl font-['Oswald'] font-semibold text-[#C8202F] tabular-nums">
                                     ₱
                                     {parseFloat(formData.fine_amount || 0).toLocaleString()}
-                                  </p>
-                                </div>
-                                <div
-                                  className={`rounded-lg border p-3 ${parseInt(formData.demerit_points) > 0
-                                    ? 'bg-[#FBEAE2] border-[#C2541F]/30'
-                                    : 'bg-[#F5F6F8] border-[#E3E7EE]'
-                                    }`}
-                                >
-                                  <p
-                                    className={`text-[10px] uppercase tracking-wider mb-1 ${parseInt(formData.demerit_points) > 0
-                                      ? 'text-[#C2541F]'
-                                      : 'text-[#64748B]'
-                                      }`}
-                                  >
-                                    Points
-                                  </p>
-                                  <p
-                                    className={`text-xl font-['Oswald'] font-semibold tabular-nums ${parseInt(formData.demerit_points) > 0
-                                      ? 'text-[#C2541F]'
-                                      : 'text-[#94A3B8]'
-                                      }`}
-                                  >
-                                    {parseInt(formData.demerit_points) || 0}
                                   </p>
                                 </div>
                               </div>
@@ -873,10 +781,6 @@ const Violations = () => {
                                   Fine amounts are snapshotted onto each ticket when the
                                   violation is issued, so changing them later doesn't
                                   affect past tickets.
-                                </li>
-                                <li>
-                                  Demerit points accumulate on the violator's record and
-                                  may trigger a repeat-offender flag.
                                 </li>
                               </ul>
                             </div>
@@ -996,10 +900,6 @@ const Violations = () => {
                           <p className="text-[10px] text-[#94A3B8]">Fine Amount</p>
                           <p className="text-2xl font-['Oswald'] font-semibold text-[#C8202F] tabular-nums">₱{v.fine_amount?.toLocaleString()}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[10px] text-[#94A3B8] mb-1">Points</p>
-                          {ptsBadge(v)}
-                        </div>
                       </div>
                       <FineBar value={v.fine_amount} max={maxFine} />
                       <div className="mt-4 pt-4 border-t border-dashed border-[#CBD5E1]">{actions(v)}</div>
@@ -1009,7 +909,7 @@ const Violations = () => {
               ) : (
                 <div className="rounded-xl border border-[#E3E7EE] bg-white overflow-hidden">
                   <div className={`hidden gap-4 px-4 py-2.5 bg-[#16233F] text-white text-xs font-semibold ${ROW}`}>
-                    {["Code", "Violation Name", "Category", "Fine Amount", "Points", "Actions"].map((c) => <span key={c}>{c}</span>)}
+                    {["Code", "Violation Name", "Category", "Fine Amount", "Actions"].map((c) => <span key={c}>{c}</span>)}
                   </div>
                   <ul className="divide-y divide-[#EEF0F4]">
                     {filteredViolations.map((v) => (
@@ -1021,7 +921,6 @@ const Violations = () => {
                           <span className="font-medium text-[#C8202F]"><Mini>Fine</Mini>₱{v.fine_amount?.toLocaleString()}</span>
                           <FineBar value={v.fine_amount} max={maxFine} />
                         </div>
-                        <span><Mini>Points</Mini>{ptsBadge(v)}</span>
                         <div>{actions(v)}</div>
                       </li>
                     ))}
