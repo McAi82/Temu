@@ -1281,12 +1281,26 @@ const Payments = () => {
         refetch: refetchPending,
         error: pendingError,
     } = useQuery({
-        queryKey: ['payments-pending', unpaidPage, unpaidSearch, unpaidMonth],
-        queryFn: () =>
-            getPendingPayments(unpaidPage, ITEMS_PER_PAGE, {
+        // NOTE: the page is intentionally NOT part of the key. We fetch every
+        // pending ticket, filter out overdue ones client-side, then paginate
+        // locally. Server-side pagination broke because page 1 was full of
+        // overdue tickets that the client filter removed (empty tab).
+        queryKey: ['payments-pending', unpaidSearch, unpaidMonth],
+        queryFn: async () => {
+            const params = {
                 search: unpaidSearch || undefined,
                 month: unpaidMonth || undefined,
-            }),
+            };
+            const PAGE_SIZE = 200;
+            const first = await getPendingPayments(1, PAGE_SIZE, params);
+            let all = getDataArray(first);
+            const lastPage = getMeta(first).last_page || 1;
+            for (let page = 2; page <= lastPage; page++) {
+                const res = await getPendingPayments(page, PAGE_SIZE, params);
+                all = all.concat(getDataArray(res));
+            }
+            return all;
+        },
         keepPreviousData: true,
         staleTime: 1000 * 30,
     });
@@ -1337,7 +1351,7 @@ const Payments = () => {
         });
 
     /* ---------- Derived: Unpaid (not paid & not overdue) ---------- */
-    const unpaidTickets = useMemo(() => {
+    const allUnpaidTickets = useMemo(() => {
         let list = getDataArray(pendingResponse);
 
         // Strictly exclude paid tickets and overdue tickets
@@ -1369,7 +1383,26 @@ const Payments = () => {
         });
     }, [pendingResponse, unpaidFilters]);
 
-    const pendingMeta = getMeta(pendingResponse);
+    const unpaidLastPage = Math.max(
+        1,
+        Math.ceil(allUnpaidTickets.length / ITEMS_PER_PAGE),
+    );
+    const unpaidCurrentPage = Math.min(unpaidPage, unpaidLastPage);
+
+    const unpaidTickets = useMemo(
+        () =>
+            allUnpaidTickets.slice(
+                (unpaidCurrentPage - 1) * ITEMS_PER_PAGE,
+                unpaidCurrentPage * ITEMS_PER_PAGE,
+            ),
+        [allUnpaidTickets, unpaidCurrentPage],
+    );
+
+    const pendingMeta = {
+        current_page: unpaidCurrentPage,
+        last_page: unpaidLastPage,
+        total: allUnpaidTickets.length,
+    };
 
     const payments = useMemo(() => {
         let list = getDataArray(historyResponse);
@@ -1499,7 +1532,7 @@ const Payments = () => {
         }
     };
 
-    const totalUnpaidCount = unpaidTickets.length;
+    const totalUnpaidCount = allUnpaidTickets.length;
 
     const ticketHistory = ticketHistoryResponse?.data?.ticket;
     const ticketHistorySummary = ticketHistoryResponse?.data?.summary;
