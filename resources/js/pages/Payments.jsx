@@ -266,18 +266,29 @@ const isUnpaidNotOverdueTicket = (ticket) => {
 };
 
 const TimeLeftClamped = ({ ticket }) => {
+    const [now, setNow] = useState(() => Date.now());
     const due = getDueState(ticket);
     const state = due?.state;
+    const dueAt = ticket?.payment_due_at
+        ? new Date(ticket.payment_due_at).getTime()
+        : NaN;
+
+    useEffect(() => {
+        if (state === 'overdue' || Number.isNaN(dueAt)) return;
+        const interval = setInterval(() => {
+            setNow(Date.now());
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [state, dueAt]);
 
     if (state === 'overdue') {
         return (
             <span className="text-xs font-medium text-[#C8202F] whitespace-nowrap">
-                <Mini>Time Left</Mini>0d 0h
+                <Mini>Time Left</Mini>0h 0m 0s
             </span>
         );
     }
 
-    const dueAt = ticket?.payment_due_at ? new Date(ticket.payment_due_at).getTime() : NaN;
     if (Number.isNaN(dueAt)) {
         return (
             <span className="text-xs text-[#64748B] whitespace-nowrap">
@@ -286,10 +297,11 @@ const TimeLeftClamped = ({ ticket }) => {
         );
     }
 
-    const msLeft = Math.max(0, dueAt - Date.now());
-    const totalHours = Math.floor(msLeft / 3_600_000);
-    const days = Math.floor(totalHours / 24);
-    const hours = totalHours % 24;
+    const msLeft = Math.max(0, dueAt - now);
+    const totalSeconds = Math.floor(msLeft / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
 
     const cls =
         state === 'due-soon'
@@ -297,9 +309,9 @@ const TimeLeftClamped = ({ ticket }) => {
             : 'text-[#1F2937]';
 
     return (
-        <span className={`text-xs whitespace-nowrap ${cls}`}>
+        <span className={`text-xs tabular-nums whitespace-nowrap ${cls}`}>
             <Mini>Time Left</Mini>
-            {days}d {hours}h
+            {hours}h {minutes}m {seconds}s
         </span>
     );
 };

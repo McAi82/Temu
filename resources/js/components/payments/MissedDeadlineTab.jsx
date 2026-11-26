@@ -1,3 +1,4 @@
+
 // web/src/components/payments/MissedDeadlineTab.jsx
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,18 +9,13 @@ import { Input } from '../ui/input';
 import { Pagination } from '../ui/Pagination';
 import { useAlert } from '../ui/AlertProvider';
 import { getOverduePayments, sendOverdueWarnings, updateWarrantStatus } from '../../services/api';
-import { useNow } from './DueStatus';
-import { formatOverdue, formatDay } from '../../lib/dueTime';
+import { formatDay } from '../../lib/dueTime';
 
 const PER_PAGE = 20;
 const peso = (n) =>
     `₱${(parseFloat(n) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const OverdueFor = ({ ticket }) => {
-    const now = useNow(60_000);
-    const ms = now - new Date(ticket.payment_due_at).getTime();
-    return <span className="font-semibold text-[#C8202F] tabular-nums">{formatOverdue(Math.max(0, ms))}</span>;
-};
+const isWarnedTicket = (t) => (Number(t?.warning_count) || 0) > 0;
 
 const WarrantCell = ({ t }) => {
     if (t.warrant_status === 'visited') {
@@ -58,6 +54,8 @@ const ViolatorModal = ({ ticket, onClose, onWarn, warning }) => {
         v.address,
         [v.street, v.barangay, v.city, v.province].filter(Boolean).join(', '),
     );
+    const alreadyWarned = isWarnedTicket(ticket);
+
     return (
         <Dialog open={!!ticket} onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
@@ -99,7 +97,7 @@ const ViolatorModal = ({ ticket, onClose, onWarn, warning }) => {
                                     <InfoRow label="Deadline" value={formatDay(ticket.payment_due_at)} />
                                     <InfoRow
                                         label="Warnings sent"
-                                        value={ticket.warning_count > 0 ? `${ticket.warning_count}× (last ${formatDay(ticket.warning_sent_at)})` : 'None'}
+                                        value={alreadyWarned ? `${ticket.warning_count}× (last ${formatDay(ticket.warning_sent_at)})` : 'None'}
                                     />
                                     <InfoRow
                                         label="Warrant visit"
@@ -117,10 +115,22 @@ const ViolatorModal = ({ ticket, onClose, onWarn, warning }) => {
                             <Button variant="outline" onClick={onClose}>Close</Button>
                             <Button
                                 onClick={() => onWarn([ticket.ticket_id])}
-                                disabled={!v.email || warning}
-                                className="bg-[#C8202F] hover:bg-[#A51A27]"
+                                disabled={!v.email || warning || alreadyWarned}
+                                className={
+                                    alreadyWarned
+                                        ? 'bg-[#E5F2EA] text-[#1E8449] hover:bg-[#E5F2EA]'
+                                        : 'bg-[#C8202F] hover:bg-[#A51A27]'
+                                }
                             >
-                                <Mail className="w-4 h-4 mr-2" /> Send warning
+                                {alreadyWarned ? (
+                                    <>
+                                        <CheckCircle className="w-4 h-4 mr-2" /> Warned
+                                    </>
+                                ) : (
+                                    <>
+                                        <Mail className="w-4 h-4 mr-2" /> Send warning
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </>
@@ -244,67 +254,83 @@ const MissedDeadlineTab = () => {
                             <th className="px-3 py-3 w-8">
                                 <input type="checkbox" checked={allOnPage} onChange={toggleAll} />
                             </th>
-                            {['Ticket #', 'Violator / Email', 'Balance', 'Deadline', 'Overdue For', 'Warnings', 'Warrant Visit', 'Actions'].map((h) => (
+                            {['Ticket #', 'Violator / Email', 'Balance', 'Deadline', 'Warnings', 'Warrant Visit', 'Actions'].map((h) => (
                                 <th key={h} className="px-3 py-3 font-semibold whitespace-nowrap">{h}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#EEF0F4]">
                         {isLoading && (
-                            <tr><td colSpan={9} className="p-8 text-center text-[#64748B]"><Loader2 className="inline w-4 h-4 animate-spin mr-2" />Loading…</td></tr>
+                            <tr><td colSpan={8} className="p-8 text-center text-[#64748B]"><Loader2 className="inline w-4 h-4 animate-spin mr-2" />Loading…</td></tr>
                         )}
                         {!isLoading && rows.length === 0 && (
-                            <tr><td colSpan={9} className="p-8 text-center text-[#64748B]">No tickets have missed the deadline. 🎉</td></tr>
+                            <tr><td colSpan={8} className="p-8 text-center text-[#64748B]">No tickets have missed the deadline. 🎉</td></tr>
                         )}
-                        {rows.map((t) => (
-                            <tr key={t.ticket_id} className="hover:bg-[#F8F9FB]">
-                                <td className="px-3 py-3">
-                                    <input type="checkbox" checked={selected.has(t.ticket_id)} onChange={() => toggle(t.ticket_id)} />
-                                </td>
-                                <td className="px-3 py-3 font-mono font-medium text-[#16233F] whitespace-nowrap">{t.ticket_number}</td>
-                                <td className="px-3 py-3 min-w-[190px]">
-                                    <button
-                                        type="button"
-                                        onClick={() => setViewTicket(t)}
-                                        className="text-left text-[#16233F] font-medium hover:underline"
-                                    >
-                                        {t.violator?.firstname} {t.violator?.lastname}
-                                    </button>
-                                    {t.violator?.email
-                                        ? <div className="text-xs text-[#64748B] truncate">{t.violator.email}</div>
-                                        : <div className="text-xs text-[#C8202F]">No email on file</div>}
-                                </td>
-                                <td className="px-3 py-3 font-bold text-[#C2541F] tabular-nums whitespace-nowrap">{peso(t.balance)}</td>
-                                <td className="px-3 py-3 text-xs text-[#64748B] whitespace-nowrap">{formatDay(t.payment_due_at)}</td>
-                                <td className="px-3 py-3 whitespace-nowrap"><OverdueFor ticket={t} /></td>
-                                <td className="px-3 py-3 text-xs whitespace-nowrap">
-                                    {t.warning_count > 0
-                                        ? <>{t.warning_count}× <span className="text-[#64748B]">· last {formatDay(t.warning_sent_at)}</span></>
-                                        : <span className="text-[#94A3B8]">None sent</span>}
-                                </td>
-                                <td className="px-3 py-3"><WarrantCell t={t} /></td>
-                                <td className="px-3 py-3 whitespace-nowrap">
-                                    <div className="flex gap-2">
-                                        <Button size="sm" variant="outline" onClick={() => setViewTicket(t)}>
-                                            <Eye className="w-3.5 h-3.5 mr-1" /> View
-                                        </Button>
-                                        <Button size="sm" variant="outline" disabled={!t.violator?.email || warnMut.isLoading} onClick={() => sendTo([t.ticket_id])}>
-                                            <Mail className="w-3.5 h-3.5 mr-1" /> Warn
-                                        </Button>
-                                        {t.warrant_status === 'for_visit' && (
-                                            <Button size="sm" variant="outline" onClick={() => warrantMut.mutate({ id: t.ticket_id, status: 'visited' })}>
-                                                <CheckCircle className="w-3.5 h-3.5 mr-1" /> Mark visited
+                        {rows.map((t) => {
+                            const alreadyWarned = isWarnedTicket(t);
+                            return (
+                                <tr key={t.ticket_id} className="hover:bg-[#F8F9FB]">
+                                    <td className="px-3 py-3">
+                                        <input type="checkbox" checked={selected.has(t.ticket_id)} onChange={() => toggle(t.ticket_id)} />
+                                    </td>
+                                    <td className="px-3 py-3 font-mono font-medium text-[#16233F] whitespace-nowrap">{t.ticket_number}</td>
+                                    <td className="px-3 py-3 min-w-[190px]">
+                                        <button
+                                            type="button"
+                                            onClick={() => setViewTicket(t)}
+                                            className="text-left text-[#16233F] font-medium hover:underline"
+                                        >
+                                            {t.violator?.firstname} {t.violator?.lastname}
+                                        </button>
+                                        {t.violator?.email
+                                            ? <div className="text-xs text-[#64748B] truncate">{t.violator.email}</div>
+                                            : <div className="text-xs text-[#C8202F]">No email on file</div>}
+                                    </td>
+                                    <td className="px-3 py-3 font-bold text-[#C2541F] tabular-nums whitespace-nowrap">{peso(t.balance)}</td>
+                                    <td className="px-3 py-3 text-xs text-[#64748B] whitespace-nowrap">{formatDay(t.payment_due_at)}</td>
+                                    <td className="px-3 py-3 text-xs whitespace-nowrap">
+                                        {alreadyWarned
+                                            ? <>{t.warning_count}× <span className="text-[#64748B]">· last {formatDay(t.warning_sent_at)}</span></>
+                                            : <span className="text-[#94A3B8]">None sent</span>}
+                                    </td>
+                                    <td className="px-3 py-3"><WarrantCell t={t} /></td>
+                                    <td className="px-3 py-3 whitespace-nowrap">
+                                        <div className="flex gap-2">
+                                            <Button size="sm" variant="outline" onClick={() => setViewTicket(t)}>
+                                                <Eye className="w-3.5 h-3.5 mr-1" /> View
                                             </Button>
-                                        )}
-                                        {t.warrant_status === 'visited' && (
-                                            <Button size="sm" variant="outline" onClick={() => warrantMut.mutate({ id: t.ticket_id, status: 'for_visit' })}>
-                                                <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reopen
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={!t.violator?.email || warnMut.isLoading || alreadyWarned}
+                                                onClick={() => sendTo([t.ticket_id])}
+                                                className={alreadyWarned ? 'bg-[#E5F2EA] text-[#1E8449] border-[#1E8449]/30' : ''}
+                                            >
+                                                {alreadyWarned ? (
+                                                    <>
+                                                        <CheckCircle className="w-3.5 h-3.5 mr-1" /> Warned
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Mail className="w-3.5 h-3.5 mr-1" /> Warn
+                                                    </>
+                                                )}
                                             </Button>
-                                        )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                                            {t.warrant_status === 'for_visit' && (
+                                                <Button size="sm" variant="outline" onClick={() => warrantMut.mutate({ id: t.ticket_id, status: 'visited' })}>
+                                                    <CheckCircle className="w-3.5 h-3.5 mr-1" /> Mark visited
+                                                </Button>
+                                            )}
+                                            {t.warrant_status === 'visited' && (
+                                                <Button size="sm" variant="outline" onClick={() => warrantMut.mutate({ id: t.ticket_id, status: 'for_visit' })}>
+                                                    <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reopen
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
