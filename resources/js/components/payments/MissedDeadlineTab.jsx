@@ -1,4 +1,3 @@
-
 // web/src/components/payments/MissedDeadlineTab.jsx
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -167,6 +166,7 @@ const MissedDeadlineTab = () => {
     const refresh = () => {
         qc.invalidateQueries(['payments-overdue']);
         qc.invalidateQueries(['payments-overdue-count']);
+        qc.invalidateQueries(['payments-warrant']);
     };
 
     const warnMut = useMutation({

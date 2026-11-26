@@ -22,6 +22,7 @@ import {
     getOverduePayments,
 } from '../services/api';
 import MissedDeadlineTab from '../components/payments/MissedDeadlineTab';
+import WarrantVisitTab from '../components/payments/WarrantVisitTab';
 import { DueBadge, DUE_META } from '../components/payments/DueStatus';
 import { getDueState } from '../lib/dueTime';
 import {
@@ -53,6 +54,7 @@ import {
     AlertTriangle,
     Tag,
     ShieldCheck,
+    MapPin,
 } from 'lucide-react';
 import { useAlert } from '../components/ui/AlertProvider';
 
@@ -790,6 +792,7 @@ const PlateSearchPaymentModal = ({ open, onClose, onSuccess }) => {
             queryClient.invalidateQueries(['payments-pending']);
             queryClient.invalidateQueries(['payments-history']);
             queryClient.invalidateQueries(['payments-overdue-count']);
+            queryClient.invalidateQueries(['payments-warrant']);
             queryClient.invalidateQueries(['tickets']);
 
             notify.success(
@@ -1343,6 +1346,14 @@ const Payments = () => {
     });
     const overdueCount = overdueCountResponse?.data?.total || 0;
 
+    const { data: warrantCountResponse } = useQuery({
+        queryKey: ['payments-warrant', 'count'],
+        queryFn: () => getOverduePayments(1, 1, { warrant: 'for_visit' }),
+        staleTime: 1000 * 60,
+        refetchInterval: 1000 * 60,
+    });
+    const warrantCount = warrantCountResponse?.data?.total || 0;
+
     const { data: ticketHistoryResponse, isLoading: ticketHistoryLoading } =
         useQuery({
             queryKey: ['payments-by-ticket', historyTicketId],
@@ -1470,6 +1481,7 @@ const Payments = () => {
             const jobs = [
                 refetchPending({ cancelRefetch: true }),
                 queryClient.invalidateQueries(['payments-overdue-count']),
+                queryClient.invalidateQueries(['payments-warrant']),
             ];
             if (isPaymentHistoryFiltered) {
                 jobs.push(refetchHistory({ cancelRefetch: true }));
@@ -1861,6 +1873,16 @@ const Payments = () => {
                         Overdue
                         <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
                             {overdueCount}
+                        </span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="warrant"
+                        className="data-[state=active]:bg-[#7C3AED] data-[state=active]:text-white flex items-center gap-2"
+                    >
+                        <MapPin className="w-4 h-4" />
+                        Warrant Visit
+                        <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                            {warrantCount}
                         </span>
                     </TabsTrigger>
                 </TabsList>
@@ -2397,6 +2419,11 @@ const Payments = () => {
                 {/* ==================== OVERDUE TAB ==================== */}
                 <TabsContent value="overdue" className="mt-0">
                     {tab === 'overdue' && <MissedDeadlineTab />}
+                </TabsContent>
+
+                {/* ==================== WARRANT VISIT TAB ==================== */}
+                <TabsContent value="warrant" className="mt-0">
+                    {tab === 'warrant' && <WarrantVisitTab />}
                 </TabsContent>
             </Tabs>
 
