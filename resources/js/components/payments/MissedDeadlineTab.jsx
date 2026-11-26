@@ -1,13 +1,13 @@
 // web/src/components/payments/MissedDeadlineTab.jsx
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Mail, Loader2, Home, CheckCircle, RotateCcw, AlertTriangle, User as UserIcon, Car, Eye } from 'lucide-react';
+import { Search, Mail, Loader2, CheckCircle, AlertTriangle, User as UserIcon, Car, Eye } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Pagination } from '../ui/Pagination';
 import { useAlert } from '../ui/AlertProvider';
-import { getOverduePayments, sendOverdueWarnings, updateWarrantStatus } from '../../services/api';
+import { getOverduePayments, sendOverdueWarnings } from '../../services/api';
 import { formatDay } from '../../lib/dueTime';
 
 const PER_PAGE = 20;
@@ -15,24 +15,6 @@ const peso = (n) =>
     `₱${(parseFloat(n) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const isWarnedTicket = (t) => (Number(t?.warning_count) || 0) > 0;
-
-const WarrantCell = ({ t }) => {
-    if (t.warrant_status === 'visited') {
-        return (
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-[#EEF1F5] text-[#3B5170]">
-                <CheckCircle className="w-3 h-3" /> Visited
-            </span>
-        );
-    }
-    if (t.warrant_status === 'for_visit') {
-        return (
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold bg-[#FBE7E9] text-[#C8202F]">
-                <Home className="w-3 h-3" /> Warrant Visit
-            </span>
-        );
-    }
-    return <span className="text-xs text-[#64748B]">Visit eligible {formatDay(t.warrant_eligible_at)}</span>;
-};
 
 const first = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== '');
 
@@ -49,11 +31,11 @@ const ViolatorModal = ({ ticket, onClose, onWarn, warning }) => {
     const veh = ticket?.vehicle || {};
     const name = `${v.firstname || ''} ${v.middlename || ''} ${v.lastname || ''}`.replace(/\s+/g, ' ').trim();
     const phone = first(v.contact_number, v.contact_no, v.phone, v.mobile, v.contact);
+    const alreadyWarned = isWarnedTicket(ticket);
     const address = first(
         v.address,
         [v.street, v.barangay, v.city, v.province].filter(Boolean).join(', '),
     );
-    const alreadyWarned = isWarnedTicket(ticket);
 
     return (
         <Dialog open={!!ticket} onOpenChange={(o) => !o && onClose()}>
@@ -98,14 +80,6 @@ const ViolatorModal = ({ ticket, onClose, onWarn, warning }) => {
                                         label="Warnings sent"
                                         value={alreadyWarned ? `${ticket.warning_count}× (last ${formatDay(ticket.warning_sent_at)})` : 'None'}
                                     />
-                                    <InfoRow
-                                        label="Warrant visit"
-                                        value={
-                                            ticket.warrant_status === 'visited' ? 'Visited'
-                                            : ticket.warrant_status === 'for_visit' ? 'Warrant visit'
-                                            : `Eligible ${formatDay(ticket.warrant_eligible_at)}`
-                                        }
-                                    />
                                 </div>
                             </section>
                         </div>
@@ -122,13 +96,9 @@ const ViolatorModal = ({ ticket, onClose, onWarn, warning }) => {
                                 }
                             >
                                 {alreadyWarned ? (
-                                    <>
-                                        <CheckCircle className="w-4 h-4 mr-2" /> Warned
-                                    </>
+                                    <><CheckCircle className="w-4 h-4 mr-2" /> Warned</>
                                 ) : (
-                                    <>
-                                        <Mail className="w-4 h-4 mr-2" /> Send warning
-                                    </>
+                                    <><Mail className="w-4 h-4 mr-2" /> Send warning</>
                                 )}
                             </Button>
                         </div>
@@ -144,17 +114,15 @@ const MissedDeadlineTab = () => {
     const notify = useAlert();
     const [page, setPage] = useState(1);
     const [search, setSearch] = useState('');
-    const [warrant, setWarrant] = useState('');
     const [selected, setSelected] = useState(() => new Set());
     const [error, setError] = useState('');
     const [viewTicket, setViewTicket] = useState(null);
 
     const { data, isLoading, isFetching } = useQuery({
-        queryKey: ['payments-overdue', page, search, warrant],
+        queryKey: ['payments-overdue', page, search],
         queryFn: () =>
             getOverduePayments(page, PER_PAGE, {
                 search: search || undefined,
-                warrant: warrant || undefined,
             }),
         keepPreviousData: true,
         refetchInterval: 60_000,
@@ -186,12 +154,6 @@ const MissedDeadlineTab = () => {
         onError: (e) => setError(e.response?.data?.message || 'Failed to send warnings.'),
     });
 
-    const warrantMut = useMutation({
-        mutationFn: ({ id, status }) => updateWarrantStatus(id, status),
-        onSuccess: refresh,
-        onError: (e) => setError(e.response?.data?.message || 'Failed to update warrant status.'),
-    });
-
     const sendTo = (ids) => {
         if (!ids.length) return;
         if (!window.confirm(`Send a warning email to ${ids.length} violator(s)?`)) return;
@@ -221,16 +183,6 @@ const MissedDeadlineTab = () => {
                         className="pl-9"
                     />
                 </div>
-                <select
-                    value={warrant}
-                    onChange={(e) => { setWarrant(e.target.value); setPage(1); }}
-                    className="h-10 rounded-md border border-[#E3E7EE] bg-white px-3 text-sm"
-                >
-                    <option value="">All overdue</option>
-                    <option value="none">Under 2 months</option>
-                    <option value="for_visit">Warrant visit</option>
-                    <option value="visited">Visited</option>
-                </select>
                 <Button
                     onClick={() => sendTo([...selected])}
                     disabled={!selected.size || warnMut.isLoading}
@@ -254,17 +206,17 @@ const MissedDeadlineTab = () => {
                             <th className="px-3 py-3 w-8">
                                 <input type="checkbox" checked={allOnPage} onChange={toggleAll} />
                             </th>
-                            {['Ticket #', 'Violator / Email', 'Balance', 'Deadline', 'Warnings', 'Warrant Visit', 'Actions'].map((h) => (
+                            {['Ticket #', 'Violator / Email', 'Balance', 'Deadline', 'Actions'].map((h) => (
                                 <th key={h} className="px-3 py-3 font-semibold whitespace-nowrap">{h}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[#EEF0F4]">
                         {isLoading && (
-                            <tr><td colSpan={8} className="p-8 text-center text-[#64748B]"><Loader2 className="inline w-4 h-4 animate-spin mr-2" />Loading…</td></tr>
+                            <tr><td colSpan={6} className="p-8 text-center text-[#64748B]"><Loader2 className="inline w-4 h-4 animate-spin mr-2" />Loading…</td></tr>
                         )}
                         {!isLoading && rows.length === 0 && (
-                            <tr><td colSpan={8} className="p-8 text-center text-[#64748B]">No tickets have missed the deadline. 🎉</td></tr>
+                            <tr><td colSpan={6} className="p-8 text-center text-[#64748B]">No tickets have missed the deadline. 🎉</td></tr>
                         )}
                         {rows.map((t) => {
                             const alreadyWarned = isWarnedTicket(t);
@@ -288,12 +240,6 @@ const MissedDeadlineTab = () => {
                                     </td>
                                     <td className="px-3 py-3 font-bold text-[#C2541F] tabular-nums whitespace-nowrap">{peso(t.balance)}</td>
                                     <td className="px-3 py-3 text-xs text-[#64748B] whitespace-nowrap">{formatDay(t.payment_due_at)}</td>
-                                    <td className="px-3 py-3 text-xs whitespace-nowrap">
-                                        {alreadyWarned
-                                            ? <>{t.warning_count}× <span className="text-[#64748B]">· last {formatDay(t.warning_sent_at)}</span></>
-                                            : <span className="text-[#94A3B8]">None sent</span>}
-                                    </td>
-                                    <td className="px-3 py-3"><WarrantCell t={t} /></td>
                                     <td className="px-3 py-3 whitespace-nowrap">
                                         <div className="flex gap-2">
                                             <Button size="sm" variant="outline" onClick={() => setViewTicket(t)}>
@@ -307,25 +253,11 @@ const MissedDeadlineTab = () => {
                                                 className={alreadyWarned ? 'bg-[#E5F2EA] text-[#1E8449] border-[#1E8449]/30' : ''}
                                             >
                                                 {alreadyWarned ? (
-                                                    <>
-                                                        <CheckCircle className="w-3.5 h-3.5 mr-1" /> Warned
-                                                    </>
+                                                    <><CheckCircle className="w-3.5 h-3.5 mr-1" /> Warned</>
                                                 ) : (
-                                                    <>
-                                                        <Mail className="w-3.5 h-3.5 mr-1" /> Warn
-                                                    </>
+                                                    <><Mail className="w-3.5 h-3.5 mr-1" /> Warn</>
                                                 )}
                                             </Button>
-                                            {t.warrant_status === 'for_visit' && (
-                                                <Button size="sm" variant="outline" onClick={() => warrantMut.mutate({ id: t.ticket_id, status: 'visited' })}>
-                                                    <CheckCircle className="w-3.5 h-3.5 mr-1" /> Mark visited
-                                                </Button>
-                                            )}
-                                            {t.warrant_status === 'visited' && (
-                                                <Button size="sm" variant="outline" onClick={() => warrantMut.mutate({ id: t.ticket_id, status: 'for_visit' })}>
-                                                    <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reopen
-                                                </Button>
-                                            )}
                                         </div>
                                     </td>
                                 </tr>
